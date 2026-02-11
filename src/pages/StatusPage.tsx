@@ -109,10 +109,10 @@ export default function StatusPage() {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Atribuição automática</Label>
-              <Select value={newStatus.default_assign} onValueChange={(v) => setNewStatus({ ...newStatus, default_assign: v })}>
+              <Select value={newStatus.default_assign || "__none__"} onValueChange={(v) => setNewStatus({ ...newStatus, default_assign: v === "__none__" ? "" : v })}>
                 <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Nenhuma" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhuma</SelectItem>
+                  <SelectItem value="__none__">Nenhuma</SelectItem>
                   {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
                 </SelectContent>
               </Select>
