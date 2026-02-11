@@ -9,6 +9,74 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2, GripVertical, Loader2 } from "lucide-react";
 import type { TicketStatus } from "@/hooks/useTicketStatuses";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragStartEvent,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+function SortableStatusRow({
+  s,
+  agents,
+  updateField,
+  deleteStatus,
+}: {
+  s: TicketStatus;
+  agents: { id: string; full_name: string }[];
+  updateField: (id: string, field: string, value: any) => void;
+  deleteStatus: (id: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: s.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+      <button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing touch-none">
+        <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
+      </button>
+      <span className="h-4 w-4 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+      <div className="flex-1 grid gap-2 md:grid-cols-4 items-center">
+        <div>
+          <p className="text-sm font-medium">{s.name}</p>
+          <p className="text-xs text-muted-foreground font-mono">{s.id}</p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          {s.pauses_sla && <span className="px-1.5 py-0.5 rounded bg-warning/20 text-warning">Pausa SLA</span>}
+          {s.is_resolved && <span className="px-1.5 py-0.5 rounded bg-success/20 text-success">Resolvido</span>}
+          {s.is_closed && <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Encerrado</span>}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {s.sla_minutes ? `SLA: ${s.sla_minutes}m` : ""}
+          {s.default_assign ? ` · Atribuição: ${agents.find((a) => a.id === s.default_assign)?.full_name || "?"}` : ""}
+        </div>
+        <div className="flex gap-1 justify-end">
+          <input type="color" value={s.color} onChange={(e) => updateField(s.id, "color", e.target.value)} className="h-7 w-8 rounded border cursor-pointer" />
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteStatus(s.id)}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function StatusPage() {
   const { toast } = useToast();
@@ -16,6 +84,12 @@ export default function StatusPage() {
   const [agents, setAgents] = useState<{ id: string; full_name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [newStatus, setNewStatus] = useState({ id: "", name: "", color: "#6b7280", pauses_sla: false, is_resolved: false, is_closed: false, sla_minutes: "", default_assign: "" });
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
 
   const fetchData = async () => {
     const [{ data: s }, { data: p }] = await Promise.all([
@@ -67,6 +141,32 @@ export default function StatusPage() {
     toast({ title: "Estado eliminado" });
     fetchData();
   };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = statuses.findIndex((s) => s.id === active.id);
+    const newIndex = statuses.findIndex((s) => s.id === over.id);
+    const reordered = arrayMove(statuses, oldIndex, newIndex);
+
+    // Optimistic update
+    setStatuses(reordered);
+
+    // Persist new sort_order values
+    const updates = reordered.map((s, i) =>
+      supabase.from("ticket_statuses").update({ sort_order: i + 1 } as any).eq("id", s.id)
+    );
+    await Promise.all(updates);
+    fetchData();
+  };
+
+  const activeStatus = activeId ? statuses.find((s) => s.id === activeId) : null;
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
@@ -127,33 +227,22 @@ export default function StatusPage() {
       <Card>
         <CardHeader><CardTitle className="text-base">Estados Existentes</CardTitle></CardHeader>
         <CardContent className="space-y-2">
-          {statuses.map((s) => (
-            <div key={s.id} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
-              <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="h-4 w-4 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-              <div className="flex-1 grid gap-2 md:grid-cols-4 items-center">
-                <div>
-                  <p className="text-sm font-medium">{s.name}</p>
-                  <p className="text-xs text-muted-foreground font-mono">{s.id}</p>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            <SortableContext items={statuses.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+              {statuses.map((s) => (
+                <SortableStatusRow key={s.id} s={s} agents={agents} updateField={updateField} deleteStatus={deleteStatus} />
+              ))}
+            </SortableContext>
+            <DragOverlay>
+              {activeStatus && (
+                <div className="flex items-center gap-3 p-3 rounded-lg border bg-background shadow-lg">
+                  <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="h-4 w-4 rounded-full shrink-0" style={{ backgroundColor: activeStatus.color }} />
+                  <p className="text-sm font-medium">{activeStatus.name}</p>
                 </div>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  {s.pauses_sla && <span className="px-1.5 py-0.5 rounded bg-warning/20 text-warning">Pausa SLA</span>}
-                  {s.is_resolved && <span className="px-1.5 py-0.5 rounded bg-success/20 text-success">Resolvido</span>}
-                  {s.is_closed && <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Encerrado</span>}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {s.sla_minutes ? `SLA: ${s.sla_minutes}m` : ""}
-                  {s.default_assign ? ` · Atribuição: ${agents.find((a) => a.id === s.default_assign)?.full_name || "?"}` : ""}
-                </div>
-                <div className="flex gap-1 justify-end">
-                  <input type="color" value={s.color} onChange={(e) => updateField(s.id, "color", e.target.value)} className="h-7 w-8 rounded border cursor-pointer" />
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteStatus(s.id)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
+              )}
+            </DragOverlay>
+          </DndContext>
         </CardContent>
       </Card>
     </div>
