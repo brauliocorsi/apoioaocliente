@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft } from "lucide-react";
+import FileUpload from "@/components/FileUpload";
 
 type Category = { id: string; name: string };
 type Subcategory = { id: string; category_id: string; name: string };
@@ -39,6 +40,7 @@ export default function TicketNew() {
     is_exhibition: false,
     payment_method: "",
   });
+  const [attachments, setAttachments] = useState<any[]>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -112,6 +114,19 @@ export default function TicketNew() {
         event_type: "created",
         content: "Ticket criado",
       });
+      // Save attachments
+      if (attachments.length > 0) {
+        await supabase.from("ticket_attachments").insert(
+          attachments.map((a) => ({
+            ticket_id: data.id,
+            file_name: a.file_name,
+            file_path: a.file_path,
+            file_type: a.file_type,
+            file_size: a.file_size,
+            uploaded_by: user.id,
+          }))
+        );
+      }
       toast({ title: "Ticket criado com sucesso" });
       navigate(`/tickets/${data.id}`);
     }
@@ -226,6 +241,14 @@ export default function TicketNew() {
                 <input type="checkbox" checked={form.is_exhibition} onChange={(e) => update("is_exhibition", e.target.checked)} className="rounded" />
                 Artigo de exposição
               </label>
+            </div>
+            <div className="space-y-2">
+              <Label>Anexos (fotos/vídeos)</Label>
+              <FileUpload
+                userId={user?.id || ""}
+                attachments={attachments}
+                onAttachmentsChange={setAttachments}
+              />
             </div>
           </CardContent>
         </Card>

@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Loader2, Clock, Send } from "lucide-react";
 import { DecisionEngine, type RuleSuggestion } from "@/lib/decisionEngine";
+import FileUpload from "@/components/FileUpload";
 
 const statusLabels: Record<string, string> = {
   novo: "Novo",
@@ -40,19 +41,25 @@ export default function TicketDetail() {
   const [note, setNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
   const [suggestions, setSuggestions] = useState<RuleSuggestion[]>([]);
+  const [attachments, setAttachments] = useState<any[]>([]);
 
   const fetchTicket = async () => {
     if (!id) return;
-    const [{ data: t }, { data: evts }, { data: tTags }, { data: tClauses }] = await Promise.all([
+    const [{ data: t }, { data: evts }, { data: tTags }, { data: tClauses }, { data: tAttachments }] = await Promise.all([
       supabase.from("tickets").select("*").eq("id", id).single(),
       supabase.from("ticket_events").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
       supabase.from("ticket_tags").select("tag_id").eq("ticket_id", id),
       supabase.from("ticket_clauses").select("clause_id").eq("ticket_id", id),
+      supabase.from("ticket_attachments").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
     ]);
     setTicket(t);
     setEvents(evts || []);
     setTags((tTags || []).map((r: any) => r.tag_id));
     setClauses((tClauses || []).map((r: any) => r.clause_id));
+    setAttachments((tAttachments || []).map((a: any) => ({
+      ...a,
+      url: supabase.storage.from("ticket-attachments").getPublicUrl(a.file_path).data.publicUrl,
+    })));
     
     // Run decision engine
     if (t) {
@@ -165,6 +172,35 @@ export default function TicketDetail() {
             <CardHeader><CardTitle className="text-sm">Descrição</CardTitle></CardHeader>
             <CardContent>
               <p className="text-sm whitespace-pre-wrap">{ticket.description || "Sem descrição"}</p>
+            </CardContent>
+          </Card>
+
+          {/* Attachments */}
+          <Card>
+            <CardHeader><CardTitle className="text-sm">Anexos</CardTitle></CardHeader>
+            <CardContent>
+              <FileUpload
+                ticketId={id}
+                userId={user?.id || ""}
+                attachments={attachments}
+                onAttachmentsChange={async (newAtts) => {
+                  // Save any new attachments (those without id)
+                  const toInsert = newAtts.filter((a) => !a.id);
+                  if (toInsert.length > 0) {
+                    await supabase.from("ticket_attachments").insert(
+                      toInsert.map((a) => ({
+                        ticket_id: id!,
+                        file_name: a.file_name,
+                        file_path: a.file_path,
+                        file_type: a.file_type,
+                        file_size: a.file_size,
+                        uploaded_by: user!.id,
+                      }))
+                    );
+                  }
+                  fetchTicket();
+                }}
+              />
             </CardContent>
           </Card>
 
