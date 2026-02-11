@@ -6,6 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
+import { getTicketSlaStatus, calcRemaining, type SlaStatus } from "@/components/ticket/SlaDashboard";
+import { AlertTriangle, Clock, CheckCircle, Timer } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DndContext,
   DragOverlay,
@@ -28,6 +31,10 @@ type TicketRow = {
   status: string;
   order_number: string | null;
   created_at: string;
+  sla_resolution_at: string | null;
+  sla_paused_at: string | null;
+  sla_paused_total_seconds: number | null;
+  resolved_at: string | null;
 };
 
 interface KanbanBoardProps {
@@ -36,12 +43,49 @@ interface KanbanBoardProps {
   onTicketMoved?: () => void;
 }
 
+function formatSlaTime(ms: number): string {
+  const abs = Math.abs(ms);
+  const hours = Math.floor(abs / 3600000);
+  const mins = Math.floor((abs % 3600000) / 60000);
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
+
+function KanbanSlaIcon({ ticket }: { ticket: TicketRow }) {
+  const status = getTicketSlaStatus(ticket);
+  const icon =
+    status === "breached" ? <AlertTriangle className="h-3.5 w-3.5 text-destructive" /> :
+    status === "at_risk" ? <Timer className="h-3.5 w-3.5 text-warning" /> :
+    status === "on_track" ? <Clock className="h-3.5 w-3.5 text-success" /> :
+    status === "completed" ? <CheckCircle className="h-3.5 w-3.5 text-success" /> :
+    null;
+  if (!icon) return null;
+
+  let label = "";
+  if (status === "completed") label = "SLA concluído";
+  else if (status === "no_sla") label = "Sem SLA";
+  else if (ticket.sla_resolution_at) {
+    const remaining = calcRemaining(ticket.sla_resolution_at, ticket.sla_paused_total_seconds || 0, ticket.sla_paused_at);
+    label = remaining <= 0 ? `Expirado há ${formatSlaTime(remaining)}` : `${formatSlaTime(remaining)} restante`;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild><span className="cursor-default">{icon}</span></TooltipTrigger>
+      <TooltipContent><p className="text-xs">{label}</p></TooltipContent>
+    </Tooltip>
+  );
+}
+
 function TicketCard({ ticket, isDragging, categoryNames }: { ticket: TicketRow; isDragging?: boolean; categoryNames?: Record<string, string> }) {
   return (
     <div className={`bg-background border rounded-md p-3 transition-shadow ${isDragging ? "shadow-lg opacity-80 rotate-2" : "hover:shadow-md"}`}>
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs font-mono text-muted-foreground">#{ticket.ticket_number}</span>
-        <PriorityFlag priority={ticket.priority} size={14} />
+        <div className="flex items-center gap-1.5">
+          <KanbanSlaIcon ticket={ticket} />
+          <PriorityFlag priority={ticket.priority} size={14} />
+        </div>
       </div>
       <p className="text-sm font-medium leading-tight line-clamp-2">{ticket.subject}</p>
       <p className="text-xs text-muted-foreground mt-1 truncate">{ticket.client_name}</p>
@@ -139,6 +183,7 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: K
   };
 
   return (
+    <TooltipProvider>
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
@@ -177,5 +222,6 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: K
         {activeTicket && <TicketCard ticket={activeTicket} isDragging categoryNames={categoryNames} />}
       </DragOverlay>
     </DndContext>
+    </TooltipProvider>
   );
 }
