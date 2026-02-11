@@ -134,10 +134,10 @@ export default function CategoriesPage() {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Atribuição automática</Label>
-              <Select value={newCat.default_assign} onValueChange={(v) => setNewCat({ ...newCat, default_assign: v })}>
+              <Select value={newCat.default_assign || "__none__"} onValueChange={(v) => setNewCat({ ...newCat, default_assign: v === "__none__" ? "" : v })}>
                 <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Nenhuma" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhuma</SelectItem>
+                  <SelectItem value="__none__">Nenhuma</SelectItem>
                   {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -193,10 +193,10 @@ export default function CategoriesPage() {
                   {isEditing && (
                     <div className="grid gap-2 md:grid-cols-2 ml-6 mt-2">
                       <Input className="h-7 text-xs" placeholder="Descrição" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
-                      <Select value={editForm.default_assign} onValueChange={(v) => setEditForm({ ...editForm, default_assign: v })}>
+                      <Select value={editForm.default_assign || "__none__"} onValueChange={(v) => setEditForm({ ...editForm, default_assign: v === "__none__" ? "" : v })}>
                         <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Atribuição" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Nenhuma</SelectItem>
+                          <SelectItem value="__none__">Nenhuma</SelectItem>
                           {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
                         </SelectContent>
                       </Select>
@@ -223,10 +223,10 @@ export default function CategoriesPage() {
                         <Input className="h-7 text-xs" placeholder="ID" value={subForm.id} onChange={(e) => setNewSub({ ...newSub, [cat.id]: { ...subForm, id: e.target.value } })} />
                         <Input className="h-7 text-xs" placeholder="Nome" value={subForm.name} onChange={(e) => setNewSub({ ...newSub, [cat.id]: { ...subForm, name: e.target.value } })} />
                         <Input className="h-7 text-xs" placeholder="Descrição" value={subForm.description} onChange={(e) => setNewSub({ ...newSub, [cat.id]: { ...subForm, description: e.target.value } })} />
-                        <Select value={subForm.default_assign} onValueChange={(v) => setNewSub({ ...newSub, [cat.id]: { ...subForm, default_assign: v } })}>
+                        <Select value={subForm.default_assign || "__none__"} onValueChange={(v) => setNewSub({ ...newSub, [cat.id]: { ...subForm, default_assign: v === "__none__" ? "" : v } })}>
                           <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Atribuição" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Nenhuma</SelectItem>
+                            <SelectItem value="__none__">Nenhuma</SelectItem>
                             {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
                           </SelectContent>
                         </Select>
