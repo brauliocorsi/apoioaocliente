@@ -1,0 +1,1 @@
+ALTER TABLE public.tickets ADD COLUMN product_name text;
