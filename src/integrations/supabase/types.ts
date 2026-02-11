@@ -197,18 +197,21 @@ export type Database = {
       }
       tags: {
         Row: {
+          color: string | null
           id: string
           name: string
           sort_order: number
           tag_group: Database["public"]["Enums"]["tag_group"]
         }
         Insert: {
+          color?: string | null
           id: string
           name: string
           sort_order?: number
           tag_group: Database["public"]["Enums"]["tag_group"]
         }
         Update: {
+          color?: string | null
           id?: string
           name?: string
           sort_order?: number
@@ -365,6 +368,7 @@ export type Database = {
           created_at: string
           created_by: string
           delivery_date: string | null
+          delivery_type: string | null
           description: string | null
           first_responded_at: string | null
           has_original_packaging: boolean | null
@@ -375,6 +379,7 @@ export type Database = {
           needs_tpa: boolean | null
           order_number: string | null
           payment_method: string | null
+          pickup_date: string | null
           priority: Database["public"]["Enums"]["ticket_priority"]
           purchase_date: string | null
           resolved_at: string | null
@@ -398,6 +403,7 @@ export type Database = {
           created_at?: string
           created_by: string
           delivery_date?: string | null
+          delivery_type?: string | null
           description?: string | null
           first_responded_at?: string | null
           has_original_packaging?: boolean | null
@@ -408,6 +414,7 @@ export type Database = {
           needs_tpa?: boolean | null
           order_number?: string | null
           payment_method?: string | null
+          pickup_date?: string | null
           priority?: Database["public"]["Enums"]["ticket_priority"]
           purchase_date?: string | null
           resolved_at?: string | null
@@ -431,6 +438,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           delivery_date?: string | null
+          delivery_type?: string | null
           description?: string | null
           first_responded_at?: string | null
           has_original_packaging?: boolean | null
@@ -441,6 +449,7 @@ export type Database = {
           needs_tpa?: boolean | null
           order_number?: string | null
           payment_method?: string | null
+          pickup_date?: string | null
           priority?: Database["public"]["Enums"]["ticket_priority"]
           purchase_date?: string | null
           resolved_at?: string | null

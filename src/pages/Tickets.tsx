@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Search, Loader2, List, LayoutGrid } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import KanbanBoard from "@/components/KanbanBoard";
+import PriorityFlag from "@/components/ticket/PriorityFlag";
 
 const statusLabels: Record<string, string> = {
   novo: "Novo",
@@ -168,7 +169,7 @@ export default function Tickets() {
                     </div>
                     <div className="flex items-center gap-2">
                       {t.category_id && <Badge variant="outline" className="text-xs">{categories[t.category_id] || t.category_id}</Badge>}
-                      <Badge className={priorityColors[t.priority]}>{t.priority}</Badge>
+                      <PriorityFlag priority={t.priority} />
                       <Badge variant="secondary">{statusLabels[t.status] || t.status}</Badge>
                     </div>
                   </div>

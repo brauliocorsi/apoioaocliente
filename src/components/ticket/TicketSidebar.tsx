@@ -57,6 +57,8 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
         is_assembled: ticket.is_assembled,
         is_personalized: ticket.is_personalized,
         is_exhibition: ticket.is_exhibition,
+        delivery_type: ticket.delivery_type || "",
+        pickup_date: ticket.pickup_date || "",
       });
     }
   }, [ticket]);
@@ -97,6 +99,8 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
       is_assembled: form.is_assembled,
       is_personalized: form.is_personalized,
       is_exhibition: form.is_exhibition,
+      delivery_type: form.delivery_type || null,
+      pickup_date: form.pickup_date || null,
     };
     await supabase.from("tickets").update(updates).eq("id", ticket.id);
     toast({ title: "Ticket atualizado" });
@@ -195,6 +199,22 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
                 <Label className="text-xs">Data compra</Label>
                 <Input type="date" className="h-8 text-xs" value={form.purchase_date} onChange={(e) => setForm({ ...form, purchase_date: e.target.value })} />
               </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Tipo de entrega</Label>
+                <Select value={form.delivery_type} onValueChange={(v) => setForm({ ...form, delivery_type: v })}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="entrega">Entrega</SelectItem>
+                    <SelectItem value="levantamento">Levantamento</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {form.delivery_type === "levantamento" && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Data levantamento</Label>
+                  <Input type="date" className="h-8 text-xs" value={form.pickup_date} onChange={(e) => setForm({ ...form, pickup_date: e.target.value })} />
+                </div>
+              )}
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-xs">
                   <input type="checkbox" checked={form.is_assembled} onChange={(e) => setForm({ ...form, is_assembled: e.target.checked })} className="rounded" />
@@ -221,6 +241,10 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
               <div><span className="text-muted-foreground">Nº Assistência:</span> <span className="ml-2">{ticket.service_number || "–"}</span></div>
               <div><span className="text-muted-foreground">Data entrega:</span> <span className="ml-2">{ticket.delivery_date || "–"}</span></div>
               <div><span className="text-muted-foreground">Data compra:</span> <span className="ml-2">{ticket.purchase_date || "–"}</span></div>
+              <div><span className="text-muted-foreground">Tipo entrega:</span> <span className="ml-2">{ticket.delivery_type === "entrega" ? "Entrega" : ticket.delivery_type === "levantamento" ? "Levantamento" : "–"}</span></div>
+              {ticket.delivery_type === "levantamento" && (
+                <div><span className="text-muted-foreground">Data levantamento:</span> <span className="ml-2">{ticket.pickup_date || "–"}</span></div>
+              )}
               <div><span className="text-muted-foreground">Montado:</span> <span className="ml-2">{ticket.is_assembled ? "Sim" : "Não"}</span></div>
               <div><span className="text-muted-foreground">Personalizado:</span> <span className="ml-2">{ticket.is_personalized ? "Sim" : "Não"}</span></div>
               <div><span className="text-muted-foreground">Exposição:</span> <span className="ml-2">{ticket.is_exhibition ? "Sim" : "Não"}</span></div>
