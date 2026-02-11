@@ -9,6 +9,7 @@ import { Plus, Search, Loader2, List, LayoutGrid } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import KanbanBoard from "@/components/KanbanBoard";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
+import SlaDashboard, { type SlaTicket } from "@/components/ticket/SlaDashboard";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 
 type TicketRow = {
@@ -21,15 +22,25 @@ type TicketRow = {
   status: string;
   order_number: string | null;
   created_at: string;
+  assigned_to: string | null;
+  sla_first_response_at: string | null;
+  sla_resolution_at: string | null;
+  sla_paused_at: string | null;
+  sla_paused_total_seconds: number | null;
+  first_responded_at: string | null;
+  resolved_at: string | null;
+  sla_stage_deadline_at: string | null;
 };
 
 export default function Tickets() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [categories, setCategories] = useState<Record<string, string>>({});
+  const [agents, setAgents] = useState<{ id: string; full_name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [agentFilter, setAgentFilter] = useState<string>("all");
   const [view, setView] = useState<"list" | "kanban">("list");
   const [fetchKey, setFetchKey] = useState(0);
   const navigate = useNavigate();
@@ -38,10 +49,14 @@ export default function Tickets() {
   const refreshTickets = () => setFetchKey((k) => k + 1);
 
   useEffect(() => {
-    supabase.from("categories").select("id, name").then(({ data }) => {
+    Promise.all([
+      supabase.from("categories").select("id, name"),
+      supabase.from("profiles").select("id, full_name"),
+    ]).then(([{ data: cats }, { data: profs }]) => {
       const map: Record<string, string> = {};
-      (data || []).forEach((c: any) => { map[c.id] = c.name; });
+      (cats || []).forEach((c: any) => { map[c.id] = c.name; });
       setCategories(map);
+      setAgents(profs || []);
     });
   }, []);
 
@@ -49,18 +64,19 @@ export default function Tickets() {
     const fetch = async () => {
       let query = supabase
         .from("tickets")
-        .select("id, ticket_number, client_name, subject, category_id, priority, status, order_number, created_at")
+        .select("id, ticket_number, client_name, subject, category_id, priority, status, order_number, created_at, assigned_to, sla_first_response_at, sla_resolution_at, sla_paused_at, sla_paused_total_seconds, first_responded_at, resolved_at, sla_stage_deadline_at")
         .order("created_at", { ascending: false });
       
       if (statusFilter !== "all") query = query.eq("status", statusFilter as any);
       if (priorityFilter !== "all") query = query.eq("priority", priorityFilter as any);
+      if (agentFilter !== "all") query = query.eq("assigned_to", agentFilter);
 
-      const { data } = await query.limit(100);
+      const { data } = await query.limit(200);
       setTickets((data as TicketRow[]) || []);
       setLoading(false);
     };
     fetch();
-  }, [statusFilter, priorityFilter, fetchKey]);
+  }, [statusFilter, priorityFilter, agentFilter, fetchKey]);
 
   const filtered = tickets.filter(
     (t) =>
@@ -69,6 +85,11 @@ export default function Tickets() {
       (t.order_number && t.order_number.includes(search)) ||
       String(t.ticket_number).includes(search)
   );
+
+  const agentName = (id: string | null) => {
+    if (!id) return null;
+    return agents.find((a) => a.id === id)?.full_name;
+  };
 
   return (
     <div className="space-y-6">
@@ -92,8 +113,10 @@ export default function Tickets() {
         </div>
       </div>
 
-      <div className="flex gap-3">
-        <div className="relative flex-1">
+      {!loading && <SlaDashboard tickets={filtered as SlaTicket[]} />}
+
+      <div className="flex flex-wrap gap-3">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Pesquisar por nome, assunto, nº encomenda..." className="pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
@@ -115,6 +138,15 @@ export default function Tickets() {
             <SelectItem value="P1">P1 Urgente</SelectItem>
             <SelectItem value="P2">P2 Normal</SelectItem>
             <SelectItem value="P3">P3 Baixa</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={agentFilter} onValueChange={setAgentFilter}>
+          <SelectTrigger className="w-44"><SelectValue placeholder="Agente" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os agentes</SelectItem>
+            {agents.map((a) => (
+              <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -140,7 +172,11 @@ export default function Tickets() {
                       <span className="text-xs font-mono text-muted-foreground w-12">#{t.ticket_number}</span>
                       <div>
                         <p className="text-sm font-medium">{t.subject}</p>
-                        <p className="text-xs text-muted-foreground">{t.client_name}{t.order_number ? ` · Enc. ${t.order_number}` : ""}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {t.client_name}
+                          {t.order_number ? ` · Enc. ${t.order_number}` : ""}
+                          {t.assigned_to ? ` · ${agentName(t.assigned_to)}` : ""}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
