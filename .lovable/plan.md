@@ -1,201 +1,186 @@
 
-
-# Status Dinamicos e Categorias Dinamicas
+# Fase 1: Portal do Cliente com Login e Acompanhamento de Tickets
 
 ## Resumo
-
-Atualmente os estados dos tickets sao um ENUM fixo no Postgres (`ticket_status`) e as categorias existem numa tabela mas sem interface de gestao. Este plano transforma ambos em entidades totalmente dinamicas e personalizaveis pelos supervisores.
-
----
-
-## 1. Status Dinamicos
-
-### Problema atual
-Os 7 estados estao codificados como ENUM Postgres (`novo`, `em_analise`, `aguarda_cliente`, etc.) e repetidos em pelo menos 4 ficheiros frontend como objetos `statusLabels` hardcoded.
-
-### Solucao: Tabela `ticket_statuses`
-
-Criar uma tabela para gerir estados dinamicamente:
-
-```text
-ticket_statuses
------------------------------------------
-id              TEXT  (PK, ex: "novo")
-name            TEXT  (ex: "Novo")
-color           TEXT  (ex: "#3b82f6")
-sort_order      INT   (ordem no Kanban)
-pauses_sla      BOOL  (pausa cronometro SLA)
-is_resolved     BOOL  (marca ticket como resolvido)
-is_closed       BOOL  (marca ticket como encerrado)
-default_assign  UUID  (agente atribuido automaticamente, opcional)
-sla_minutes     INT   (SLA especifico para este estagio, opcional)
-```
-
-### Migracao SQL
-
-1. Criar tabela `ticket_statuses` com RLS (select para todos, insert/update/delete para supervisores)
-2. Popular com os 7 estados atuais, mapeando as propriedades existentes
-3. Alterar coluna `tickets.status` de ENUM para TEXT com foreign key para `ticket_statuses.id`
-4. Remover o ENUM `ticket_status` (apos migracao)
-
-### Impacto no Frontend
-
-Ficheiros que tem `statusLabels` hardcoded e precisam ser atualizados para carregar da base de dados:
-- `src/pages/Tickets.tsx` - filtros e lista
-- `src/pages/TicketDetail.tsx` - selector de estado
-- `src/components/KanbanBoard.tsx` - colunas do Kanban
-- `src/pages/TicketNew.tsx` (status inicial = primeiro por sort_order)
-
-### Pagina de Gestao de Status
-
-Criar `src/pages/StatusPage.tsx` (acesso supervisor) com:
-- Lista de todos os estados com drag-and-drop para reordenar
-- Formulario para criar novo estado (nome, cor, opcoes SLA)
-- Edicao inline: nome, cor, pausa SLA, resolucao, encerramento
-- Campo opcional de atribuicao automatica (dropdown de agentes)
-- Campo opcional de SLA por estagio (minutos)
-- Eliminacao (apenas se nenhum ticket usar o estado)
+Criar um portal separado em `/portal/*` onde clientes podem fazer login, ver os seus tickets, enviar mensagens e acompanhar o progresso. Inclui registo de clientes, envio de credenciais por email via Resend, e notificacoes de mudanca de estado.
 
 ---
 
-## 2. Categorias Dinamicas com Gestao
+## 1. Base de Dados -- Novas Tabelas e Alteracoes
 
-### Problema atual
-As categorias e subcategorias existem na base de dados mas nao ha interface para as gerir. Tambem nao tem campo de atribuicao automatica.
+### 1.1 Tabela `client_users`
+Perfis de clientes separados dos agentes. Liga ao `auth.users` para autenticacao.
 
-### Alteracoes na Base de Dados
+| Coluna | Tipo | Descricao |
+|--------|------|-----------|
+| id | uuid (PK, FK auth.users) | ID do utilizador |
+| email | text NOT NULL | Email do cliente |
+| full_name | text NOT NULL | Nome do cliente |
+| phone | text | Telefone |
+| created_at | timestamptz | Data de criacao |
 
-```text
-categories (adicionar colunas)
------------------------------------------
-default_assign  UUID  (agente atribuido automaticamente, opcional)
+RLS: Clientes so veem o seu proprio perfil.
 
-subcategories (adicionar colunas)
------------------------------------------
-description     TEXT  (descricao opcional)
-default_assign  UUID  (override de atribuicao, opcional)
-```
+### 1.2 Tabela `client_roles`
+Para distinguir clientes de agentes no sistema de roles.
 
-Adicionar RLS de UPDATE e DELETE na tabela `categories` e `subcategories` para supervisores.
+Alternativamente, expandir o ENUM `app_role` com valor `client`.
 
-### Pagina de Gestao de Categorias
+### 1.3 Tabela `ticket_messages`
+Mensagens bidirecionais entre cliente e agente (separadas das notas internas que ficam em `ticket_events`).
 
-Criar `src/pages/CategoriesPage.tsx` (acesso supervisor) com:
-- Lista de categorias com subcategorias expandiveis (accordion)
-- Criar/editar/eliminar categorias (nome, descricao, atribuicao)
-- Criar/editar/eliminar subcategorias dentro de cada categoria
-- Campo de atribuicao automatica por categoria e subcategoria
-- Gestao de SLA por categoria ja existe na tabela `sla_config` -- adicionar edicao inline dos tempos de SLA
+| Coluna | Tipo | Descricao |
+|--------|------|-----------|
+| id | uuid (PK) | |
+| ticket_id | uuid (FK tickets) | |
+| sender_id | uuid (FK auth.users) | |
+| sender_type | text ('client' / 'agent') | |
+| content | text | Corpo da mensagem |
+| created_at | timestamptz | |
+
+RLS: Clientes so veem mensagens dos seus tickets. Agentes veem tudo.
+
+### 1.4 Tabela `email_templates`
+Templates editaveis para cada tipo de email.
+
+| Coluna | Tipo | Descricao |
+|--------|------|-----------|
+| id | text (PK) | Ex: 'ticket_created', 'status_changed' |
+| subject | text | Assunto do email (com variaveis) |
+| body_html | text | Corpo HTML (com variaveis) |
+| description | text | Descricao para o supervisor |
+| updated_at | timestamptz | |
+
+RLS: Supervisores podem editar, todos podem ler.
+
+### 1.5 Tabela `faq_items`
+Perguntas frequentes visiveis no portal do cliente.
+
+| Coluna | Tipo | Descricao |
+|--------|------|-----------|
+| id | uuid (PK) | |
+| question | text | Pergunta |
+| answer | text | Resposta (HTML/Markdown) |
+| sort_order | integer | Ordem |
+| is_active | boolean | Visivel ou nao |
+| created_at | timestamptz | |
+
+RLS: Leitura publica (sem autenticacao necessaria).
+
+### 1.6 Coluna `client_user_id` na tabela `tickets`
+Nova coluna `client_user_id uuid` (FK client_users) para ligar tickets a contas de clientes. Atualizar RLS para que clientes vejam apenas os seus tickets.
 
 ---
 
-## 3. Logica de Atribuicao Automatica
+## 2. Edge Functions
 
-Quando um ticket muda de estado ou e criado:
-1. Verificar se o **novo estado** tem `default_assign` -- se sim, atribuir
-2. Senao, verificar se a **subcategoria** tem `default_assign`
-3. Senao, verificar se a **categoria** tem `default_assign`
-4. Senao, manter atribuicao atual
+### 2.1 `create-client-account`
+- Recebe: email, nome, ticket_id (opcional)
+- Cria conta no auth.users com password gerada
+- Insere em `client_users`
+- Insere role `client` em `user_roles`
+- Envia email via Resend com credenciais
 
-Esta logica sera aplicada em `TicketDetail.tsx` (ao mudar estado) e `TicketNew.tsx` (ao criar).
+### 2.2 `send-ticket-email`
+- Recebe: ticket_id, template_id (ex: 'ticket_created', 'status_changed')
+- Busca o template de `email_templates`
+- Substitui variaveis ({nome_cliente}, {numero_ticket}, {estado}, etc.)
+- Envia via Resend ao email do cliente
+- Chamada automaticamente quando o estado muda (trigger ou chamada no frontend)
 
----
-
-## 4. Logica de SLA por Estagio
-
-Quando um ticket entra num estado com `sla_minutes` definido:
-- Registar `sla_stage_deadline` no ticket (ou num evento) para controlo do tempo nesse estagio
-- Mostrar no `SlaIndicator` um indicador adicional de "Tempo no estagio atual"
-
-Adicionar coluna ao tickets:
-```text
-tickets (adicionar colunas)
------------------------------------------
-sla_stage_deadline_at  TIMESTAMPTZ  (prazo do estagio atual, opcional)
-status_changed_at      TIMESTAMPTZ  (quando o estado foi alterado pela ultima vez)
-```
+### 2.3 `portal-send-message`
+- Permite ao cliente enviar mensagem num ticket
+- Valida que o ticket pertence ao cliente autenticado
+- Insere em `ticket_messages`
 
 ---
 
-## Detalhes Tecnicos
+## 3. Frontend -- Paginas do Portal
 
-### Migracoes SQL (sequencia)
+### 3.1 Rotas (`/portal/*`)
+- `/portal/login` -- Login do cliente
+- `/portal/register` -- Registo de novo cliente
+- `/portal/tickets` -- Lista de tickets do cliente
+- `/portal/tickets/:id` -- Detalhe do ticket com chat
+- `/portal/faq` -- Perguntas frequentes
 
-**Migracao 1 -- Tabela de status:**
-```sql
-CREATE TABLE ticket_statuses (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  color TEXT DEFAULT '#6b7280',
-  sort_order INT NOT NULL DEFAULT 0,
-  pauses_sla BOOLEAN DEFAULT false,
-  is_resolved BOOLEAN DEFAULT false,
-  is_closed BOOLEAN DEFAULT false,
-  default_assign UUID,
-  sla_minutes INT
-);
+### 3.2 Layout do Portal (`PortalLayout.tsx`)
+Layout simples e limpo, sem sidebar de agente. Header com logo UP Moveis, nome do cliente, botao de logout.
 
-ALTER TABLE ticket_statuses ENABLE ROW LEVEL SECURITY;
--- RLS: select all, CUD supervisor only
+### 3.3 Pagina de Login/Registo do Cliente
+- Login com email + password
+- Registo com nome, email, telefone, password
+- Redireciona para `/portal/tickets`
 
-INSERT INTO ticket_statuses VALUES
-  ('novo', 'Novo', '#3b82f6', 1, false, false, false, null, null),
-  ('em_analise', 'Em analise', '#8b5cf6', 2, false, false, false, null, null),
-  ('aguarda_cliente', 'Aguarda cliente', '#f59e0b', 3, true, false, false, null, null),
-  ('aguarda_logistica', 'Aguarda logistica', '#f97316', 4, false, false, false, null, null),
-  ('aguarda_tecnico', 'Aguarda tecnico', '#a855f7', 5, false, false, false, null, null),
-  ('resolvido', 'Resolvido', '#22c55e', 6, false, true, false, null, null),
-  ('encerrado', 'Encerrado', '#6b7280', 7, false, false, true, null, null);
+### 3.4 Lista de Tickets do Cliente
+- Cards com: numero do ticket, assunto, estado (com cor), data de criacao
+- Botao "Abrir Novo Ticket"
+- Sem detalhes internos (sem SLA, prioridade, tags, categorias)
 
--- Converter status de ENUM para TEXT
-ALTER TABLE tickets ALTER COLUMN status DROP DEFAULT;
-ALTER TABLE tickets ALTER COLUMN status TYPE TEXT USING status::TEXT;
-ALTER TABLE tickets ALTER COLUMN status SET DEFAULT 'novo';
-ALTER TABLE tickets ADD CONSTRAINT tickets_status_fk 
-  FOREIGN KEY (status) REFERENCES ticket_statuses(id);
+### 3.5 Detalhe do Ticket (Vista do Cliente)
+- Assunto, estado atual (com indicador visual de progresso)
+- Timeline de mensagens (chat entre cliente e agente)
+- Campo para enviar nova mensagem
+- Sem: notas internas, tags, SLA, categorias, atribuicao
 
-DROP TYPE IF EXISTS ticket_status;
-```
+### 3.6 Pagina de FAQs
+- Accordion com perguntas e respostas
+- Geridas pelos supervisores nas definicoes
 
-**Migracao 2 -- Colunas adicionais:**
-```sql
-ALTER TABLE categories ADD COLUMN default_assign UUID;
-ALTER TABLE subcategories ADD COLUMN description TEXT;
-ALTER TABLE subcategories ADD COLUMN default_assign UUID;
-ALTER TABLE tickets ADD COLUMN sla_stage_deadline_at TIMESTAMPTZ;
-ALTER TABLE tickets ADD COLUMN status_changed_at TIMESTAMPTZ DEFAULT now();
+### 3.7 Formulario "Novo Ticket" (Portal)
+- Campos simplificados: assunto, descricao, produto (opcional), anexos
+- Nome e email preenchidos automaticamente do perfil
 
--- RLS update/delete para categories e subcategories
-CREATE POLICY "categories_update" ON categories FOR UPDATE 
-  USING (has_role(auth.uid(), 'supervisor'));
-CREATE POLICY "categories_delete" ON categories FOR DELETE 
-  USING (has_role(auth.uid(), 'supervisor'));
-CREATE POLICY "subcategories_update" ON subcategories FOR UPDATE 
-  USING (has_role(auth.uid(), 'supervisor'));
-CREATE POLICY "subcategories_delete" ON subcategories FOR DELETE 
-  USING (has_role(auth.uid(), 'supervisor'));
-```
+---
 
-### Ficheiros a criar
-- `src/pages/StatusPage.tsx` -- Gestao de estados (CRUD + reordenacao)
-- `src/pages/CategoriesPage.tsx` -- Gestao de categorias e subcategorias
+## 4. Integracao no Lado do Agente
 
-### Ficheiros a modificar
-- `src/pages/Tickets.tsx` -- Carregar estados da BD em vez de hardcoded
-- `src/pages/TicketDetail.tsx` -- Carregar estados da BD, logica de atribuicao e SLA por estagio
-- `src/components/KanbanBoard.tsx` -- Colunas dinamicas da BD com cores
-- `src/pages/TicketNew.tsx` -- Atribuicao automatica na criacao
-- `src/components/ticket/TicketSidebar.tsx` -- Mostrar info de estagio SLA
-- `src/components/ticket/SlaIndicator.tsx` -- Indicador de SLA por estagio
-- `src/App.tsx` -- Rotas para StatusPage e CategoriesPage
-- `src/components/AppSidebar.tsx` -- Links na sidebar
+### 4.1 Timeline do Ticket (TicketDetail)
+- Distinguir visualmente mensagens do cliente vs notas internas
+- Mensagens do cliente aparecem com estilo diferente (ex: balao azul)
+- Notas internas continuam no formato atual
 
-### Ordem de implementacao
-1. Migracoes SQL (tabela status + colunas)
-2. Substituir statusLabels hardcoded em todos os ficheiros por dados da BD
-3. Criar pagina de gestao de status
-4. Criar pagina de gestao de categorias
-5. Implementar logica de atribuicao automatica
-6. Implementar SLA por estagio
-7. Atualizar sidebar e rotas
+### 4.2 Resposta ao Cliente
+- Novo botao "Responder ao Cliente" que insere em `ticket_messages` (visivel para o cliente)
+- O campo de notas existente continua para notas internas
 
+### 4.3 Notificacao de Mudanca de Estado
+- Ao mudar estado no `updateStatus`, chamar `send-ticket-email` com template correspondente
+
+---
+
+## 5. Gestao de Templates de Email (Settings)
+
+### 5.1 Nova tab "Templates de Email" nas definicoes
+- Lista de templates existentes
+- Editor com preview das variaveis disponiveis
+- Templates pre-carregados: ticket_created, status_changed, welcome
+
+---
+
+## 6. Integracao Resend
+
+- Precisa de API key do Resend configurada como secret
+- Usada nas edge functions para envio de emails
+
+---
+
+## Secao Tecnica -- Sequencia de Implementacao
+
+1. Adicionar valor `client` ao ENUM `app_role`
+2. Criar tabelas: `client_users`, `ticket_messages`, `email_templates`, `faq_items`
+3. Adicionar coluna `client_user_id` a tabela `tickets`
+4. Criar RLS policies com funcao `has_role` para role `client`
+5. Configurar API key do Resend como secret
+6. Criar edge functions: `create-client-account`, `send-ticket-email`
+7. Criar `PortalLayout.tsx` e hook `useClientAuth` (separado do `useAuth` dos agentes, mas mesmo Supabase auth)
+8. Criar paginas do portal: login, registo, lista de tickets, detalhe, FAQ, novo ticket
+9. Atualizar `TicketDetail.tsx` para mostrar mensagens do cliente e botao de resposta
+10. Criar pagina de gestao de templates nas definicoes
+11. Integrar envio de email na mudanca de estado
+
+### Decisoes Tecnicas
+- Clientes e agentes partilham o mesmo `auth.users` mas sao diferenciados pelo role (`client` vs `agent`/`supervisor`)
+- O `useAuth` existente precisa ser adaptado para redirecionar clientes para `/portal` e agentes para `/`
+- RLS nos tickets atualizada: clientes veem apenas tickets onde `client_user_id = auth.uid()`
+- `ticket_messages` e separada de `ticket_events` para que notas internas nunca sejam visiveis ao cliente
