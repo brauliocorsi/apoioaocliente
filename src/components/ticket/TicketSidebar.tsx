@@ -130,125 +130,194 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
             )}
           </div>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm">
+        <CardContent className="space-y-4 text-sm">
           {editing ? (
             <>
-              <div className="space-y-1">
-                <Label className="text-xs">Categoria</Label>
-                <Select value={form.category_id} onValueChange={(v) => setForm({ ...form, category_id: v, subcategory_id: "" })}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                  <SelectContent>
-                    {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Subcategoria</Label>
-                <Select value={form.subcategory_id} onValueChange={(v) => setForm({ ...form, subcategory_id: v })}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                  <SelectContent>
-                    {filteredSubs.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Prioridade</Label>
-                <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v })}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="P1">P1 – Urgente</SelectItem>
-                    <SelectItem value="P2">P2 – Normal</SelectItem>
-                    <SelectItem value="P3">P3 – Baixa</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Atribuído a</Label>
-                <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Não atribuído" /></SelectTrigger>
-                  <SelectContent>
-                    {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Nome cliente</Label>
-                <Input className="h-8 text-xs" value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Email</Label>
-                <Input className="h-8 text-xs" value={form.client_email} onChange={(e) => setForm({ ...form, client_email: e.target.value })} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Telefone</Label>
-                <Input className="h-8 text-xs" value={form.client_phone} onChange={(e) => setForm({ ...form, client_phone: e.target.value })} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Nº Encomenda</Label>
-                <Input className="h-8 text-xs" value={form.order_number} onChange={(e) => setForm({ ...form, order_number: e.target.value })} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Nº Assistência</Label>
-                <Input className="h-8 text-xs" value={form.service_number} onChange={(e) => setForm({ ...form, service_number: e.target.value })} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Data entrega</Label>
-                <Input type="date" className="h-8 text-xs" value={form.delivery_date} onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Data compra</Label>
-                <Input type="date" className="h-8 text-xs" value={form.purchase_date} onChange={(e) => setForm({ ...form, purchase_date: e.target.value })} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Tipo de entrega</Label>
-                <Select value={form.delivery_type} onValueChange={(v) => setForm({ ...form, delivery_type: v })}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="entrega">Entrega</SelectItem>
-                    <SelectItem value="levantamento">Levantamento</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {form.delivery_type === "levantamento" && (
-                <div className="space-y-1">
-                  <Label className="text-xs">Data levantamento</Label>
-                  <Input type="date" className="h-8 text-xs" value={form.pickup_date} onChange={(e) => setForm({ ...form, pickup_date: e.target.value })} />
+              {/* === Ticket === */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Ticket</p>
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Categoria</Label>
+                    <Select value={form.category_id || "__none__"} onValueChange={(v) => setForm({ ...form, category_id: v === "__none__" ? "" : v, subcategory_id: "" })}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Nenhuma</SelectItem>
+                        {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Subcategoria</Label>
+                    <Select value={form.subcategory_id || "__none__"} onValueChange={(v) => setForm({ ...form, subcategory_id: v === "__none__" ? "" : v })}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Nenhuma</SelectItem>
+                        {filteredSubs.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Prioridade</Label>
+                    <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v })}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="P1">P1 – Urgente</SelectItem>
+                        <SelectItem value="P2">P2 – Normal</SelectItem>
+                        <SelectItem value="P3">P3 – Baixa</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Atribuído a</Label>
+                    <Select value={form.assigned_to || "__none__"} onValueChange={(v) => setForm({ ...form, assigned_to: v === "__none__" ? "" : v })}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Não atribuído" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Não atribuído</SelectItem>
+                        {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-              )}
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-xs">
-                  <input type="checkbox" checked={form.is_assembled} onChange={(e) => setForm({ ...form, is_assembled: e.target.checked })} className="rounded" />
-                  Montado
-                </label>
-                <label className="flex items-center gap-2 text-xs">
-                  <input type="checkbox" checked={form.is_personalized} onChange={(e) => setForm({ ...form, is_personalized: e.target.checked })} className="rounded" />
-                  Personalizado
-                </label>
-                <label className="flex items-center gap-2 text-xs">
-                  <input type="checkbox" checked={form.is_exhibition} onChange={(e) => setForm({ ...form, is_exhibition: e.target.checked })} className="rounded" />
-                  Exposição
-                </label>
+              </div>
+
+              <hr className="border-border" />
+
+              {/* === Cliente === */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Cliente</p>
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Nome</Label>
+                    <Input className="h-8 text-xs" value={form.client_name} onChange={(e) => setForm({ ...form, client_name: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Email</Label>
+                    <Input className="h-8 text-xs" value={form.client_email} onChange={(e) => setForm({ ...form, client_email: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Telefone</Label>
+                    <Input className="h-8 text-xs" value={form.client_phone} onChange={(e) => setForm({ ...form, client_phone: e.target.value })} />
+                  </div>
+                </div>
+              </div>
+
+              <hr className="border-border" />
+
+              {/* === Encomenda / Entrega === */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Encomenda & Entrega</p>
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Nº Encomenda</Label>
+                    <Input className="h-8 text-xs" value={form.order_number} onChange={(e) => setForm({ ...form, order_number: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Nº Assistência</Label>
+                    <Input className="h-8 text-xs" value={form.service_number} onChange={(e) => setForm({ ...form, service_number: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Data compra</Label>
+                    <Input type="date" className="h-8 text-xs" value={form.purchase_date} onChange={(e) => setForm({ ...form, purchase_date: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Tipo de entrega</Label>
+                    <Select value={form.delivery_type || "__none__"} onValueChange={(v) => setForm({ ...form, delivery_type: v === "__none__" ? "" : v })}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">–</SelectItem>
+                        <SelectItem value="entrega">Entrega</SelectItem>
+                        <SelectItem value="levantamento">Levantamento</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Data entrega</Label>
+                    <Input type="date" className="h-8 text-xs" value={form.delivery_date} onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} />
+                  </div>
+                  {form.delivery_type === "levantamento" && (
+                    <div className="space-y-1">
+                      <Label className="text-xs">Data levantamento</Label>
+                      <Input type="date" className="h-8 text-xs" value={form.pickup_date} onChange={(e) => setForm({ ...form, pickup_date: e.target.value })} />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <hr className="border-border" />
+
+              {/* === Produto === */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Produto</p>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-xs">
+                    <input type="checkbox" checked={form.is_assembled} onChange={(e) => setForm({ ...form, is_assembled: e.target.checked })} className="rounded" />
+                    Montado
+                  </label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input type="checkbox" checked={form.is_personalized} onChange={(e) => setForm({ ...form, is_personalized: e.target.checked })} className="rounded" />
+                    Personalizado
+                  </label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input type="checkbox" checked={form.is_exhibition} onChange={(e) => setForm({ ...form, is_exhibition: e.target.checked })} className="rounded" />
+                    Exposição
+                  </label>
+                </div>
               </div>
             </>
           ) : (
             <>
-              <div><span className="text-muted-foreground">Categoria:</span> <span className="ml-2">{categoryName(ticket.category_id)}</span></div>
-              <div><span className="text-muted-foreground">Subcategoria:</span> <span className="ml-2">{subcategoryName(ticket.subcategory_id)}</span></div>
-              <div><span className="text-muted-foreground">Atribuído a:</span> <span className="ml-2">{agentName(ticket.assigned_to)}</span></div>
-              <div><span className="text-muted-foreground">Email:</span> <span className="ml-2">{ticket.client_email || "–"}</span></div>
-              <div><span className="text-muted-foreground">Telefone:</span> <span className="ml-2">{ticket.client_phone || "–"}</span></div>
-              <div><span className="text-muted-foreground">Nº Encomenda:</span> <span className="ml-2">{ticket.order_number || "–"}</span></div>
-              <div><span className="text-muted-foreground">Nº Assistência:</span> <span className="ml-2">{ticket.service_number || "–"}</span></div>
-              <div><span className="text-muted-foreground">Data entrega:</span> <span className="ml-2">{ticket.delivery_date || "–"}</span></div>
-              <div><span className="text-muted-foreground">Data compra:</span> <span className="ml-2">{ticket.purchase_date || "–"}</span></div>
-              <div><span className="text-muted-foreground">Tipo entrega:</span> <span className="ml-2">{ticket.delivery_type === "entrega" ? "Entrega" : ticket.delivery_type === "levantamento" ? "Levantamento" : "–"}</span></div>
-              {ticket.delivery_type === "levantamento" && (
-                <div><span className="text-muted-foreground">Data levantamento:</span> <span className="ml-2">{ticket.pickup_date || "–"}</span></div>
-              )}
-              <div><span className="text-muted-foreground">Montado:</span> <span className="ml-2">{ticket.is_assembled ? "Sim" : "Não"}</span></div>
-              <div><span className="text-muted-foreground">Personalizado:</span> <span className="ml-2">{ticket.is_personalized ? "Sim" : "Não"}</span></div>
-              <div><span className="text-muted-foreground">Exposição:</span> <span className="ml-2">{ticket.is_exhibition ? "Sim" : "Não"}</span></div>
-              <div><span className="text-muted-foreground">Criado:</span> <span className="ml-2">{new Date(ticket.created_at).toLocaleString("pt-PT")}</span></div>
+              {/* === Ticket === */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Ticket</p>
+                <div className="space-y-1.5">
+                  <div><span className="text-muted-foreground">Categoria:</span> <span className="ml-2">{categoryName(ticket.category_id)}</span></div>
+                  <div><span className="text-muted-foreground">Subcategoria:</span> <span className="ml-2">{subcategoryName(ticket.subcategory_id)}</span></div>
+                  <div><span className="text-muted-foreground">Atribuído a:</span> <span className="ml-2">{agentName(ticket.assigned_to)}</span></div>
+                  <div><span className="text-muted-foreground">Criado:</span> <span className="ml-2">{new Date(ticket.created_at).toLocaleString("pt-PT")}</span></div>
+                </div>
+              </div>
+
+              <hr className="border-border" />
+
+              {/* === Cliente === */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Cliente</p>
+                <div className="space-y-1.5">
+                  <div><span className="text-muted-foreground">Nome:</span> <span className="ml-2">{ticket.client_name}</span></div>
+                  <div><span className="text-muted-foreground">Email:</span> <span className="ml-2">{ticket.client_email || "–"}</span></div>
+                  <div><span className="text-muted-foreground">Telefone:</span> <span className="ml-2">{ticket.client_phone || "–"}</span></div>
+                </div>
+              </div>
+
+              <hr className="border-border" />
+
+              {/* === Encomenda / Entrega === */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Encomenda & Entrega</p>
+                <div className="space-y-1.5">
+                  <div><span className="text-muted-foreground">Nº Encomenda:</span> <span className="ml-2">{ticket.order_number || "–"}</span></div>
+                  <div><span className="text-muted-foreground">Nº Assistência:</span> <span className="ml-2">{ticket.service_number || "–"}</span></div>
+                  <div><span className="text-muted-foreground">Data compra:</span> <span className="ml-2">{ticket.purchase_date || "–"}</span></div>
+                  <div><span className="text-muted-foreground">Tipo entrega:</span> <span className="ml-2">{ticket.delivery_type === "entrega" ? "Entrega" : ticket.delivery_type === "levantamento" ? "Levantamento" : "–"}</span></div>
+                  <div><span className="text-muted-foreground">Data entrega:</span> <span className="ml-2">{ticket.delivery_date || "–"}</span></div>
+                  {ticket.delivery_type === "levantamento" && (
+                    <div><span className="text-muted-foreground">Data levantamento:</span> <span className="ml-2">{ticket.pickup_date || "–"}</span></div>
+                  )}
+                </div>
+              </div>
+
+              <hr className="border-border" />
+
+              {/* === Produto === */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Produto</p>
+                <div className="space-y-1.5">
+                  <div><span className="text-muted-foreground">Montado:</span> <span className="ml-2">{ticket.is_assembled ? "Sim" : "Não"}</span></div>
+                  <div><span className="text-muted-foreground">Personalizado:</span> <span className="ml-2">{ticket.is_personalized ? "Sim" : "Não"}</span></div>
+                  <div><span className="text-muted-foreground">Exposição:</span> <span className="ml-2">{ticket.is_exhibition ? "Sim" : "Não"}</span></div>
+                </div>
+              </div>
             </>
           )}
         </CardContent>
