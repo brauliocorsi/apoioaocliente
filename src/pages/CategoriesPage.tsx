@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2, ChevronDown, Loader2, Pencil, Check, X } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 type Category = { id: string; name: string; description: string | null; sort_order: number; default_assign: string | null };
 type Subcategory = { id: string; category_id: string; name: string; sort_order: number; description: string | null; default_assign: string | null };
@@ -99,6 +100,11 @@ export default function CategoriesPage() {
       setNewSub({ ...newSub, [categoryId]: { id: "", name: "", description: "", default_assign: "" } });
       fetchData();
     }
+  };
+
+  const updateSubField = async (id: string, field: string, value: any) => {
+    await supabase.from("subcategories").update({ [field]: value } as any).eq("id", id);
+    fetchData();
   };
 
   const deleteSubcategory = async (id: string) => {
@@ -206,15 +212,24 @@ export default function CategoriesPage() {
                 <CollapsibleContent>
                   <CardContent className="pt-0 space-y-2">
                     {subs.map((sub) => (
-                      <div key={sub.id} className="flex items-center justify-between p-2 rounded border bg-muted/30 ml-4">
-                        <div>
-                          <p className="text-sm">{sub.name}</p>
+                      <div key={sub.id} className="p-3 rounded border bg-muted/30 ml-4 space-y-2">
+                        <div className="flex items-center justify-between">
                           <p className="text-xs text-muted-foreground font-mono">{sub.id}</p>
-                          {sub.default_assign && <p className="text-xs text-muted-foreground">Atribuição: {agents.find((a) => a.id === sub.default_assign)?.full_name || "?"}</p>}
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteSubcategory(sub.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
                         </div>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteSubcategory(sub.id)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="grid gap-2 md:grid-cols-3">
+                          <Input className="h-7 text-xs" value={sub.name} onChange={(e) => updateSubField(sub.id, "name", e.target.value)} placeholder="Nome" />
+                          <Input className="h-7 text-xs" value={sub.description || ""} onChange={(e) => updateSubField(sub.id, "description", e.target.value || null)} placeholder="Descrição" />
+                          <Select value={sub.default_assign || "__none__"} onValueChange={(v) => updateSubField(sub.id, "default_assign", v === "__none__" ? null : v)}>
+                            <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Atribuição" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Nenhuma</SelectItem>
+                              {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                     ))}
                     <div className="ml-4 p-3 rounded border border-dashed">
