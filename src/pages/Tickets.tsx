@@ -9,15 +9,44 @@ import { Plus, Search, Loader2, List, LayoutGrid, AlertTriangle, Clock, CheckCir
 import { useNavigate } from "react-router-dom";
 import KanbanBoard from "@/components/KanbanBoard";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
-import SlaDashboard, { type SlaTicket, getTicketSlaStatus, type SlaStatus } from "@/components/ticket/SlaDashboard";
+import SlaDashboard, { type SlaTicket, getTicketSlaStatus, calcRemaining, type SlaStatus } from "@/components/ticket/SlaDashboard";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-function SlaIcon({ status }: { status: SlaStatus }) {
-  if (status === "breached") return <AlertTriangle className="h-4 w-4 text-destructive" />;
-  if (status === "at_risk") return <Timer className="h-4 w-4 text-warning" />;
-  if (status === "on_track") return <Clock className="h-4 w-4 text-success" />;
-  if (status === "completed") return <CheckCircle className="h-4 w-4 text-success" />;
-  return null;
+function formatSlaTime(ms: number): string {
+  const abs = Math.abs(ms);
+  const hours = Math.floor(abs / 3600000);
+  const mins = Math.floor((abs % 3600000) / 60000);
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
+
+function slaTooltipText(ticket: SlaTicket, status: SlaStatus): string {
+  if (status === "completed") return "SLA concluído";
+  if (status === "no_sla") return "Sem SLA definido";
+  const deadline = ticket.sla_resolution_at;
+  if (!deadline) return "Sem SLA";
+  const remaining = calcRemaining(deadline, ticket.sla_paused_total_seconds || 0, ticket.sla_paused_at);
+  if (remaining <= 0) return `Expirado há ${formatSlaTime(remaining)}`;
+  return `${formatSlaTime(remaining)} restante`;
+}
+
+function SlaIcon({ status, ticket }: { status: SlaStatus; ticket: SlaTicket }) {
+  const icon =
+    status === "breached" ? <AlertTriangle className="h-4 w-4 text-destructive" /> :
+    status === "at_risk" ? <Timer className="h-4 w-4 text-warning" /> :
+    status === "on_track" ? <Clock className="h-4 w-4 text-success" /> :
+    status === "completed" ? <CheckCircle className="h-4 w-4 text-success" /> :
+    null;
+
+  if (!icon) return null;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild><span className="cursor-default">{icon}</span></TooltipTrigger>
+      <TooltipContent><p className="text-xs">{slaTooltipText(ticket, status)}</p></TooltipContent>
+    </Tooltip>
+  );
 }
 
 type TicketRow = {
@@ -100,6 +129,7 @@ export default function Tickets() {
   };
 
   return (
+    <TooltipProvider>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -188,7 +218,7 @@ export default function Tickets() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <SlaIcon status={getTicketSlaStatus(t)} />
+                      <SlaIcon status={getTicketSlaStatus(t)} ticket={t as SlaTicket} />
                       {t.category_id && <Badge variant="outline" className="text-xs">{categories[t.category_id] || t.category_id}</Badge>}
                       <PriorityFlag priority={t.priority} />
                       <Badge variant="secondary">{statusLabels[t.status] || t.status}</Badge>
@@ -201,5 +231,6 @@ export default function Tickets() {
         </Card>
       )}
     </div>
+    </TooltipProvider>
   );
 }
