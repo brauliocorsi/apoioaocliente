@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +39,7 @@ type TicketRow = {
 
 export default function Tickets() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
+  const [categories, setCategories] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -48,6 +49,14 @@ export default function Tickets() {
   const navigate = useNavigate();
 
   const refreshTickets = () => setFetchKey((k) => k + 1);
+
+  useEffect(() => {
+    supabase.from("categories").select("id, name").then(({ data }) => {
+      const map: Record<string, string> = {};
+      (data || []).forEach((c: any) => { map[c.id] = c.name; });
+      setCategories(map);
+    });
+  }, []);
 
   useEffect(() => {
     const fetch = async () => {
@@ -136,7 +145,7 @@ export default function Tickets() {
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : view === "kanban" ? (
-        <KanbanBoard tickets={filtered} onTicketMoved={refreshTickets} />
+        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -158,7 +167,7 @@ export default function Tickets() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {t.category_id && <Badge variant="outline" className="text-xs">{t.category_id}</Badge>}
+                      {t.category_id && <Badge variant="outline" className="text-xs">{categories[t.category_id] || t.category_id}</Badge>}
                       <Badge className={priorityColors[t.priority]}>{t.priority}</Badge>
                       <Badge variant="secondary">{statusLabels[t.status] || t.status}</Badge>
                     </div>

@@ -66,10 +66,11 @@ type TicketRow = {
 
 interface KanbanBoardProps {
   tickets: TicketRow[];
+  categoryNames?: Record<string, string>;
   onTicketMoved?: () => void;
 }
 
-function TicketCard({ ticket, isDragging }: { ticket: TicketRow; isDragging?: boolean }) {
+function TicketCard({ ticket, isDragging, categoryNames }: { ticket: TicketRow; isDragging?: boolean; categoryNames?: Record<string, string> }) {
   return (
     <div className={`bg-background border rounded-md p-3 transition-shadow ${isDragging ? "shadow-lg opacity-80 rotate-2" : "hover:shadow-md"}`}>
       <div className="flex items-center justify-between mb-1">
@@ -79,13 +80,13 @@ function TicketCard({ ticket, isDragging }: { ticket: TicketRow; isDragging?: bo
       <p className="text-sm font-medium leading-tight line-clamp-2">{ticket.subject}</p>
       <p className="text-xs text-muted-foreground mt-1 truncate">{ticket.client_name}</p>
       {ticket.category_id && (
-        <Badge variant="outline" className="text-[10px] mt-1.5">{ticket.category_id}</Badge>
+        <Badge variant="outline" className="text-[10px] mt-1.5">{categoryNames?.[ticket.category_id] || ticket.category_id}</Badge>
       )}
     </div>
   );
 }
 
-function DraggableTicket({ ticket }: { ticket: TicketRow }) {
+function DraggableTicket({ ticket, categoryNames }: { ticket: TicketRow; categoryNames?: Record<string, string> }) {
   const navigate = useNavigate();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: ticket.id,
@@ -100,7 +101,7 @@ function DraggableTicket({ ticket }: { ticket: TicketRow }) {
       className={`cursor-grab active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}
       onClick={() => navigate(`/tickets/${ticket.id}`)}
     >
-      <TicketCard ticket={ticket} />
+      <TicketCard ticket={ticket} categoryNames={categoryNames} />
     </div>
   );
 }
@@ -118,7 +119,7 @@ function DroppableColumn({ status, children, isOver }: { status: string; childre
   );
 }
 
-export default function KanbanBoard({ tickets, onTicketMoved }: KanbanBoardProps) {
+export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: KanbanBoardProps) {
   const { toast } = useToast();
   const [activeTicket, setActiveTicket] = useState<TicketRow | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
@@ -192,7 +193,7 @@ export default function KanbanBoard({ tickets, onTicketMoved }: KanbanBoardProps
             <ScrollArea className="h-[calc(100vh-320px)]">
               <div className="p-2 space-y-2">
                 {grouped[status].map((t) => (
-                  <DraggableTicket key={t.id} ticket={t} />
+                  <DraggableTicket key={t.id} ticket={t} categoryNames={categoryNames} />
                 ))}
                 {grouped[status].length === 0 && (
                   <p className="text-xs text-muted-foreground text-center py-8">Sem tickets</p>
@@ -204,7 +205,7 @@ export default function KanbanBoard({ tickets, onTicketMoved }: KanbanBoardProps
       </div>
 
       <DragOverlay>
-        {activeTicket && <TicketCard ticket={activeTicket} isDragging />}
+        {activeTicket && <TicketCard ticket={activeTicket} isDragging categoryNames={categoryNames} />}
       </DragOverlay>
     </DndContext>
   );
