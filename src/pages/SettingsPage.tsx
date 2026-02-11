@@ -6,6 +6,7 @@ import StatusPage from "./StatusPage";
 import CategoriesPage from "./CategoriesPage";
 import TagsPage from "./TagsPage";
 import AgentsTab from "@/components/settings/AgentsTab";
+import EmailTemplatesTab from "@/components/settings/EmailTemplatesTab";
 
 export default function SettingsPage() {
   const { profile, role } = useAuth();
@@ -14,7 +15,7 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
-        <p className="text-muted-foreground">Perfil, estados, categorias e etiquetas</p>
+        <p className="text-muted-foreground">Perfil, estados, categorias, etiquetas e templates</p>
       </div>
 
       <Tabs defaultValue="profile" className="space-y-4">
@@ -24,6 +25,7 @@ export default function SettingsPage() {
           <TabsTrigger value="statuses">Estados</TabsTrigger>
           <TabsTrigger value="categories">Categorias</TabsTrigger>
           <TabsTrigger value="tags">Etiquetas</TabsTrigger>
+          <TabsTrigger value="templates">Templates Email</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="max-w-2xl space-y-6">
@@ -52,21 +54,6 @@ export default function SettingsPage() {
               <p className="mt-1">Os SLAs são calculados automaticamente com base na categoria e prioridade do ticket.</p>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader><CardTitle className="text-base">Integração de Email</CardTitle></CardHeader>
-            <CardContent className="text-sm space-y-3">
-              <p className="text-muted-foreground">
-                Configure o seu serviço de email (SendGrid, Mailgun, etc.) para enviar emails recebidos via webhook para o seguinte URL:
-              </p>
-              <code className="block bg-muted p-3 rounded text-xs break-all">
-                {`https://ijxxjtiqitlyazwdqgwv.supabase.co/functions/v1/inbound-email`}
-              </code>
-              <p className="text-muted-foreground text-xs">
-                Emails recebidos neste webhook serão automaticamente convertidos em tickets com os dados do remetente.
-              </p>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         <TabsContent value="agents">
@@ -83,6 +70,10 @@ export default function SettingsPage() {
 
         <TabsContent value="tags">
           <TagsPage />
+        </TabsContent>
+
+        <TabsContent value="templates">
+          <EmailTemplatesTab />
         </TabsContent>
       </Tabs>
     </div>
