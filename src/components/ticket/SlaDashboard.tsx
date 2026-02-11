@@ -17,7 +17,7 @@ export type SlaTicket = {
   sla_stage_deadline_at: string | null;
 };
 
-function calcRemaining(deadline: string, pausedSeconds: number, pausedAt: string | null): number {
+export function calcRemaining(deadline: string, pausedSeconds: number, pausedAt: string | null): number {
   const deadlineMs = new Date(deadline).getTime();
   let pausedMs = (pausedSeconds || 0) * 1000;
   if (pausedAt) pausedMs += Date.now() - new Date(pausedAt).getTime();
