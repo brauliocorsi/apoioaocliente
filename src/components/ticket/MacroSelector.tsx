@@ -38,7 +38,13 @@ export default function MacroSelector({ ticket, onSelect }: MacroSelectorProps) 
       .replace(/\{data_entrega\}/g, ticket.delivery_date || "")
       .replace(/\{data_compra\}/g, ticket.purchase_date || "")
       .replace(/\{numero_ticket\}/g, String(ticket.ticket_number || ""))
-      .replace(/\{assunto\}/g, ticket.subject || "");
+      .replace(/\{assunto\}/g, ticket.subject || "")
+      .replace(/\{email_cliente\}/g, ticket.client_email || "")
+      .replace(/\{telefone_cliente\}/g, ticket.client_phone || "")
+      .replace(/\{produto\}/g, ticket.product_name || "")
+      .replace(/\{n_assistencia\}/g, ticket.service_number || "")
+      .replace(/\{data_levantamento\}/g, ticket.pickup_date || "")
+      .replace(/\{tipo_entrega\}/g, ticket.delivery_type === "entrega" ? "Entrega" : ticket.delivery_type === "levantamento" ? "Levantamento" : "");
   };
 
   const handleSelect = (macro: any) => {

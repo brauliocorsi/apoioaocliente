@@ -42,6 +42,7 @@ export default function TicketNew() {
     payment_method: "",
     delivery_type: "",
     pickup_date: "",
+    product_name: "",
   });
   const [attachments, setAttachments] = useState<any[]>([]);
 
@@ -105,6 +106,7 @@ export default function TicketNew() {
       payment_method: form.payment_method || null,
       delivery_type: form.delivery_type || null,
       pickup_date: form.pickup_date || null,
+      product_name: form.product_name || null,
       sla_first_response_at,
       sla_resolution_at,
       created_by: user.id,
@@ -255,6 +257,10 @@ export default function TicketNew() {
                   <Input type="date" value={form.pickup_date} onChange={(e) => update("pickup_date", e.target.value)} />
                 </div>
               )}
+            </div>
+            <div className="space-y-2">
+              <Label>Produto</Label>
+              <Input placeholder="Nome ou referência do produto" value={form.product_name} onChange={(e) => update("product_name", e.target.value)} />
             </div>
             <div className="flex flex-wrap gap-4">
               <label className="flex items-center gap-2 text-sm">

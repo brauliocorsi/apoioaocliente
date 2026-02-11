@@ -59,6 +59,7 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
         is_exhibition: ticket.is_exhibition,
         delivery_type: ticket.delivery_type || "",
         pickup_date: ticket.pickup_date || "",
+        product_name: ticket.product_name || "",
       });
     }
   }, [ticket]);
@@ -101,6 +102,7 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
       is_exhibition: form.is_exhibition,
       delivery_type: form.delivery_type || null,
       pickup_date: form.pickup_date || null,
+      product_name: form.product_name || null,
     };
     await supabase.from("tickets").update(updates).eq("id", ticket.id);
     toast({ title: "Ticket atualizado" });
@@ -250,6 +252,10 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Produto</p>
                 <div className="space-y-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Produto</Label>
+                    <Input className="h-8 text-xs" placeholder="Nome ou referência" value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
+                  </div>
                   <label className="flex items-center gap-2 text-xs">
                     <input type="checkbox" checked={form.is_assembled} onChange={(e) => setForm({ ...form, is_assembled: e.target.checked })} className="rounded" />
                     Montado
@@ -313,6 +319,7 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Produto</p>
                 <div className="space-y-1.5">
+                  <div><span className="text-muted-foreground">Produto:</span> <span className="ml-2">{ticket.product_name || "–"}</span></div>
                   <div><span className="text-muted-foreground">Montado:</span> <span className="ml-2">{ticket.is_assembled ? "Sim" : "Não"}</span></div>
                   <div><span className="text-muted-foreground">Personalizado:</span> <span className="ml-2">{ticket.is_personalized ? "Sim" : "Não"}</span></div>
                   <div><span className="text-muted-foreground">Exposição:</span> <span className="ml-2">{ticket.is_exhibition ? "Sim" : "Não"}</span></div>

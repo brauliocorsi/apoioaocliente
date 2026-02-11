@@ -426,6 +426,7 @@ export type Database = {
           payment_method: string | null
           pickup_date: string | null
           priority: Database["public"]["Enums"]["ticket_priority"]
+          product_name: string | null
           purchase_date: string | null
           resolved_at: string | null
           service_number: string | null
@@ -463,6 +464,7 @@ export type Database = {
           payment_method?: string | null
           pickup_date?: string | null
           priority?: Database["public"]["Enums"]["ticket_priority"]
+          product_name?: string | null
           purchase_date?: string | null
           resolved_at?: string | null
           service_number?: string | null
@@ -500,6 +502,7 @@ export type Database = {
           payment_method?: string | null
           pickup_date?: string | null
           priority?: Database["public"]["Enums"]["ticket_priority"]
+          product_name?: string | null
           purchase_date?: string | null
           resolved_at?: string | null
           service_number?: string | null
