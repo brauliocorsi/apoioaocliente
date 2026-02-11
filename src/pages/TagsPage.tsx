@@ -84,11 +84,7 @@ export default function TagsPage() {
   }, {} as Record<string, any[]>);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Etiquetas</h1>
-        <p className="text-muted-foreground">Gerir etiquetas do sistema de tickets</p>
-      </div>
+    <div className="space-y-6">
 
       {isSupervisor && (
         <Card>

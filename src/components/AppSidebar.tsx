@@ -1,4 +1,4 @@
-import { LayoutDashboard, Ticket, MessageSquareText, Settings, LogOut, Sofa, Tags, CircleDot, FolderTree } from "lucide-react";
+import { LayoutDashboard, Ticket, MessageSquareText, Settings, LogOut, Sofa } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -19,9 +19,6 @@ const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Tickets", url: "/tickets", icon: Ticket },
   { title: "Macros", url: "/macros", icon: MessageSquareText },
-  { title: "Etiquetas", url: "/tags", icon: Tags },
-  { title: "Estados", url: "/statuses", icon: CircleDot },
-  { title: "Categorias", url: "/categories", icon: FolderTree },
   { title: "Configurações", url: "/settings", icon: Settings },
 ];
 

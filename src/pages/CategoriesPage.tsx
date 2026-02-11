@@ -117,10 +117,6 @@ export default function CategoriesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Gestão de Categorias</h1>
-        <p className="text-muted-foreground">Configurar categorias, subcategorias e atribuição automática</p>
-      </div>
 
       <Card>
         <CardHeader><CardTitle className="text-base">Nova Categoria</CardTitle></CardHeader>
