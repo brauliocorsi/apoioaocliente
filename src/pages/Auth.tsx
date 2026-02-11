@@ -5,15 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Sofa } from "lucide-react";
 
 export default function Auth() {
-  const { session, loading } = useAuth();
+  const { session, loading, signIn } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
-  const { signIn, signUp } = useAuth();
 
   if (loading) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (session) return <Navigate to="/" replace />;
@@ -24,23 +22,6 @@ export default function Auth() {
     const form = new FormData(e.currentTarget);
     const { error } = await signIn(form.get("email") as string, form.get("password") as string);
     if (error) toast({ title: "Erro no login", description: error.message, variant: "destructive" });
-    setIsSubmitting(false);
-  };
-
-  const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    const form = new FormData(e.currentTarget);
-    const { error } = await signUp(
-      form.get("email") as string,
-      form.get("password") as string,
-      form.get("fullName") as string
-    );
-    if (error) {
-      toast({ title: "Erro no registo", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Registo efetuado", description: "Verifique o seu email para confirmar a conta." });
-    }
     setIsSubmitting(false);
   };
 
@@ -55,48 +36,23 @@ export default function Auth() {
           <CardDescription>Sistema de Suporte ao Cliente</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="login">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">Entrar</TabsTrigger>
-              <TabsTrigger value="register">Registar</TabsTrigger>
-            </TabsList>
-            <TabsContent value="login">
-              <form onSubmit={handleSignIn} className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label htmlFor="login-email">Email</Label>
-                  <Input id="login-email" name="email" type="email" required placeholder="agente@upmoveis.pt" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="login-password">Password</Label>
-                  <Input id="login-password" name="password" type="password" required placeholder="••••••••" />
-                </div>
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Entrar
-                </Button>
-              </form>
-            </TabsContent>
-            <TabsContent value="register">
-              <form onSubmit={handleSignUp} className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label htmlFor="reg-name">Nome completo</Label>
-                  <Input id="reg-name" name="fullName" required placeholder="Nome do agente" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reg-email">Email</Label>
-                  <Input id="reg-email" name="email" type="email" required placeholder="agente@upmoveis.pt" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="reg-password">Password</Label>
-                  <Input id="reg-password" name="password" type="password" required minLength={6} placeholder="Mínimo 6 caracteres" />
-                </div>
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Registar
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
+          <form onSubmit={handleSignIn} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="login-email">Email</Label>
+              <Input id="login-email" name="email" type="email" required placeholder="agente@upmoveis.pt" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="login-password">Password</Label>
+              <Input id="login-password" name="password" type="password" required placeholder="••••••••" />
+            </div>
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Entrar
+            </Button>
+          </form>
+          <p className="text-xs text-muted-foreground text-center mt-4">
+            Contacte o supervisor para obter as suas credenciais de acesso.
+          </p>
         </CardContent>
       </Card>
     </div>

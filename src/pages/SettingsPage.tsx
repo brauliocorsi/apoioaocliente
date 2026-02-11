@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import StatusPage from "./StatusPage";
 import CategoriesPage from "./CategoriesPage";
 import TagsPage from "./TagsPage";
+import AgentsTab from "@/components/settings/AgentsTab";
 
 export default function SettingsPage() {
   const { profile, role } = useAuth();
@@ -19,6 +20,7 @@ export default function SettingsPage() {
       <Tabs defaultValue="profile" className="space-y-4">
         <TabsList>
           <TabsTrigger value="profile">Perfil</TabsTrigger>
+          <TabsTrigger value="agents">Agentes</TabsTrigger>
           <TabsTrigger value="statuses">Estados</TabsTrigger>
           <TabsTrigger value="categories">Categorias</TabsTrigger>
           <TabsTrigger value="tags">Etiquetas</TabsTrigger>
@@ -65,6 +67,10 @@ export default function SettingsPage() {
               </p>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="agents">
+          <AgentsTab />
         </TabsContent>
 
         <TabsContent value="statuses">
