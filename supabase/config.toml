@@ -2,3 +2,9 @@ project_id = "ijxxjtiqitlyazwdqgwv"
 
 [functions.inbound-email]
 verify_jwt = false
+
+[functions.create-client-account]
+verify_jwt = false
+
+[functions.send-ticket-email]
+verify_jwt = false
