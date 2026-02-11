@@ -4,6 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import PriorityFlag from "@/components/ticket/PriorityFlag";
 import {
   DndContext,
   DragOverlay,
@@ -75,7 +76,7 @@ function TicketCard({ ticket, isDragging, categoryNames }: { ticket: TicketRow; 
     <div className={`bg-background border rounded-md p-3 transition-shadow ${isDragging ? "shadow-lg opacity-80 rotate-2" : "hover:shadow-md"}`}>
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs font-mono text-muted-foreground">#{ticket.ticket_number}</span>
-        <Badge className={`text-[10px] px-1.5 py-0 ${priorityColors[ticket.priority]}`}>{ticket.priority}</Badge>
+        <PriorityFlag priority={ticket.priority} size={14} />
       </div>
       <p className="text-sm font-medium leading-tight line-clamp-2">{ticket.subject}</p>
       <p className="text-xs text-muted-foreground mt-1 truncate">{ticket.client_name}</p>

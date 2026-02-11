@@ -13,6 +13,8 @@ import { DecisionEngine, type RuleSuggestion } from "@/lib/decisionEngine";
 import FileUpload from "@/components/FileUpload";
 import MacroSelector from "@/components/ticket/MacroSelector";
 import TicketSidebar from "@/components/ticket/TicketSidebar";
+import SlaIndicator from "@/components/ticket/SlaIndicator";
+import PriorityFlag from "@/components/ticket/PriorityFlag";
 
 const statusLabels: Record<string, string> = {
   novo: "Novo",
@@ -124,7 +126,7 @@ export default function TicketDetail() {
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold">#{ticket.ticket_number} – {ticket.subject}</h1>
-            <Badge className={priorityColors[ticket.priority]}>{ticket.priority}</Badge>
+            <PriorityFlag priority={ticket.priority} showLabel />
           </div>
           <p className="text-sm text-muted-foreground">{ticket.client_name}{ticket.order_number ? ` · Enc. ${ticket.order_number}` : ""}{ticket.service_number ? ` · OS ${ticket.service_number}` : ""}</p>
         </div>
@@ -163,6 +165,8 @@ export default function TicketDetail() {
           </CardContent>
         </Card>
       )}
+
+      <SlaIndicator ticket={ticket} />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">

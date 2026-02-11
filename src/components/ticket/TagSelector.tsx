@@ -57,9 +57,13 @@ export default function TagSelector({ ticketId, selectedTags, onTagsChange }: Ta
         {selectedTags.map((t) => {
           const tag = allTags.find((at) => at.id === t);
           return (
-            <Badge key={t} variant="secondary" className="text-xs gap-1">
+            <Badge
+              key={t}
+              className="text-xs gap-1 text-white border-0"
+              style={{ backgroundColor: tag?.color || "#6b7280" }}
+            >
               {tag?.name || t}
-              <button onClick={() => removeTag(t)} className="hover:text-destructive">
+              <button onClick={() => removeTag(t)} className="hover:text-destructive-foreground/80">
                 <X className="h-3 w-3" />
               </button>
             </Badge>
@@ -84,10 +88,12 @@ export default function TagSelector({ ticketId, selectedTags, onTagsChange }: Ta
                     {(tags as any[]).map((tag) => (
                       <Badge
                         key={tag.id}
+                        className={`text-xs cursor-pointer ${selectedTags.includes(tag.id) ? "text-white border-0" : "border"}`}
+                        style={selectedTags.includes(tag.id) ? { backgroundColor: tag.color || "#6b7280" } : undefined}
                         variant={selectedTags.includes(tag.id) ? "default" : "outline"}
-                        className="text-xs cursor-pointer"
                         onClick={() => selectedTags.includes(tag.id) ? removeTag(tag.id) : addTag(tag.id)}
                       >
+                        <span className="inline-block h-2 w-2 rounded-full mr-1" style={{ backgroundColor: tag.color || "#6b7280" }} />
                         {tag.name}
                       </Badge>
                     ))}

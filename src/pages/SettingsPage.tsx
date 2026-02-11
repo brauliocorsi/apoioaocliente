@@ -37,6 +37,21 @@ export default function SettingsPage() {
           <p className="mt-1">Os SLAs são calculados automaticamente com base na categoria e prioridade do ticket.</p>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Integração de Email</CardTitle></CardHeader>
+        <CardContent className="text-sm space-y-3">
+          <p className="text-muted-foreground">
+            Configure o seu serviço de email (SendGrid, Mailgun, etc.) para enviar emails recebidos via webhook para o seguinte URL:
+          </p>
+          <code className="block bg-muted p-3 rounded text-xs break-all">
+            {`https://ijxxjtiqitlyazwdqgwv.supabase.co/functions/v1/inbound-email`}
+          </code>
+          <p className="text-muted-foreground text-xs">
+            Emails recebidos neste webhook serão automaticamente convertidos em tickets com os dados do remetente.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

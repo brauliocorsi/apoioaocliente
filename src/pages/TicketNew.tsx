@@ -40,6 +40,8 @@ export default function TicketNew() {
     is_personalized: false,
     is_exhibition: false,
     payment_method: "",
+    delivery_type: "",
+    pickup_date: "",
   });
   const [attachments, setAttachments] = useState<any[]>([]);
 
@@ -101,6 +103,8 @@ export default function TicketNew() {
       is_personalized: form.is_personalized,
       is_exhibition: form.is_exhibition,
       payment_method: form.payment_method || null,
+      delivery_type: form.delivery_type || null,
+      pickup_date: form.pickup_date || null,
       sla_first_response_at,
       sla_resolution_at,
       created_by: user.id,
@@ -233,6 +237,24 @@ export default function TicketNew() {
                 <Label>Data de compra</Label>
                 <Input type="date" value={form.purchase_date} onChange={(e) => update("purchase_date", e.target.value)} />
               </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Tipo de entrega</Label>
+                <Select value={form.delivery_type} onValueChange={(v) => update("delivery_type", v)}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar tipo" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="entrega">Entrega</SelectItem>
+                    <SelectItem value="levantamento">Levantamento</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {form.delivery_type === "levantamento" && (
+                <div className="space-y-2">
+                  <Label>Data de levantamento</Label>
+                  <Input type="date" value={form.pickup_date} onChange={(e) => update("pickup_date", e.target.value)} />
+                </div>
+              )}
             </div>
             <div className="flex flex-wrap gap-4">
               <label className="flex items-center gap-2 text-sm">
