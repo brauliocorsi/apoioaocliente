@@ -44,7 +44,10 @@ export default function Tickets() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [view, setView] = useState<"list" | "kanban">("list");
+  const [fetchKey, setFetchKey] = useState(0);
   const navigate = useNavigate();
+
+  const refreshTickets = () => setFetchKey((k) => k + 1);
 
   useEffect(() => {
     const fetch = async () => {
@@ -61,7 +64,7 @@ export default function Tickets() {
       setLoading(false);
     };
     fetch();
-  }, [statusFilter, priorityFilter]);
+  }, [statusFilter, priorityFilter, fetchKey]);
 
   const filtered = tickets.filter(
     (t) =>
@@ -133,7 +136,7 @@ export default function Tickets() {
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : view === "kanban" ? (
-        <KanbanBoard tickets={filtered} />
+        <KanbanBoard tickets={filtered} onTicketMoved={refreshTickets} />
       ) : (
         <Card>
           <CardContent className="p-0">
