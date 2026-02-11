@@ -86,6 +86,81 @@ export type Database = {
         }
         Relationships: []
       }
+      client_users: {
+        Row: {
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          phone: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          full_name: string
+          id: string
+          phone?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          phone?: string | null
+        }
+        Relationships: []
+      }
+      email_templates: {
+        Row: {
+          body_html: string
+          description: string | null
+          id: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          body_html: string
+          description?: string | null
+          id: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          body_html?: string
+          description?: string | null
+          id?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      faq_items: {
+        Row: {
+          answer: string
+          created_at: string
+          id: string
+          is_active: boolean
+          question: string
+          sort_order: number
+        }
+        Insert: {
+          answer: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          question: string
+          sort_order?: number
+        }
+        Update: {
+          answer?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          question?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       macros: {
         Row: {
           content: string
@@ -337,6 +412,41 @@ export type Database = {
           },
         ]
       }
+      ticket_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          sender_id: string
+          sender_type: string
+          ticket_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          sender_id: string
+          sender_type: string
+          ticket_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          sender_id?: string
+          sender_type?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ticket_statuses: {
         Row: {
           color: string | null
@@ -410,6 +520,7 @@ export type Database = {
           client_email: string | null
           client_name: string
           client_phone: string | null
+          client_user_id: string | null
           created_at: string
           created_by: string
           delivery_date: string | null
@@ -448,6 +559,7 @@ export type Database = {
           client_email?: string | null
           client_name: string
           client_phone?: string | null
+          client_user_id?: string | null
           created_at?: string
           created_by: string
           delivery_date?: string | null
@@ -486,6 +598,7 @@ export type Database = {
           client_email?: string | null
           client_name?: string
           client_phone?: string | null
+          client_user_id?: string | null
           created_at?: string
           created_by?: string
           delivery_date?: string | null
@@ -524,6 +637,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_client_user_id_fkey"
+            columns: ["client_user_id"]
+            isOneToOne: false
+            referencedRelation: "client_users"
             referencedColumns: ["id"]
           },
           {
@@ -578,7 +698,7 @@ export type Database = {
       is_authenticated_agent: { Args: never; Returns: boolean }
     }
     Enums: {
-      app_role: "agent" | "supervisor"
+      app_role: "agent" | "supervisor" | "client"
       macro_category:
         | "entrega"
         | "reclamacao"
@@ -722,7 +842,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["agent", "supervisor"],
+      app_role: ["agent", "supervisor", "client"],
       macro_category: [
         "entrega",
         "reclamacao",
