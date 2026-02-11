@@ -378,6 +378,7 @@ export type Database = {
           priority: Database["public"]["Enums"]["ticket_priority"]
           purchase_date: string | null
           resolved_at: string | null
+          service_number: string | null
           sla_first_response_at: string | null
           sla_paused_at: string | null
           sla_paused_total_seconds: number | null
@@ -410,6 +411,7 @@ export type Database = {
           priority?: Database["public"]["Enums"]["ticket_priority"]
           purchase_date?: string | null
           resolved_at?: string | null
+          service_number?: string | null
           sla_first_response_at?: string | null
           sla_paused_at?: string | null
           sla_paused_total_seconds?: number | null
@@ -442,6 +444,7 @@ export type Database = {
           priority?: Database["public"]["Enums"]["ticket_priority"]
           purchase_date?: string | null
           resolved_at?: string | null
+          service_number?: string | null
           sla_first_response_at?: string | null
           sla_paused_at?: string | null
           sla_paused_total_seconds?: number | null

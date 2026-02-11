@@ -28,6 +28,7 @@ export default function TicketNew() {
     client_email: "",
     client_phone: "",
     order_number: "",
+    service_number: "",
     subject: "",
     description: "",
     category_id: "",
@@ -88,6 +89,7 @@ export default function TicketNew() {
       client_email: form.client_email || null,
       client_phone: form.client_phone || null,
       order_number: form.order_number || null,
+      service_number: form.service_number || null,
       subject: form.subject,
       description: form.description || null,
       category_id: form.category_id || null,
@@ -156,6 +158,10 @@ export default function TicketNew() {
             <div className="space-y-2">
               <Label>Nº Encomenda</Label>
               <Input value={form.order_number} onChange={(e) => update("order_number", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Nº Assistência (OS)</Label>
+              <Input value={form.service_number} onChange={(e) => update("service_number", e.target.value)} placeholder="Número de ordem de serviço" />
             </div>
             <div className="space-y-2">
               <Label>Email</Label>

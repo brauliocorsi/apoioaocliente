@@ -1,0 +1,1 @@
+ALTER TABLE public.tickets ADD COLUMN service_number TEXT;

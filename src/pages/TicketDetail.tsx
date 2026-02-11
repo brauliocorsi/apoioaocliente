@@ -11,6 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Loader2, Clock, Send } from "lucide-react";
 import { DecisionEngine, type RuleSuggestion } from "@/lib/decisionEngine";
 import FileUpload from "@/components/FileUpload";
+import MacroSelector from "@/components/ticket/MacroSelector";
+import TicketSidebar from "@/components/ticket/TicketSidebar";
 
 const statusLabels: Record<string, string> = {
   novo: "Novo",
@@ -61,7 +63,6 @@ export default function TicketDetail() {
       url: supabase.storage.from("ticket-attachments").getPublicUrl(a.file_path).data.publicUrl,
     })));
     
-    // Run decision engine
     if (t) {
       const s = DecisionEngine.evaluate(t, (tTags || []).map((r: any) => r.tag_id));
       setSuggestions(s);
@@ -75,7 +76,6 @@ export default function TicketDetail() {
     if (!id || !user) return;
     const oldStatus = ticket.status;
     
-    // Handle SLA pause
     const updates: any = { status: newStatus };
     if (newStatus === "aguarda_cliente" && !ticket.sla_paused_at) {
       updates.sla_paused_at = new Date().toISOString();
@@ -126,7 +126,7 @@ export default function TicketDetail() {
             <h1 className="text-xl font-bold">#{ticket.ticket_number} – {ticket.subject}</h1>
             <Badge className={priorityColors[ticket.priority]}>{ticket.priority}</Badge>
           </div>
-          <p className="text-sm text-muted-foreground">{ticket.client_name}{ticket.order_number ? ` · Enc. ${ticket.order_number}` : ""}</p>
+          <p className="text-sm text-muted-foreground">{ticket.client_name}{ticket.order_number ? ` · Enc. ${ticket.order_number}` : ""}{ticket.service_number ? ` · OS ${ticket.service_number}` : ""}</p>
         </div>
         <Select value={ticket.status} onValueChange={updateStatus}>
           <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
@@ -138,7 +138,6 @@ export default function TicketDetail() {
         </Select>
       </div>
 
-      {/* Decision Engine Suggestions */}
       {suggestions.length > 0 && (
         <Card className="border-warning/50 bg-warning/5">
           <CardHeader className="pb-2">
@@ -166,7 +165,6 @@ export default function TicketDetail() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Main content */}
         <div className="lg:col-span-2 space-y-6">
           <Card>
             <CardHeader><CardTitle className="text-sm">Descrição</CardTitle></CardHeader>
@@ -175,7 +173,6 @@ export default function TicketDetail() {
             </CardContent>
           </Card>
 
-          {/* Attachments */}
           <Card>
             <CardHeader><CardTitle className="text-sm">Anexos</CardTitle></CardHeader>
             <CardContent>
@@ -184,7 +181,6 @@ export default function TicketDetail() {
                 userId={user?.id || ""}
                 attachments={attachments}
                 onAttachmentsChange={async (newAtts) => {
-                  // Save any new attachments (those without id)
                   const toInsert = newAtts.filter((a) => !a.id);
                   if (toInsert.length > 0) {
                     await supabase.from("ticket_attachments").insert(
@@ -204,7 +200,6 @@ export default function TicketDetail() {
             </CardContent>
           </Card>
 
-          {/* Timeline */}
           <Card>
             <CardHeader><CardTitle className="text-sm">Timeline</CardTitle></CardHeader>
             <CardContent className="space-y-3">
@@ -219,51 +214,22 @@ export default function TicketDetail() {
                   </div>
                 </div>
               ))}
-              <div className="flex gap-2 pt-2 border-t">
-                <Textarea placeholder="Adicionar nota..." value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="flex-1" />
-                <Button size="icon" onClick={addNote} disabled={addingNote || !note.trim()}>
-                  {addingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                </Button>
+              <div className="pt-2 border-t space-y-2">
+                <div className="flex items-center gap-2">
+                  <MacroSelector ticket={ticket} onSelect={(content) => setNote(content)} />
+                </div>
+                <div className="flex gap-2">
+                  <Textarea placeholder="Adicionar nota ou usar macro..." value={note} onChange={(e) => setNote(e.target.value)} rows={3} className="flex-1" />
+                  <Button size="icon" onClick={addNote} disabled={addingNote || !note.trim()}>
+                    {addingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Sidebar info */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader><CardTitle className="text-sm">Informação</CardTitle></CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div><span className="text-muted-foreground">Categoria:</span> <span className="ml-2">{ticket.category_id || "–"}</span></div>
-              <div><span className="text-muted-foreground">Subcategoria:</span> <span className="ml-2">{ticket.subcategory_id || "–"}</span></div>
-              <div><span className="text-muted-foreground">Email:</span> <span className="ml-2">{ticket.client_email || "–"}</span></div>
-              <div><span className="text-muted-foreground">Telefone:</span> <span className="ml-2">{ticket.client_phone || "–"}</span></div>
-              <div><span className="text-muted-foreground">Data entrega:</span> <span className="ml-2">{ticket.delivery_date || "–"}</span></div>
-              <div><span className="text-muted-foreground">Montado:</span> <span className="ml-2">{ticket.is_assembled ? "Sim" : "Não"}</span></div>
-              <div><span className="text-muted-foreground">Personalizado:</span> <span className="ml-2">{ticket.is_personalized ? "Sim" : "Não"}</span></div>
-              <div><span className="text-muted-foreground">Exposição:</span> <span className="ml-2">{ticket.is_exhibition ? "Sim" : "Não"}</span></div>
-              <div><span className="text-muted-foreground">Criado:</span> <span className="ml-2">{new Date(ticket.created_at).toLocaleString("pt-PT")}</span></div>
-            </CardContent>
-          </Card>
-
-          {tags.length > 0 && (
-            <Card>
-              <CardHeader><CardTitle className="text-sm">Tags</CardTitle></CardHeader>
-              <CardContent className="flex flex-wrap gap-1">
-                {tags.map((t) => <Badge key={t} variant="secondary" className="text-xs">{t}</Badge>)}
-              </CardContent>
-            </Card>
-          )}
-
-          {clauses.length > 0 && (
-            <Card>
-              <CardHeader><CardTitle className="text-sm">Cláusulas</CardTitle></CardHeader>
-              <CardContent className="flex flex-wrap gap-1">
-                {clauses.map((c) => <Badge key={c} variant="outline" className="text-xs font-mono">{c}</Badge>)}
-              </CardContent>
-            </Card>
-          )}
-        </div>
+        <TicketSidebar ticket={ticket} tags={tags} clauses={clauses} onUpdate={fetchTicket} />
       </div>
     </div>
   );
