@@ -78,6 +78,7 @@ export default function Tickets() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [agentFilter, setAgentFilter] = useState<string>("all");
+  const [slaFilter, setSlaFilter] = useState<string>("all");
   const [view, setView] = useState<"list" | "kanban">("list");
   const [fetchKey, setFetchKey] = useState(0);
   const navigate = useNavigate();
@@ -115,13 +116,17 @@ export default function Tickets() {
     fetch();
   }, [statusFilter, priorityFilter, agentFilter, fetchKey]);
 
-  const filtered = tickets.filter(
-    (t) =>
+  const filtered = tickets.filter((t) => {
+    const matchesSearch =
       t.client_name.toLowerCase().includes(search.toLowerCase()) ||
       t.subject.toLowerCase().includes(search.toLowerCase()) ||
       (t.order_number && t.order_number.includes(search)) ||
-      String(t.ticket_number).includes(search)
-  );
+      String(t.ticket_number).includes(search);
+    if (!matchesSearch) return false;
+    if (slaFilter === "all") return true;
+    const sla = getTicketSlaStatus(t);
+    return sla === slaFilter;
+  });
 
   const agentName = (id: string | null) => {
     if (!id) return null;
@@ -185,6 +190,16 @@ export default function Tickets() {
             {agents.map((a) => (
               <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        <Select value={slaFilter} onValueChange={setSlaFilter}>
+          <SelectTrigger className="w-40"><SelectValue placeholder="SLA" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos SLA</SelectItem>
+            <SelectItem value="breached">Expirado</SelectItem>
+            <SelectItem value="at_risk">Em risco</SelectItem>
+            <SelectItem value="on_track">Dentro do prazo</SelectItem>
+            <SelectItem value="completed">Concluído</SelectItem>
           </SelectContent>
         </Select>
       </div>
