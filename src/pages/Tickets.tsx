@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,22 +9,7 @@ import { Plus, Search, Loader2, List, LayoutGrid } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import KanbanBoard from "@/components/KanbanBoard";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
-
-const statusLabels: Record<string, string> = {
-  novo: "Novo",
-  em_analise: "Em análise",
-  aguarda_cliente: "Aguarda cliente",
-  aguarda_logistica: "Aguarda logística",
-  aguarda_tecnico: "Aguarda técnico",
-  resolvido: "Resolvido",
-  encerrado: "Encerrado",
-};
-
-const priorityColors: Record<string, string> = {
-  P1: "bg-destructive text-destructive-foreground",
-  P2: "bg-warning text-warning-foreground",
-  P3: "bg-muted text-muted-foreground",
-};
+import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 
 type TicketRow = {
   id: string;
@@ -48,6 +33,7 @@ export default function Tickets() {
   const [view, setView] = useState<"list" | "kanban">("list");
   const [fetchKey, setFetchKey] = useState(0);
   const navigate = useNavigate();
+  const { statuses, statusLabels } = useTicketStatuses();
 
   const refreshTickets = () => setFetchKey((k) => k + 1);
 
@@ -93,20 +79,10 @@ export default function Tickets() {
         </div>
         <div className="flex items-center gap-2">
           <div className="flex border rounded-md">
-            <Button
-              variant={view === "list" ? "secondary" : "ghost"}
-              size="icon"
-              className="h-9 w-9 rounded-r-none"
-              onClick={() => setView("list")}
-            >
+            <Button variant={view === "list" ? "secondary" : "ghost"} size="icon" className="h-9 w-9 rounded-r-none" onClick={() => setView("list")}>
               <List className="h-4 w-4" />
             </Button>
-            <Button
-              variant={view === "kanban" ? "secondary" : "ghost"}
-              size="icon"
-              className="h-9 w-9 rounded-l-none"
-              onClick={() => setView("kanban")}
-            >
+            <Button variant={view === "kanban" ? "secondary" : "ghost"} size="icon" className="h-9 w-9 rounded-l-none" onClick={() => setView("kanban")}>
               <LayoutGrid className="h-4 w-4" />
             </Button>
           </div>
@@ -126,8 +102,8 @@ export default function Tickets() {
             <SelectTrigger className="w-48"><SelectValue placeholder="Estado" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os estados</SelectItem>
-              {Object.entries(statusLabels).map(([k, v]) => (
-                <SelectItem key={k} value={k}>{v}</SelectItem>
+              {statuses.map((s) => (
+                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>

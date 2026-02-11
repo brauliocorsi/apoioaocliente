@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Clock, Pause, AlertTriangle, CheckCircle } from "lucide-react";
 
 interface SlaIndicatorProps {
@@ -12,6 +11,8 @@ interface SlaIndicatorProps {
     resolved_at: string | null;
     created_at: string;
     status: string;
+    sla_stage_deadline_at?: string | null;
+    status_changed_at?: string | null;
   };
 }
 
@@ -93,7 +94,7 @@ function SlaRow({ label, deadline, created, pausedSeconds, pausedAt, completed, 
 
 export default function SlaIndicator({ ticket }: SlaIndicatorProps) {
   const hasSla = ticket.sla_first_response_at || ticket.sla_resolution_at;
-  if (!hasSla) return null;
+  if (!hasSla && !ticket.sla_stage_deadline_at) return null;
 
   const isPaused = !!ticket.sla_paused_at;
 
@@ -129,6 +130,17 @@ export default function SlaIndicator({ ticket }: SlaIndicatorProps) {
           completed={!!ticket.resolved_at}
           completedAt={ticket.resolved_at}
         />
+        {ticket.sla_stage_deadline_at && (
+          <SlaRow
+            label="Tempo no estágio atual"
+            deadline={ticket.sla_stage_deadline_at}
+            created={ticket.status_changed_at || ticket.created_at}
+            pausedSeconds={0}
+            pausedAt={null}
+            completed={false}
+            completedAt={null}
+          />
+        )}
       </CardContent>
     </Card>
   );

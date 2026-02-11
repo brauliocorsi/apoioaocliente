@@ -3,7 +3,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,28 +14,14 @@ import MacroSelector from "@/components/ticket/MacroSelector";
 import TicketSidebar from "@/components/ticket/TicketSidebar";
 import SlaIndicator from "@/components/ticket/SlaIndicator";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
-
-const statusLabels: Record<string, string> = {
-  novo: "Novo",
-  em_analise: "Em análise",
-  aguarda_cliente: "Aguarda cliente",
-  aguarda_logistica: "Aguarda logística",
-  aguarda_tecnico: "Aguarda técnico",
-  resolvido: "Resolvido",
-  encerrado: "Encerrado",
-};
-
-const priorityColors: Record<string, string> = {
-  P1: "bg-destructive text-destructive-foreground",
-  P2: "bg-warning text-warning-foreground",
-  P3: "bg-muted text-muted-foreground",
-};
+import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 
 export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { statuses, statusLabels } = useTicketStatuses();
   const [ticket, setTicket] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [tags, setTags] = useState<string[]>([]);
@@ -77,23 +62,40 @@ export default function TicketDetail() {
   const updateStatus = async (newStatus: string) => {
     if (!id || !user) return;
     const oldStatus = ticket.status;
+    const newStatusObj = statuses.find((s) => s.id === newStatus);
+    const oldStatusObj = statuses.find((s) => s.id === oldStatus);
     
-    const updates: any = { status: newStatus };
-    if (newStatus === "aguarda_cliente" && !ticket.sla_paused_at) {
+    const updates: any = { status: newStatus, status_changed_at: new Date().toISOString() };
+
+    // SLA pause logic based on pauses_sla flag
+    if (newStatusObj?.pauses_sla && !ticket.sla_paused_at) {
       updates.sla_paused_at = new Date().toISOString();
-    } else if (oldStatus === "aguarda_cliente" && newStatus !== "aguarda_cliente" && ticket.sla_paused_at) {
+    } else if (oldStatusObj?.pauses_sla && !newStatusObj?.pauses_sla && ticket.sla_paused_at) {
       const pausedSeconds = Math.floor((Date.now() - new Date(ticket.sla_paused_at).getTime()) / 1000);
       updates.sla_paused_total_seconds = (ticket.sla_paused_total_seconds || 0) + pausedSeconds;
       updates.sla_paused_at = null;
     }
-    if (newStatus === "resolvido") updates.resolved_at = new Date().toISOString();
+
+    if (newStatusObj?.is_resolved) updates.resolved_at = new Date().toISOString();
+
+    // SLA per stage
+    if (newStatusObj?.sla_minutes) {
+      updates.sla_stage_deadline_at = new Date(Date.now() + newStatusObj.sla_minutes * 60000).toISOString();
+    } else {
+      updates.sla_stage_deadline_at = null;
+    }
+
+    // Auto-assign from status
+    if (newStatusObj?.default_assign) {
+      updates.assigned_to = newStatusObj.default_assign;
+    }
 
     await supabase.from("tickets").update(updates).eq("id", id);
     await supabase.from("ticket_events").insert({
       ticket_id: id,
       user_id: user.id,
       event_type: "status_change",
-      content: `Estado alterado: ${statusLabels[oldStatus]} → ${statusLabels[newStatus]}`,
+      content: `Estado alterado: ${statusLabels[oldStatus] || oldStatus} → ${statusLabels[newStatus] || newStatus}`,
       metadata: { from: oldStatus, to: newStatus },
     });
     toast({ title: "Estado atualizado" });
@@ -133,8 +135,13 @@ export default function TicketDetail() {
         <Select value={ticket.status} onValueChange={updateStatus}>
           <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {Object.entries(statusLabels).map(([k, v]) => (
-              <SelectItem key={k} value={k}>{v}</SelectItem>
+            {statuses.map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                <span className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
+                  {s.name}
+                </span>
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
