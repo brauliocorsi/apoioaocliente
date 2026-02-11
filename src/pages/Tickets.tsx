@@ -5,12 +5,20 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Search, Loader2, List, LayoutGrid } from "lucide-react";
+import { Plus, Search, Loader2, List, LayoutGrid, AlertTriangle, Clock, CheckCircle, Timer } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import KanbanBoard from "@/components/KanbanBoard";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
-import SlaDashboard, { type SlaTicket } from "@/components/ticket/SlaDashboard";
+import SlaDashboard, { type SlaTicket, getTicketSlaStatus, type SlaStatus } from "@/components/ticket/SlaDashboard";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
+
+function SlaIcon({ status }: { status: SlaStatus }) {
+  if (status === "breached") return <AlertTriangle className="h-4 w-4 text-destructive" />;
+  if (status === "at_risk") return <Timer className="h-4 w-4 text-warning" />;
+  if (status === "on_track") return <Clock className="h-4 w-4 text-success" />;
+  if (status === "completed") return <CheckCircle className="h-4 w-4 text-success" />;
+  return null;
+}
 
 type TicketRow = {
   id: string;
@@ -180,6 +188,7 @@ export default function Tickets() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <SlaIcon status={getTicketSlaStatus(t)} />
                       {t.category_id && <Badge variant="outline" className="text-xs">{categories[t.category_id] || t.category_id}</Badge>}
                       <PriorityFlag priority={t.priority} />
                       <Badge variant="secondary">{statusLabels[t.status] || t.status}</Badge>

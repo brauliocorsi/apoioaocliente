@@ -24,9 +24,9 @@ function calcRemaining(deadline: string, pausedSeconds: number, pausedAt: string
   return deadlineMs + pausedMs - Date.now();
 }
 
-type SlaStatus = "breached" | "at_risk" | "on_track" | "completed" | "no_sla";
+export type SlaStatus = "breached" | "at_risk" | "on_track" | "completed" | "no_sla";
 
-function getTicketSlaStatus(t: SlaTicket): SlaStatus {
+export function getTicketSlaStatus(t: Pick<SlaTicket, "resolved_at" | "sla_resolution_at" | "sla_paused_total_seconds" | "sla_paused_at">): SlaStatus {
   if (t.resolved_at) return "completed";
 
   const deadline = t.sla_resolution_at;
