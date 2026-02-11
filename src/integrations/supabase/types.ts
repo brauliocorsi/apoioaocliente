@@ -16,18 +16,21 @@ export type Database = {
     Tables: {
       categories: {
         Row: {
+          default_assign: string | null
           description: string | null
           id: string
           name: string
           sort_order: number
         }
         Insert: {
+          default_assign?: string | null
           description?: string | null
           id: string
           name: string
           sort_order?: number
         }
         Update: {
+          default_assign?: string | null
           description?: string | null
           id?: string
           name?: string
@@ -169,18 +172,24 @@ export type Database = {
       subcategories: {
         Row: {
           category_id: string
+          default_assign: string | null
+          description: string | null
           id: string
           name: string
           sort_order: number
         }
         Insert: {
           category_id: string
+          default_assign?: string | null
+          description?: string | null
           id: string
           name: string
           sort_order?: number
         }
         Update: {
           category_id?: string
+          default_assign?: string | null
+          description?: string | null
           id?: string
           name?: string
           sort_order?: number
@@ -328,6 +337,42 @@ export type Database = {
           },
         ]
       }
+      ticket_statuses: {
+        Row: {
+          color: string | null
+          default_assign: string | null
+          id: string
+          is_closed: boolean | null
+          is_resolved: boolean | null
+          name: string
+          pauses_sla: boolean | null
+          sla_minutes: number | null
+          sort_order: number
+        }
+        Insert: {
+          color?: string | null
+          default_assign?: string | null
+          id: string
+          is_closed?: boolean | null
+          is_resolved?: boolean | null
+          name: string
+          pauses_sla?: boolean | null
+          sla_minutes?: number | null
+          sort_order?: number
+        }
+        Update: {
+          color?: string | null
+          default_assign?: string | null
+          id?: string
+          is_closed?: boolean | null
+          is_resolved?: boolean | null
+          name?: string
+          pauses_sla?: boolean | null
+          sla_minutes?: number | null
+          sort_order?: number
+        }
+        Relationships: []
+      }
       ticket_tags: {
         Row: {
           tag_id: string
@@ -388,7 +433,9 @@ export type Database = {
           sla_paused_at: string | null
           sla_paused_total_seconds: number | null
           sla_resolution_at: string | null
-          status: Database["public"]["Enums"]["ticket_status"]
+          sla_stage_deadline_at: string | null
+          status: string
+          status_changed_at: string | null
           subcategory_id: string | null
           subject: string
           ticket_number: number
@@ -423,7 +470,9 @@ export type Database = {
           sla_paused_at?: string | null
           sla_paused_total_seconds?: number | null
           sla_resolution_at?: string | null
-          status?: Database["public"]["Enums"]["ticket_status"]
+          sla_stage_deadline_at?: string | null
+          status?: string
+          status_changed_at?: string | null
           subcategory_id?: string | null
           subject: string
           ticket_number?: number
@@ -458,7 +507,9 @@ export type Database = {
           sla_paused_at?: string | null
           sla_paused_total_seconds?: number | null
           sla_resolution_at?: string | null
-          status?: Database["public"]["Enums"]["ticket_status"]
+          sla_stage_deadline_at?: string | null
+          status?: string
+          status_changed_at?: string | null
           subcategory_id?: string | null
           subject?: string
           ticket_number?: number
@@ -470,6 +521,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_status_fk"
+            columns: ["status"]
+            isOneToOne: false
+            referencedRelation: "ticket_statuses"
             referencedColumns: ["id"]
           },
           {
@@ -534,14 +592,6 @@ export type Database = {
         | "reclamacao"
         | "gestao_interna"
       ticket_priority: "P1" | "P2" | "P3"
-      ticket_status:
-        | "novo"
-        | "em_analise"
-        | "aguarda_cliente"
-        | "aguarda_logistica"
-        | "aguarda_tecnico"
-        | "resolvido"
-        | "encerrado"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -688,15 +738,6 @@ export const Constants = {
         "gestao_interna",
       ],
       ticket_priority: ["P1", "P2", "P3"],
-      ticket_status: [
-        "novo",
-        "em_analise",
-        "aguarda_cliente",
-        "aguarda_logistica",
-        "aguarda_tecnico",
-        "resolvido",
-        "encerrado",
-      ],
     },
   },
 } as const

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
+import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import {
   DndContext,
   DragOverlay,
@@ -16,42 +17,6 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
-
-const statusLabels: Record<string, string> = {
-  novo: "Novo",
-  em_analise: "Em análise",
-  aguarda_cliente: "Aguarda cliente",
-  aguarda_logistica: "Aguarda logística",
-  aguarda_tecnico: "Aguarda técnico",
-  resolvido: "Resolvido",
-  encerrado: "Encerrado",
-};
-
-const statusColumns = [
-  "novo",
-  "em_analise",
-  "aguarda_cliente",
-  "aguarda_logistica",
-  "aguarda_tecnico",
-  "resolvido",
-  "encerrado",
-];
-
-const priorityColors: Record<string, string> = {
-  P1: "bg-destructive text-destructive-foreground",
-  P2: "bg-warning text-warning-foreground",
-  P3: "bg-muted text-muted-foreground",
-};
-
-const columnColors: Record<string, string> = {
-  novo: "border-t-primary",
-  em_analise: "border-t-blue-500",
-  aguarda_cliente: "border-t-warning",
-  aguarda_logistica: "border-t-orange-500",
-  aguarda_tecnico: "border-t-purple-500",
-  resolvido: "border-t-success",
-  encerrado: "border-t-muted-foreground",
-};
 
 type TicketRow = {
   id: string;
@@ -107,13 +72,14 @@ function DraggableTicket({ ticket, categoryNames }: { ticket: TicketRow; categor
   );
 }
 
-function DroppableColumn({ status, children, isOver }: { status: string; children: React.ReactNode; isOver: boolean }) {
-  const { setNodeRef } = useDroppable({ id: status });
+function DroppableColumn({ statusId, color, children, isOver }: { statusId: string; color: string; children: React.ReactNode; isOver: boolean }) {
+  const { setNodeRef } = useDroppable({ id: statusId });
 
   return (
     <div
       ref={setNodeRef}
-      className={`flex-shrink-0 w-64 rounded-lg border border-t-4 transition-colors ${columnColors[status]} ${isOver ? "bg-primary/10 ring-2 ring-primary/30" : "bg-muted/30"}`}
+      className={`flex-shrink-0 w-64 rounded-lg border border-t-4 transition-colors ${isOver ? "bg-primary/10 ring-2 ring-primary/30" : "bg-muted/30"}`}
+      style={{ borderTopColor: color }}
     >
       {children}
     </div>
@@ -122,6 +88,7 @@ function DroppableColumn({ status, children, isOver }: { status: string; childre
 
 export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: KanbanBoardProps) {
   const { toast } = useToast();
+  const { statuses, statusLabels } = useTicketStatuses();
   const [activeTicket, setActiveTicket] = useState<TicketRow | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
 
@@ -129,8 +96,10 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: K
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  const grouped = statusColumns.reduce((acc, status) => {
-    acc[status] = tickets.filter((t) => t.status === status);
+  const statusIds = statuses.map((s) => s.id);
+
+  const grouped = statuses.reduce((acc, s) => {
+    acc[s.id] = tickets.filter((t) => t.status === s.id);
     return acc;
   }, {} as Record<string, TicketRow[]>);
 
@@ -141,7 +110,7 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: K
 
   const handleDragOver = (event: any) => {
     const overId = event.over?.id as string | null;
-    setOverColumn(overId && statusColumns.includes(overId) ? overId : null);
+    setOverColumn(overId && statusIds.includes(overId) ? overId : null);
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -154,9 +123,8 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: K
     const ticket = active.data.current?.ticket as TicketRow;
     const newStatus = over.id as string;
 
-    if (!statusColumns.includes(newStatus) || ticket.status === newStatus) return;
+    if (!statusIds.includes(newStatus) || ticket.status === newStatus) return;
 
-    // Optimistic update handled by parent refresh
     const { error } = await supabase
       .from("tickets")
       .update({ status: newStatus as any })
@@ -179,24 +147,24 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: K
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
-        {statusColumns.map((status) => (
-          <DroppableColumn key={status} status={status} isOver={overColumn === status}>
+        {statuses.map((s) => (
+          <DroppableColumn key={s.id} statusId={s.id} color={s.color} isOver={overColumn === s.id}>
             <div className="px-3 py-2 border-b">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {statusLabels[status]}
+                  {s.name}
                 </h3>
                 <Badge variant="secondary" className="text-xs h-5 min-w-[20px] justify-center">
-                  {grouped[status].length}
+                  {(grouped[s.id] || []).length}
                 </Badge>
               </div>
             </div>
             <ScrollArea className="h-[calc(100vh-320px)]">
               <div className="p-2 space-y-2">
-                {grouped[status].map((t) => (
+                {(grouped[s.id] || []).map((t) => (
                   <DraggableTicket key={t.id} ticket={t} categoryNames={categoryNames} />
                 ))}
-                {grouped[status].length === 0 && (
+                {(grouped[s.id] || []).length === 0 && (
                   <p className="text-xs text-muted-foreground text-center py-8">Sem tickets</p>
                 )}
               </div>
