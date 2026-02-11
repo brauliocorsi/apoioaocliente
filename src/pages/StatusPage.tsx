@@ -55,17 +55,42 @@ function SortableStatusRow({
       <span className="h-4 w-4 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
       <div className="flex-1 grid gap-2 md:grid-cols-4 items-center">
         <div>
-          <p className="text-sm font-medium">{s.name}</p>
-          <p className="text-xs text-muted-foreground font-mono">{s.id}</p>
+          <Input
+            className="h-7 text-sm font-medium px-1.5"
+            value={s.name}
+            onChange={(e) => updateField(s.id, "name", e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground font-mono mt-0.5">{s.id}</p>
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
-          {s.pauses_sla && <span className="px-1.5 py-0.5 rounded bg-warning/20 text-warning">Pausa SLA</span>}
-          {s.is_resolved && <span className="px-1.5 py-0.5 rounded bg-success/20 text-success">Resolvido</span>}
-          {s.is_closed && <span className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Encerrado</span>}
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <Switch checked={!!s.pauses_sla} onCheckedChange={(v) => updateField(s.id, "pauses_sla", v)} className="scale-75" />
+            <span className="text-muted-foreground">Pausa SLA</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <Switch checked={!!s.is_resolved} onCheckedChange={(v) => updateField(s.id, "is_resolved", v)} className="scale-75" />
+            <span className="text-muted-foreground">Resolvido</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <Switch checked={!!s.is_closed} onCheckedChange={(v) => updateField(s.id, "is_closed", v)} className="scale-75" />
+            <span className="text-muted-foreground">Encerrado</span>
+          </label>
         </div>
-        <div className="text-xs text-muted-foreground">
-          {s.sla_minutes ? `SLA: ${s.sla_minutes}m` : ""}
-          {s.default_assign ? ` · Atribuição: ${agents.find((a) => a.id === s.default_assign)?.full_name || "?"}` : ""}
+        <div className="flex gap-2 items-center">
+          <Input
+            className="h-7 text-xs w-20 px-1.5"
+            type="number"
+            placeholder="SLA min"
+            value={s.sla_minutes ?? ""}
+            onChange={(e) => updateField(s.id, "sla_minutes", e.target.value ? parseInt(e.target.value) : null)}
+          />
+          <Select value={s.default_assign || "__none__"} onValueChange={(v) => updateField(s.id, "default_assign", v === "__none__" ? null : v)}>
+            <SelectTrigger className="h-7 text-xs flex-1"><SelectValue placeholder="Agente" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Nenhum</SelectItem>
+              {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex gap-1 justify-end">
           <input type="color" value={s.color} onChange={(e) => updateField(s.id, "color", e.target.value)} className="h-7 w-8 rounded border cursor-pointer" />
