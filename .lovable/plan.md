@@ -1,63 +1,99 @@
 
 
-# Melhorias ao Sistema de Tickets — UP Moveis
+# Melhorias ao Sistema de Tickets - Fase 2
 
-## Resumo das Alteracoes
+## 1. Etiquetas dinamicas com cores
 
-### 1. Macros integradas nas respostas dos tickets
-Atualmente as macros estao numa pagina separada. Vamos adicionar um seletor de macros diretamente na area de resposta do ticket, permitindo inserir um modelo pre-escrito, preencher as variaveis automaticamente com os dados do ticket (nome, encomenda, data entrega) e enviar como nota/resposta.
+A tabela `tags` atualmente tem apenas `id`, `name`, `tag_group` e `sort_order`. Vamos adicionar uma coluna `color` (TEXT) para que cada etiqueta tenha uma cor personalizada. Os supervisores poderao escolher cores ao criar/editar etiquetas.
 
-### 2. Campo de Numero de Assistencia (OS)
-Adicionar um novo campo `service_number` (texto) na tabela `tickets` para registar o numero de Ordem de Servico / Assistencia tecnica vinculada. Este campo sera editavel diretamente no detalhe do ticket.
+**Alteracoes:**
+- Migracao: adicionar coluna `color TEXT DEFAULT '#6b7280'` a tabela `tags`
+- Adicionar RLS de UPDATE e DELETE para supervisores na tabela `tags`
+- Atualizar `TagSelector.tsx` para mostrar as badges com a cor da etiqueta (usando `style={{ backgroundColor: tag.color }}`)
+- Criar pagina de gestao de etiquetas (`src/pages/TagsPage.tsx`) onde supervisores podem criar, editar cores e eliminar tags
+- Adicionar rota e link na sidebar
 
-### 3. Edicao de campos do ticket
-Permitir editar campos do ticket diretamente na pagina de detalhe: categoria, subcategoria, prioridade, dados do cliente, datas, e o novo campo de assistencia. Atualmente so o estado e editavel.
+## 2. Regras SLA visiveis no ticket
 
-### 4. Etiquetas (Tags) editaveis nos tickets
-As tags ja existem na base de dados (50 tags predefinidas), mas nao ha forma de as adicionar/remover no detalhe do ticket. Vamos adicionar um seletor de tags com as 50 etiquetas organizadas por grupo.
+O SLA ja e calculado na criacao do ticket (`sla_first_response_at`, `sla_resolution_at`), mas nao e mostrado no detalhe. Vamos adicionar um card de SLA no ticket com:
+- Prazo de primeira resposta e tempo restante (ou se ja expirou)
+- Prazo de resolucao e tempo restante
+- Barra de progresso visual (verde/amarelo/vermelho)
+- Indicacao se o SLA esta pausado (estado "Aguarda cliente")
+- Calculo que desconta o tempo pausado (`sla_paused_total_seconds`)
 
-### 5. Atribuicao de tickets a agentes
-Adicionar um seletor de agente no ticket para atribuir a um membro da equipa. O campo `assigned_to` ja existe na tabela.
+**Alteracoes:**
+- Criar componente `src/components/ticket/SlaIndicator.tsx`
+- Integrar no `TicketDetail.tsx` entre o cabecalho e a descricao
 
-### 6. Mostrar nomes das categorias em vez de codigos
-Atualmente mostra "A" em vez de "Entrega e Montagem". Corrigir na listagem e no detalhe para mostrar o nome completo.
+## 3. Tipo de entrega (Entregue vs Levantamento)
 
-### 7. Estados dinamicos (nota)
-A criacao de estados dinamicos requer uma mudanca significativa na arquitetura (o estado atual e um enum fixo na base de dados). Proponho implementar isto numa fase posterior, pois envolve recriar o enum como tabela, atualizar o Kanban, os filtros e toda a logica de SLA.
+Adicionar campo para distinguir se a encomenda foi entregue ao cliente ou se o cliente fez levantamento, com a data correspondente.
 
-### 8. Integracao com email (nota)
-A ligacao ao email da empresa para importar emails de clientes automaticamente e uma funcionalidade complexa que requer configuracao de um servidor de email (IMAP/SMTP) ou integracao com um servico como Gmail API / Microsoft Graph. Proponho implementar isto como passo seguinte apos estas melhorias base.
+**Alteracoes:**
+- Migracao: adicionar colunas `delivery_type TEXT` (valores: 'entrega', 'levantamento') e `pickup_date DATE` na tabela `tickets`
+- Atualizar formulario de criacao (`TicketNew.tsx`) com selecao do tipo e campo de data de levantamento
+- Atualizar `TicketSidebar.tsx` para mostrar e editar estes campos
+
+## 4. Prioridade com flag colorida
+
+Atualmente a prioridade aparece como badge com cor. Vamos melhorar com um icone de flag colorido mais visivel:
+- P1: flag vermelha
+- P2: flag amarela/laranja
+- P3: flag cinza
+
+**Alteracoes:**
+- Atualizar `TicketDetail.tsx` para usar icone `Flag` do lucide-react com cor inline
+- Atualizar lista em `Tickets.tsx` e cards no `KanbanBoard.tsx` com o mesmo icone
+- Criar componente reutilizavel `src/components/ticket/PriorityFlag.tsx`
+
+## 5. Integracao de email para abertura automatica de tickets
+
+Criar uma edge function que recebe emails via webhook (compativel com servicos como SendGrid Inbound Parse, Mailgun, etc.) e cria tickets automaticamente.
+
+**Alteracoes:**
+- Criar edge function `supabase/functions/inbound-email/index.ts` que:
+  - Recebe POST com dados do email (from, subject, body, attachments)
+  - Cria um ticket com `client_name` e `client_email` extraidos do remetente
+  - Regista o corpo do email como descricao
+  - Cria evento inicial "Ticket criado via email"
+- Configurar `verify_jwt = false` no config.toml para esta funcao (webhook externo)
+- Adicionar na pagina de Settings instrucoes de como configurar o webhook no servico de email
+
+**Nota:** A configuracao do servico de email externo (SendGrid, Mailgun, etc.) tera de ser feita pelo utilizador no painel do servico, apontando o webhook para o URL da edge function.
 
 ---
 
 ## Detalhes Tecnicos
 
-### Alteracoes na Base de Dados
-- Adicionar coluna `service_number TEXT` a tabela `tickets`
+### Migracoes SQL
+```sql
+-- Cores nas tags
+ALTER TABLE tags ADD COLUMN color TEXT DEFAULT '#6b7280';
 
-### Ficheiros a Criar/Modificar
+-- Tipo de entrega
+ALTER TABLE tickets ADD COLUMN delivery_type TEXT;
+ALTER TABLE tickets ADD COLUMN pickup_date DATE;
 
-**`src/pages/TicketDetail.tsx`** (modificar significativamente):
-- Adicionar modo de edicao inline para campos: categoria, subcategoria, prioridade, cliente, datas, numero de assistencia
-- Adicionar seletor de macros na area de resposta (dropdown que insere o conteudo da macro no campo de nota, com variaveis preenchidas)
-- Adicionar seletor de tags (multi-select com as 50 tags agrupadas)
-- Adicionar seletor de agente atribuido (dropdown com lista de agentes)
-- Mostrar nomes de categorias em vez de codigos
+-- RLS para tags (update/delete por supervisores)
+CREATE POLICY "tags_update" ON tags FOR UPDATE USING (has_role(auth.uid(), 'supervisor'));
+CREATE POLICY "tags_delete" ON tags FOR DELETE USING (has_role(auth.uid(), 'supervisor'));
+```
 
-**`src/pages/Tickets.tsx`** (modificar):
-- Mostrar nome da categoria em vez do codigo na listagem
-- Mostrar agente atribuido
+### Ficheiros a criar
+- `src/components/ticket/SlaIndicator.tsx` - Card de SLA com barras de progresso e contagem regressiva
+- `src/components/ticket/PriorityFlag.tsx` - Componente de flag colorida reutilizavel
+- `src/pages/TagsPage.tsx` - Gestao de etiquetas com color picker
+- `supabase/functions/inbound-email/index.ts` - Webhook para receber emails
 
-**`src/components/KanbanBoard.tsx`** (modificar):
-- Mostrar nome da categoria em vez do codigo nos cards
-
-**`src/pages/TicketNew.tsx`** (modificar):
-- Adicionar campo de numero de assistencia
-
-### Logica de preenchimento de macros
-Ao selecionar uma macro, o sistema substitui automaticamente:
-- `{nome_cliente}` pelo nome do cliente do ticket
-- `{n_encomenda}` pelo numero de encomenda
-- `{data_entrega}` pela data de entrega
-- Outras variaveis conforme disponivel no ticket
+### Ficheiros a modificar
+- `src/components/ticket/TagSelector.tsx` - Usar cores das tags nos badges
+- `src/components/ticket/TicketSidebar.tsx` - Campos de tipo de entrega e data de levantamento
+- `src/pages/TicketDetail.tsx` - Integrar SlaIndicator e PriorityFlag
+- `src/pages/TicketNew.tsx` - Campos de tipo de entrega e levantamento
+- `src/pages/Tickets.tsx` - PriorityFlag na listagem
+- `src/components/KanbanBoard.tsx` - PriorityFlag nos cards
+- `src/App.tsx` - Rota para pagina de tags
+- `src/components/AppSidebar.tsx` - Link para gestao de tags
+- `supabase/config.toml` - Configuracao da edge function inbound-email
 
