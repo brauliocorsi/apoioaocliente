@@ -11,9 +11,6 @@ import Tickets from "./pages/Tickets";
 import TicketNew from "./pages/TicketNew";
 import TicketDetail from "./pages/TicketDetail";
 import Macros from "./pages/Macros";
-import TagsPage from "./pages/TagsPage";
-import StatusPage from "./pages/StatusPage";
-import CategoriesPage from "./pages/CategoriesPage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 
@@ -34,9 +31,7 @@ const App = () => (
               <Route path="/tickets/new" element={<TicketNew />} />
               <Route path="/tickets/:id" element={<TicketDetail />} />
               <Route path="/macros" element={<Macros />} />
-              <Route path="/tags" element={<TagsPage />} />
-              <Route path="/statuses" element={<StatusPage />} />
-              <Route path="/categories" element={<CategoriesPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />

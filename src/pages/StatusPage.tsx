@@ -197,10 +197,6 @@ export default function StatusPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Gestão de Estados</h1>
-        <p className="text-muted-foreground">Configurar estados dos tickets e propriedades de SLA</p>
-      </div>
 
       <Card>
         <CardHeader><CardTitle className="text-base">Novo Estado</CardTitle></CardHeader>
