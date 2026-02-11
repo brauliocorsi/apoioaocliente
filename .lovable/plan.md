@@ -1,99 +1,201 @@
 
 
-# Melhorias ao Sistema de Tickets - Fase 2
+# Status Dinamicos e Categorias Dinamicas
 
-## 1. Etiquetas dinamicas com cores
+## Resumo
 
-A tabela `tags` atualmente tem apenas `id`, `name`, `tag_group` e `sort_order`. Vamos adicionar uma coluna `color` (TEXT) para que cada etiqueta tenha uma cor personalizada. Os supervisores poderao escolher cores ao criar/editar etiquetas.
+Atualmente os estados dos tickets sao um ENUM fixo no Postgres (`ticket_status`) e as categorias existem numa tabela mas sem interface de gestao. Este plano transforma ambos em entidades totalmente dinamicas e personalizaveis pelos supervisores.
 
-**Alteracoes:**
-- Migracao: adicionar coluna `color TEXT DEFAULT '#6b7280'` a tabela `tags`
-- Adicionar RLS de UPDATE e DELETE para supervisores na tabela `tags`
-- Atualizar `TagSelector.tsx` para mostrar as badges com a cor da etiqueta (usando `style={{ backgroundColor: tag.color }}`)
-- Criar pagina de gestao de etiquetas (`src/pages/TagsPage.tsx`) onde supervisores podem criar, editar cores e eliminar tags
-- Adicionar rota e link na sidebar
+---
 
-## 2. Regras SLA visiveis no ticket
+## 1. Status Dinamicos
 
-O SLA ja e calculado na criacao do ticket (`sla_first_response_at`, `sla_resolution_at`), mas nao e mostrado no detalhe. Vamos adicionar um card de SLA no ticket com:
-- Prazo de primeira resposta e tempo restante (ou se ja expirou)
-- Prazo de resolucao e tempo restante
-- Barra de progresso visual (verde/amarelo/vermelho)
-- Indicacao se o SLA esta pausado (estado "Aguarda cliente")
-- Calculo que desconta o tempo pausado (`sla_paused_total_seconds`)
+### Problema atual
+Os 7 estados estao codificados como ENUM Postgres (`novo`, `em_analise`, `aguarda_cliente`, etc.) e repetidos em pelo menos 4 ficheiros frontend como objetos `statusLabels` hardcoded.
 
-**Alteracoes:**
-- Criar componente `src/components/ticket/SlaIndicator.tsx`
-- Integrar no `TicketDetail.tsx` entre o cabecalho e a descricao
+### Solucao: Tabela `ticket_statuses`
 
-## 3. Tipo de entrega (Entregue vs Levantamento)
+Criar uma tabela para gerir estados dinamicamente:
 
-Adicionar campo para distinguir se a encomenda foi entregue ao cliente ou se o cliente fez levantamento, com a data correspondente.
+```text
+ticket_statuses
+-----------------------------------------
+id              TEXT  (PK, ex: "novo")
+name            TEXT  (ex: "Novo")
+color           TEXT  (ex: "#3b82f6")
+sort_order      INT   (ordem no Kanban)
+pauses_sla      BOOL  (pausa cronometro SLA)
+is_resolved     BOOL  (marca ticket como resolvido)
+is_closed       BOOL  (marca ticket como encerrado)
+default_assign  UUID  (agente atribuido automaticamente, opcional)
+sla_minutes     INT   (SLA especifico para este estagio, opcional)
+```
 
-**Alteracoes:**
-- Migracao: adicionar colunas `delivery_type TEXT` (valores: 'entrega', 'levantamento') e `pickup_date DATE` na tabela `tickets`
-- Atualizar formulario de criacao (`TicketNew.tsx`) com selecao do tipo e campo de data de levantamento
-- Atualizar `TicketSidebar.tsx` para mostrar e editar estes campos
+### Migracao SQL
 
-## 4. Prioridade com flag colorida
+1. Criar tabela `ticket_statuses` com RLS (select para todos, insert/update/delete para supervisores)
+2. Popular com os 7 estados atuais, mapeando as propriedades existentes
+3. Alterar coluna `tickets.status` de ENUM para TEXT com foreign key para `ticket_statuses.id`
+4. Remover o ENUM `ticket_status` (apos migracao)
 
-Atualmente a prioridade aparece como badge com cor. Vamos melhorar com um icone de flag colorido mais visivel:
-- P1: flag vermelha
-- P2: flag amarela/laranja
-- P3: flag cinza
+### Impacto no Frontend
 
-**Alteracoes:**
-- Atualizar `TicketDetail.tsx` para usar icone `Flag` do lucide-react com cor inline
-- Atualizar lista em `Tickets.tsx` e cards no `KanbanBoard.tsx` com o mesmo icone
-- Criar componente reutilizavel `src/components/ticket/PriorityFlag.tsx`
+Ficheiros que tem `statusLabels` hardcoded e precisam ser atualizados para carregar da base de dados:
+- `src/pages/Tickets.tsx` - filtros e lista
+- `src/pages/TicketDetail.tsx` - selector de estado
+- `src/components/KanbanBoard.tsx` - colunas do Kanban
+- `src/pages/TicketNew.tsx` (status inicial = primeiro por sort_order)
 
-## 5. Integracao de email para abertura automatica de tickets
+### Pagina de Gestao de Status
 
-Criar uma edge function que recebe emails via webhook (compativel com servicos como SendGrid Inbound Parse, Mailgun, etc.) e cria tickets automaticamente.
+Criar `src/pages/StatusPage.tsx` (acesso supervisor) com:
+- Lista de todos os estados com drag-and-drop para reordenar
+- Formulario para criar novo estado (nome, cor, opcoes SLA)
+- Edicao inline: nome, cor, pausa SLA, resolucao, encerramento
+- Campo opcional de atribuicao automatica (dropdown de agentes)
+- Campo opcional de SLA por estagio (minutos)
+- Eliminacao (apenas se nenhum ticket usar o estado)
 
-**Alteracoes:**
-- Criar edge function `supabase/functions/inbound-email/index.ts` que:
-  - Recebe POST com dados do email (from, subject, body, attachments)
-  - Cria um ticket com `client_name` e `client_email` extraidos do remetente
-  - Regista o corpo do email como descricao
-  - Cria evento inicial "Ticket criado via email"
-- Configurar `verify_jwt = false` no config.toml para esta funcao (webhook externo)
-- Adicionar na pagina de Settings instrucoes de como configurar o webhook no servico de email
+---
 
-**Nota:** A configuracao do servico de email externo (SendGrid, Mailgun, etc.) tera de ser feita pelo utilizador no painel do servico, apontando o webhook para o URL da edge function.
+## 2. Categorias Dinamicas com Gestao
+
+### Problema atual
+As categorias e subcategorias existem na base de dados mas nao ha interface para as gerir. Tambem nao tem campo de atribuicao automatica.
+
+### Alteracoes na Base de Dados
+
+```text
+categories (adicionar colunas)
+-----------------------------------------
+default_assign  UUID  (agente atribuido automaticamente, opcional)
+
+subcategories (adicionar colunas)
+-----------------------------------------
+description     TEXT  (descricao opcional)
+default_assign  UUID  (override de atribuicao, opcional)
+```
+
+Adicionar RLS de UPDATE e DELETE na tabela `categories` e `subcategories` para supervisores.
+
+### Pagina de Gestao de Categorias
+
+Criar `src/pages/CategoriesPage.tsx` (acesso supervisor) com:
+- Lista de categorias com subcategorias expandiveis (accordion)
+- Criar/editar/eliminar categorias (nome, descricao, atribuicao)
+- Criar/editar/eliminar subcategorias dentro de cada categoria
+- Campo de atribuicao automatica por categoria e subcategoria
+- Gestao de SLA por categoria ja existe na tabela `sla_config` -- adicionar edicao inline dos tempos de SLA
+
+---
+
+## 3. Logica de Atribuicao Automatica
+
+Quando um ticket muda de estado ou e criado:
+1. Verificar se o **novo estado** tem `default_assign` -- se sim, atribuir
+2. Senao, verificar se a **subcategoria** tem `default_assign`
+3. Senao, verificar se a **categoria** tem `default_assign`
+4. Senao, manter atribuicao atual
+
+Esta logica sera aplicada em `TicketDetail.tsx` (ao mudar estado) e `TicketNew.tsx` (ao criar).
+
+---
+
+## 4. Logica de SLA por Estagio
+
+Quando um ticket entra num estado com `sla_minutes` definido:
+- Registar `sla_stage_deadline` no ticket (ou num evento) para controlo do tempo nesse estagio
+- Mostrar no `SlaIndicator` um indicador adicional de "Tempo no estagio atual"
+
+Adicionar coluna ao tickets:
+```text
+tickets (adicionar colunas)
+-----------------------------------------
+sla_stage_deadline_at  TIMESTAMPTZ  (prazo do estagio atual, opcional)
+status_changed_at      TIMESTAMPTZ  (quando o estado foi alterado pela ultima vez)
+```
 
 ---
 
 ## Detalhes Tecnicos
 
-### Migracoes SQL
+### Migracoes SQL (sequencia)
+
+**Migracao 1 -- Tabela de status:**
 ```sql
--- Cores nas tags
-ALTER TABLE tags ADD COLUMN color TEXT DEFAULT '#6b7280';
+CREATE TABLE ticket_statuses (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  color TEXT DEFAULT '#6b7280',
+  sort_order INT NOT NULL DEFAULT 0,
+  pauses_sla BOOLEAN DEFAULT false,
+  is_resolved BOOLEAN DEFAULT false,
+  is_closed BOOLEAN DEFAULT false,
+  default_assign UUID,
+  sla_minutes INT
+);
 
--- Tipo de entrega
-ALTER TABLE tickets ADD COLUMN delivery_type TEXT;
-ALTER TABLE tickets ADD COLUMN pickup_date DATE;
+ALTER TABLE ticket_statuses ENABLE ROW LEVEL SECURITY;
+-- RLS: select all, CUD supervisor only
 
--- RLS para tags (update/delete por supervisores)
-CREATE POLICY "tags_update" ON tags FOR UPDATE USING (has_role(auth.uid(), 'supervisor'));
-CREATE POLICY "tags_delete" ON tags FOR DELETE USING (has_role(auth.uid(), 'supervisor'));
+INSERT INTO ticket_statuses VALUES
+  ('novo', 'Novo', '#3b82f6', 1, false, false, false, null, null),
+  ('em_analise', 'Em analise', '#8b5cf6', 2, false, false, false, null, null),
+  ('aguarda_cliente', 'Aguarda cliente', '#f59e0b', 3, true, false, false, null, null),
+  ('aguarda_logistica', 'Aguarda logistica', '#f97316', 4, false, false, false, null, null),
+  ('aguarda_tecnico', 'Aguarda tecnico', '#a855f7', 5, false, false, false, null, null),
+  ('resolvido', 'Resolvido', '#22c55e', 6, false, true, false, null, null),
+  ('encerrado', 'Encerrado', '#6b7280', 7, false, false, true, null, null);
+
+-- Converter status de ENUM para TEXT
+ALTER TABLE tickets ALTER COLUMN status DROP DEFAULT;
+ALTER TABLE tickets ALTER COLUMN status TYPE TEXT USING status::TEXT;
+ALTER TABLE tickets ALTER COLUMN status SET DEFAULT 'novo';
+ALTER TABLE tickets ADD CONSTRAINT tickets_status_fk 
+  FOREIGN KEY (status) REFERENCES ticket_statuses(id);
+
+DROP TYPE IF EXISTS ticket_status;
+```
+
+**Migracao 2 -- Colunas adicionais:**
+```sql
+ALTER TABLE categories ADD COLUMN default_assign UUID;
+ALTER TABLE subcategories ADD COLUMN description TEXT;
+ALTER TABLE subcategories ADD COLUMN default_assign UUID;
+ALTER TABLE tickets ADD COLUMN sla_stage_deadline_at TIMESTAMPTZ;
+ALTER TABLE tickets ADD COLUMN status_changed_at TIMESTAMPTZ DEFAULT now();
+
+-- RLS update/delete para categories e subcategories
+CREATE POLICY "categories_update" ON categories FOR UPDATE 
+  USING (has_role(auth.uid(), 'supervisor'));
+CREATE POLICY "categories_delete" ON categories FOR DELETE 
+  USING (has_role(auth.uid(), 'supervisor'));
+CREATE POLICY "subcategories_update" ON subcategories FOR UPDATE 
+  USING (has_role(auth.uid(), 'supervisor'));
+CREATE POLICY "subcategories_delete" ON subcategories FOR DELETE 
+  USING (has_role(auth.uid(), 'supervisor'));
 ```
 
 ### Ficheiros a criar
-- `src/components/ticket/SlaIndicator.tsx` - Card de SLA com barras de progresso e contagem regressiva
-- `src/components/ticket/PriorityFlag.tsx` - Componente de flag colorida reutilizavel
-- `src/pages/TagsPage.tsx` - Gestao de etiquetas com color picker
-- `supabase/functions/inbound-email/index.ts` - Webhook para receber emails
+- `src/pages/StatusPage.tsx` -- Gestao de estados (CRUD + reordenacao)
+- `src/pages/CategoriesPage.tsx` -- Gestao de categorias e subcategorias
 
 ### Ficheiros a modificar
-- `src/components/ticket/TagSelector.tsx` - Usar cores das tags nos badges
-- `src/components/ticket/TicketSidebar.tsx` - Campos de tipo de entrega e data de levantamento
-- `src/pages/TicketDetail.tsx` - Integrar SlaIndicator e PriorityFlag
-- `src/pages/TicketNew.tsx` - Campos de tipo de entrega e levantamento
-- `src/pages/Tickets.tsx` - PriorityFlag na listagem
-- `src/components/KanbanBoard.tsx` - PriorityFlag nos cards
-- `src/App.tsx` - Rota para pagina de tags
-- `src/components/AppSidebar.tsx` - Link para gestao de tags
-- `supabase/config.toml` - Configuracao da edge function inbound-email
+- `src/pages/Tickets.tsx` -- Carregar estados da BD em vez de hardcoded
+- `src/pages/TicketDetail.tsx` -- Carregar estados da BD, logica de atribuicao e SLA por estagio
+- `src/components/KanbanBoard.tsx` -- Colunas dinamicas da BD com cores
+- `src/pages/TicketNew.tsx` -- Atribuicao automatica na criacao
+- `src/components/ticket/TicketSidebar.tsx` -- Mostrar info de estagio SLA
+- `src/components/ticket/SlaIndicator.tsx` -- Indicador de SLA por estagio
+- `src/App.tsx` -- Rotas para StatusPage e CategoriesPage
+- `src/components/AppSidebar.tsx` -- Links na sidebar
+
+### Ordem de implementacao
+1. Migracoes SQL (tabela status + colunas)
+2. Substituir statusLabels hardcoded em todos os ficheiros por dados da BD
+3. Criar pagina de gestao de status
+4. Criar pagina de gestao de categorias
+5. Implementar logica de atribuicao automatica
+6. Implementar SLA por estagio
+7. Atualizar sidebar e rotas
 
