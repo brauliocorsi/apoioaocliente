@@ -116,6 +116,22 @@ export default function Tickets() {
     fetch();
   }, [statusFilter, priorityFilter, agentFilter, fetchKey]);
 
+  // Pre-compute SLA counts (before SLA filter, but after other filters)
+  const preSlaCounts = (() => {
+    const counts = { breached: 0, at_risk: 0, on_track: 0, completed: 0, no_sla: 0 };
+    tickets.forEach((t) => {
+      const matchesSearch =
+        t.client_name.toLowerCase().includes(search.toLowerCase()) ||
+        t.subject.toLowerCase().includes(search.toLowerCase()) ||
+        (t.order_number && t.order_number.includes(search)) ||
+        String(t.ticket_number).includes(search);
+      if (!matchesSearch) return;
+      const s = getTicketSlaStatus(t);
+      if (s in counts) counts[s as keyof typeof counts]++;
+    });
+    return counts;
+  })();
+
   const filtered = tickets.filter((t) => {
     const matchesSearch =
       t.client_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -196,10 +212,10 @@ export default function Tickets() {
           <SelectTrigger className="w-40"><SelectValue placeholder="SLA" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos SLA</SelectItem>
-            <SelectItem value="breached">Expirado</SelectItem>
-            <SelectItem value="at_risk">Em risco</SelectItem>
-            <SelectItem value="on_track">Dentro do prazo</SelectItem>
-            <SelectItem value="completed">Concluído</SelectItem>
+            <SelectItem value="breached">Expirado ({preSlaCounts.breached})</SelectItem>
+            <SelectItem value="at_risk">Em risco ({preSlaCounts.at_risk})</SelectItem>
+            <SelectItem value="on_track">Dentro do prazo ({preSlaCounts.on_track})</SelectItem>
+            <SelectItem value="completed">Concluído ({preSlaCounts.completed})</SelectItem>
           </SelectContent>
         </Select>
       </div>
