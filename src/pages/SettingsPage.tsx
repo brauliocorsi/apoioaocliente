@@ -7,6 +7,7 @@ import CategoriesPage from "./CategoriesPage";
 import TagsPage from "./TagsPage";
 import AgentsTab from "@/components/settings/AgentsTab";
 import EmailTemplatesTab from "@/components/settings/EmailTemplatesTab";
+import FaqTab from "@/components/settings/FaqTab";
 
 export default function SettingsPage() {
   const { profile, role } = useAuth();
@@ -26,6 +27,7 @@ export default function SettingsPage() {
           <TabsTrigger value="categories">Categorias</TabsTrigger>
           <TabsTrigger value="tags">Etiquetas</TabsTrigger>
           <TabsTrigger value="templates">Templates Email</TabsTrigger>
+          <TabsTrigger value="faq">FAQs</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="max-w-2xl space-y-6">
@@ -74,6 +76,10 @@ export default function SettingsPage() {
 
         <TabsContent value="templates">
           <EmailTemplatesTab />
+        </TabsContent>
+
+        <TabsContent value="faq">
+          <FaqTab />
         </TabsContent>
       </Tabs>
     </div>
