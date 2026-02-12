@@ -26,7 +26,7 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
   const [creatingClient, setCreatingClient] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
-  const [agents, setAgents] = useState<{ id: string; full_name: string }[]>([]);
+  const [agents, setAgents] = useState<{ id: string; full_name: string; role: string }[]>([]);
   const [form, setForm] = useState<any>({});
 
   useEffect(() => {
@@ -37,7 +37,7 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
     ]).then(([{ data: cats }, { data: subs }, { data: profs }]) => {
       setCategories(cats || []);
       setSubcategories(subs || []);
-      setAgents((profs as { id: string; full_name: string }[]) || []);
+      setAgents((profs as { id: string; full_name: string; role: string }[]) || []);
     });
   }, []);
 
@@ -207,7 +207,11 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
                       <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Não atribuído" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">Não atribuído</SelectItem>
-                        {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
+                        {agents.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.full_name} <span className="text-muted-foreground ml-1">({a.role === "supervisor" ? "Supervisor" : "Agente"})</span>
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
