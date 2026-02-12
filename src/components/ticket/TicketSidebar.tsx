@@ -33,11 +33,17 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
     Promise.all([
       supabase.from("categories").select("id, name").order("sort_order"),
       supabase.from("subcategories").select("id, category_id, name").order("sort_order"),
-      supabase.from("profiles").select("id, full_name"),
-    ]).then(([{ data: cats }, { data: subs }, { data: profs }]) => {
+      supabase.from("user_roles").select("user_id, role").in("role", ["agent", "supervisor"]),
+    ]).then(async ([{ data: cats }, { data: subs }, { data: roles }]) => {
       setCategories(cats || []);
       setSubcategories(subs || []);
-      setAgents(profs || []);
+      const agentIds = (roles || []).map((r: any) => r.user_id);
+      if (agentIds.length > 0) {
+        const { data: profs } = await supabase.from("profiles").select("id, full_name").in("id", agentIds);
+        setAgents(profs || []);
+      } else {
+        setAgents([]);
+      }
     });
   }, []);
 
