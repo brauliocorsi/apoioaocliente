@@ -24,6 +24,8 @@ const VARIABLE_LIST = [
   { var: "{numero_ticket}", desc: "Número do ticket" },
   { var: "{assunto}", desc: "Assunto do ticket" },
   { var: "{estado}", desc: "Estado atual" },
+  { var: "{tipo_decisao}", desc: "Tipo de decisão (Resolução/Cancelamento)" },
+  { var: "{motivo_decisao}", desc: "Motivo/justificação da decisão" },
   { var: "{ticket_url}", desc: "Link para o ticket no portal" },
   { var: "{portal_url}", desc: "Link para o portal" },
 ];
