@@ -749,6 +749,7 @@ export type Database = {
         Returns: {
           full_name: string
           id: string
+          role: string
         }[]
       }
       has_role: {
