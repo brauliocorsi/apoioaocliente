@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Ticket, Clock, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { Ticket, Clock, AlertTriangle, CheckCircle2, Loader2, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { formatDistanceToNow } from "date-fns";
+import { pt } from "date-fns/locale";
 
 type TicketRow = {
   id: string;
@@ -17,6 +19,14 @@ type TicketRow = {
   sla_first_response_at: string | null;
   sla_resolution_at: string | null;
   first_responded_at: string | null;
+};
+
+type ClientRow = {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  last_seen_at: string | null;
 };
 
 const statusLabels: Record<string, string> = {
@@ -37,17 +47,26 @@ const priorityColors: Record<string, string> = {
 
 export default function Dashboard() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
+  const [clients, setClients] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetch = async () => {
-      const { data } = await supabase
-        .from("tickets")
-        .select("id, ticket_number, client_name, subject, category_id, priority, status, created_at, sla_first_response_at, sla_resolution_at, first_responded_at")
-        .order("created_at", { ascending: false })
-        .limit(50);
-      setTickets((data as TicketRow[]) || []);
+      const [ticketsRes, clientsRes] = await Promise.all([
+        supabase
+          .from("tickets")
+          .select("id, ticket_number, client_name, subject, category_id, priority, status, created_at, sla_first_response_at, sla_resolution_at, first_responded_at")
+          .order("created_at", { ascending: false })
+          .limit(50),
+        supabase
+          .from("client_users")
+          .select("id, full_name, email, phone, last_seen_at")
+          .order("last_seen_at", { ascending: false })
+          .limit(10),
+      ]);
+      setTickets((ticketsRes.data as TicketRow[]) || []);
+      setClients((clientsRes.data as ClientRow[]) || []);
       setLoading(false);
     };
     fetch();
@@ -136,6 +155,39 @@ export default function Dashboard() {
                     <Badge className={priorityColors[t.priority]}>{t.priority}</Badge>
                     <Badge variant="outline">{statusLabels[t.status] || t.status}</Badge>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Últimos Clientes Online</CardTitle>
+          <Users className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          {clients.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">Nenhum cliente registado</p>
+          ) : (
+            <div className="space-y-2">
+              {clients.map((c) => (
+                <div key={c.id} className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold">
+                      {c.full_name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{c.full_name}</p>
+                      <p className="text-xs text-muted-foreground">{c.email}</p>
+                    </div>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {c.last_seen_at
+                      ? formatDistanceToNow(new Date(c.last_seen_at), { addSuffix: true, locale: pt })
+                      : "Nunca"}
+                  </span>
                 </div>
               ))}
             </div>
