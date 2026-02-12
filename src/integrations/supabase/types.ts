@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_notifications: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          is_read: boolean
+          recipient_id: string
+          sender_id: string | null
+          ticket_id: string | null
+          type: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          recipient_id: string
+          sender_id?: string | null
+          ticket_id?: string | null
+          type?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          recipient_id?: string
+          sender_id?: string | null
+          ticket_id?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_notifications_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           default_assign: string | null

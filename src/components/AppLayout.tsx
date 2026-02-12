@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Loader2 } from "lucide-react";
+import NotificationBell from "@/components/NotificationBell";
 
 export function AppLayout() {
   const { session, loading } = useAuth();
@@ -22,8 +23,9 @@ export function AppLayout() {
       <div className="flex min-h-screen w-full">
         <AppSidebar />
         <main className="flex-1 flex flex-col">
-          <header className="flex h-14 items-center gap-4 border-b bg-card px-6">
+          <header className="flex h-14 items-center justify-between gap-4 border-b bg-card px-6">
             <SidebarTrigger />
+            <NotificationBell />
           </header>
           <div className="flex-1 p-6">
             <Outlet />

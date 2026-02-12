@@ -15,6 +15,7 @@ import TicketSidebar from "@/components/ticket/TicketSidebar";
 import SlaIndicator from "@/components/ticket/SlaIndicator";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
+import MentionTextarea from "@/components/MentionTextarea";
 
 export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();
@@ -34,6 +35,7 @@ export default function TicketDetail() {
   const [sendingReply, setSendingReply] = useState(false);
   const [suggestions, setSuggestions] = useState<RuleSuggestion[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
+  const [agents, setAgents] = useState<{ id: string; full_name: string }[]>([]);
 
   const fetchTicket = async () => {
     if (!id) return;
@@ -63,6 +65,13 @@ export default function TicketDetail() {
   };
 
   useEffect(() => { fetchTicket(); }, [id]);
+
+  // Load agents for mentions
+  useEffect(() => {
+    supabase.from("profiles").select("id, full_name").then(({ data }) => {
+      setAgents((data as { id: string; full_name: string }[]) || []);
+    });
+  }, []);
 
   // Realtime for messages
   useEffect(() => {
@@ -137,6 +146,26 @@ export default function TicketDetail() {
       event_type: "note",
       content: note,
     });
+
+    // Extract @mentions and create notifications
+    const mentionRegex = /@([\w\s]+?)(?=\s@|\s*$|[.,!?])/g;
+    let match;
+    while ((match = mentionRegex.exec(note)) !== null) {
+      const mentionedName = match[1].trim();
+      const mentionedAgent = agents.find(
+        (a) => a.full_name.toLowerCase() === mentionedName.toLowerCase()
+      );
+      if (mentionedAgent && mentionedAgent.id !== user.id) {
+        await supabase.from("agent_notifications").insert({
+          recipient_id: mentionedAgent.id,
+          sender_id: user.id,
+          ticket_id: id,
+          type: "mention",
+          content: `mencionou-o no ticket #${ticket.ticket_number}: "${note.slice(0, 80)}${note.length > 80 ? "..." : ""}"`,
+        });
+      }
+    }
+
     setNote("");
     setAddingNote(false);
     fetchTicket();
@@ -312,7 +341,12 @@ export default function TicketDetail() {
                 <div key={ev.id} className="flex gap-3 text-sm">
                   <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                   <div>
-                    <p>{ev.content}</p>
+                    <p dangerouslySetInnerHTML={{
+                      __html: (ev.content || "").replace(
+                        /@([\w\s]+?)(?=\s@|\s*$|[.,!?])/g,
+                        '<span class="font-semibold text-primary">@$1</span>'
+                      )
+                    }} />
                     <p className="text-xs text-muted-foreground">
                       {new Date(ev.created_at).toLocaleString("pt-PT")}
                     </p>
@@ -324,7 +358,13 @@ export default function TicketDetail() {
                   <MacroSelector ticket={ticket} onSelect={(content) => setNote(content)} />
                 </div>
                 <div className="flex gap-2">
-                  <Textarea placeholder="Adicionar nota interna..." value={note} onChange={(e) => setNote(e.target.value)} rows={3} className="flex-1" />
+                  <MentionTextarea
+                    value={note}
+                    onChange={setNote}
+                    agents={agents}
+                    placeholder="Adicionar nota interna... Use @ para mencionar agentes"
+                    rows={3}
+                  />
                   <Button size="icon" onClick={addNote} disabled={addingNote || !note.trim()}>
                     {addingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   </Button>
