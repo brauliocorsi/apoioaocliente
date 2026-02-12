@@ -89,12 +89,18 @@ export default function Tickets() {
   useEffect(() => {
     Promise.all([
       supabase.from("categories").select("id, name"),
-      supabase.from("profiles").select("id, full_name"),
-    ]).then(([{ data: cats }, { data: profs }]) => {
+      supabase.from("user_roles").select("user_id, role").in("role", ["agent", "supervisor"]),
+    ]).then(async ([{ data: cats }, { data: roles }]) => {
       const map: Record<string, string> = {};
       (cats || []).forEach((c: any) => { map[c.id] = c.name; });
       setCategories(map);
-      setAgents(profs || []);
+      const agentIds = (roles || []).map((r: any) => r.user_id);
+      if (agentIds.length > 0) {
+        const { data: profs } = await supabase.from("profiles").select("id, full_name").in("id", agentIds);
+        setAgents(profs || []);
+      } else {
+        setAgents([]);
+      }
     });
   }, []);
 
