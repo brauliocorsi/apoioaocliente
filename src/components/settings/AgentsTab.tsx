@@ -30,16 +30,28 @@ export default function AgentsTab() {
   const isSupervisor = role === "supervisor";
 
   const fetchAgents = async () => {
-    const { data: profiles } = await supabase.from("profiles").select("id, full_name, email, created_at");
+    const { data: profs } = await supabase.rpc("get_agent_profiles");
     const { data: roles } = await supabase.from("user_roles").select("user_id, role");
 
     const roleMap: Record<string, string> = {};
     roles?.forEach((r) => { roleMap[r.user_id] = r.role; });
 
-    const agentList = (profiles || []).map((p) => ({
-      ...p,
-      role: roleMap[p.id] || "agent",
+    const agentList = ((profs as any[]) || []).map((p: any) => ({
+      id: p.id,
+      full_name: p.full_name,
+      email: "",
+      created_at: "",
+      role: roleMap[p.id] || p.role || "agent",
     }));
+
+    // Fetch emails for the filtered agents
+    if (agentList.length > 0) {
+      const { data: profiles } = await supabase.from("profiles").select("id, email, created_at").in("id", agentList.map((a) => a.id));
+      profiles?.forEach((p) => {
+        const agent = agentList.find((a) => a.id === p.id);
+        if (agent) { agent.email = p.email; agent.created_at = p.created_at; }
+      });
+    }
 
     setAgents(agentList);
     setLoading(false);
