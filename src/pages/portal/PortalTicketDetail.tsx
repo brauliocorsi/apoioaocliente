@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Loader2, Send } from "lucide-react";
+import { ArrowLeft, Loader2, Send, Paperclip, FileText, Download } from "lucide-react";
 
 export default function PortalTicketDetail() {
   const { id } = useParams<{ id: string }>();
   const { user, profile } = useClientAuth();
   const navigate = useNavigate();
   const [ticket, setTicket] = useState<any>(null);
+  const [attachments, setAttachments] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [statuses, setStatuses] = useState<Record<string, { name: string; color: string }>>({});
   const [loading, setLoading] = useState(true);
@@ -22,16 +23,21 @@ export default function PortalTicketDetail() {
 
   const fetchData = async () => {
     if (!id || !user) return;
-    const [{ data: t }, { data: msgs }, { data: sts }] = await Promise.all([
+    const [{ data: t }, { data: msgs }, { data: sts }, { data: atts }] = await Promise.all([
       supabase.from("tickets").select("id, ticket_number, subject, status, created_at, description, resolution_type, resolution_reason, resolution_at").eq("id", id).single(),
       supabase.from("ticket_messages").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
       supabase.from("ticket_statuses").select("id, name, color").order("sort_order"),
+      supabase.from("ticket_attachments").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
     ]);
     setTicket(t);
     setMessages(msgs || []);
     const map: Record<string, { name: string; color: string }> = {};
     (sts || []).forEach((s: any) => { map[s.id] = { name: s.name, color: s.color }; });
     setStatuses(map);
+    setAttachments((atts || []).map((a: any) => ({
+      ...a,
+      url: supabase.storage.from("ticket-attachments").getPublicUrl(a.file_path).data.publicUrl,
+    })));
     setLoading(false);
   };
 
@@ -122,6 +128,48 @@ export default function PortalTicketDetail() {
             <p className="text-xs text-muted-foreground">
               Decisão registada em {new Date(ticket.resolution_at).toLocaleString("pt-PT")}
             </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {attachments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Paperclip className="h-4 w-4" />
+              Anexos ({attachments.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {attachments.map((att) => {
+                const isImage = att.file_type?.startsWith("image/");
+                const isVideo = att.file_type?.startsWith("video/");
+                return (
+                  <a
+                    key={att.id}
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group border rounded-lg overflow-hidden hover:border-primary/50 transition-colors"
+                  >
+                    {isImage ? (
+                      <img src={att.url} alt={att.file_name} className="w-full h-32 object-cover" />
+                    ) : isVideo ? (
+                      <video src={att.url} className="w-full h-32 object-cover" />
+                    ) : (
+                      <div className="w-full h-32 flex items-center justify-center bg-muted">
+                        <FileText className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="p-2 flex items-center gap-1">
+                      <Download className="h-3 w-3 text-muted-foreground shrink-0" />
+                      <p className="text-xs truncate">{att.file_name}</p>
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
       )}
