@@ -44,6 +44,15 @@ export default function ResolutionCard({ ticket, userId, onUpdate }: ResolutionC
       metadata: { resolution_type: type },
     });
 
+    // Send email notification to client
+    try {
+      await supabase.functions.invoke("send-ticket-email", {
+        body: { ticket_id: ticket.id, template_id: "resolution_decision" },
+      });
+    } catch (e) {
+      console.error("Failed to send resolution email:", e);
+    }
+
     toast({ title: "Decisão registada com sucesso" });
     setSaving(false);
     setEditing(false);

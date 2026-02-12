@@ -110,6 +110,8 @@ Deno.serve(async (req) => {
     const portalUrl = req.headers.get("origin") || "https://portal.exemplo.com";
     const ticketUrl = `${portalUrl}/portal/tickets/${ticket.id}`;
 
+    const resolutionTypeLabel = ticket.resolution_type === "resolved" ? "Resolução" : ticket.resolution_type === "cancelled" ? "Cancelamento" : "";
+
     const replacements: Record<string, string> = {
       "{nome_cliente}": clientName || "",
       "{numero_ticket}": String(ticket.ticket_number),
@@ -117,6 +119,8 @@ Deno.serve(async (req) => {
       "{estado}": statusName,
       "{ticket_url}": ticketUrl,
       "{email}": clientEmail,
+      "{tipo_decisao}": resolutionTypeLabel,
+      "{motivo_decisao}": ticket.resolution_reason || "",
     };
 
     let subject = template.subject;
