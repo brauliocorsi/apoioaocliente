@@ -23,7 +23,7 @@ export default function PortalTicketDetail() {
   const fetchData = async () => {
     if (!id || !user) return;
     const [{ data: t }, { data: msgs }, { data: sts }] = await Promise.all([
-      supabase.from("tickets").select("id, ticket_number, subject, status, created_at, description").eq("id", id).single(),
+      supabase.from("tickets").select("id, ticket_number, subject, status, created_at, description, resolution_type, resolution_reason, resolution_at").eq("id", id).single(),
       supabase.from("ticket_messages").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
       supabase.from("ticket_statuses").select("id, name, color").order("sort_order"),
     ]);
@@ -106,6 +106,22 @@ export default function PortalTicketDetail() {
           <CardHeader><CardTitle className="text-sm">Descrição</CardTitle></CardHeader>
           <CardContent>
             <p className="text-sm whitespace-pre-wrap">{ticket.description}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {ticket.resolution_type && (
+        <Card className={`border-2 ${ticket.resolution_type === "resolved" ? "border-green-500/40 bg-green-50/50 dark:bg-green-950/20" : "border-red-500/40 bg-red-50/50 dark:bg-red-950/20"}`}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              {ticket.resolution_type === "resolved" ? "✅ Resolução Formal" : "❌ Cancelamento Formal"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-sm whitespace-pre-wrap">{ticket.resolution_reason}</p>
+            <p className="text-xs text-muted-foreground">
+              Decisão registada em {new Date(ticket.resolution_at).toLocaleString("pt-PT")}
+            </p>
           </CardContent>
         </Card>
       )}

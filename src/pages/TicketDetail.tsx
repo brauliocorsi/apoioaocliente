@@ -16,6 +16,7 @@ import SlaIndicator from "@/components/ticket/SlaIndicator";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import MentionTextarea from "@/components/MentionTextarea";
+import ResolutionCard from "@/components/ticket/ResolutionCard";
 
 export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();
@@ -242,6 +243,8 @@ export default function TicketDetail() {
       )}
 
       <SlaIndicator ticket={ticket} />
+
+      <ResolutionCard ticket={ticket} userId={user?.id || ""} onUpdate={fetchTicket} />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
