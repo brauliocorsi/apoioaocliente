@@ -580,6 +580,10 @@ export type Database = {
           priority: Database["public"]["Enums"]["ticket_priority"]
           product_name: string | null
           purchase_date: string | null
+          resolution_at: string | null
+          resolution_by: string | null
+          resolution_reason: string | null
+          resolution_type: string | null
           resolved_at: string | null
           service_number: string | null
           sla_first_response_at: string | null
@@ -619,6 +623,10 @@ export type Database = {
           priority?: Database["public"]["Enums"]["ticket_priority"]
           product_name?: string | null
           purchase_date?: string | null
+          resolution_at?: string | null
+          resolution_by?: string | null
+          resolution_reason?: string | null
+          resolution_type?: string | null
           resolved_at?: string | null
           service_number?: string | null
           sla_first_response_at?: string | null
@@ -658,6 +666,10 @@ export type Database = {
           priority?: Database["public"]["Enums"]["ticket_priority"]
           product_name?: string | null
           purchase_date?: string | null
+          resolution_at?: string | null
+          resolution_by?: string | null
+          resolution_reason?: string | null
+          resolution_type?: string | null
           resolved_at?: string | null
           service_number?: string | null
           sla_first_response_at?: string | null
