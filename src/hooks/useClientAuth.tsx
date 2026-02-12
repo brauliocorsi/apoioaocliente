@@ -60,7 +60,10 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (!error && data.user) {
+      await supabase.from("client_users").update({ last_seen_at: new Date().toISOString() }).eq("id", data.user.id);
+    }
     return { error: error as Error | null };
   };
 
