@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, Check, X } from "lucide-react";
+import { Pencil, Check, X, UserPlus, Loader2 } from "lucide-react";
 import TagSelector from "./TagSelector";
 
 interface TicketSidebarProps {
@@ -23,6 +23,7 @@ type Subcategory = { id: string; category_id: string; name: string };
 export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: TicketSidebarProps) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
+  const [creatingClient, setCreatingClient] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [agents, setAgents] = useState<{ id: string; full_name: string }[]>([]);
@@ -108,6 +109,36 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
     toast({ title: "Ticket atualizado" });
     setEditing(false);
     onUpdate();
+  };
+
+  const createClientAccount = async () => {
+    if (!ticket.client_email || !ticket.client_name) {
+      toast({ title: "Email e nome do cliente são obrigatórios", variant: "destructive" });
+      return;
+    }
+    setCreatingClient(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-client-account", {
+        body: {
+          email: ticket.client_email,
+          full_name: ticket.client_name,
+          phone: ticket.client_phone || null,
+          ticket_id: ticket.id,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({
+        title: data.is_new
+          ? "Conta de cliente criada e email enviado"
+          : "Cliente associado ao ticket",
+      });
+      onUpdate();
+    } catch (e: any) {
+      toast({ title: "Erro ao criar conta", description: e.message, variant: "destructive" });
+    } finally {
+      setCreatingClient(false);
+    }
   };
 
   return (
@@ -293,6 +324,20 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
                   <div><span className="text-muted-foreground">Nome:</span> <span className="ml-2">{ticket.client_name}</span></div>
                   <div><span className="text-muted-foreground">Email:</span> <span className="ml-2">{ticket.client_email || "–"}</span></div>
                   <div><span className="text-muted-foreground">Telefone:</span> <span className="ml-2">{ticket.client_phone || "–"}</span></div>
+                  {ticket.client_user_id ? (
+                    <Badge variant="secondary" className="text-xs mt-1">Conta de portal ativa</Badge>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full mt-2 text-xs"
+                      onClick={createClientAccount}
+                      disabled={creatingClient || !ticket.client_email}
+                    >
+                      {creatingClient ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <UserPlus className="h-3 w-3 mr-1" />}
+                      Criar Conta de Cliente
+                    </Button>
+                  )}
                 </div>
               </div>
 
