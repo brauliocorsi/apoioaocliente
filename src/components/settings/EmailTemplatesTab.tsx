@@ -17,6 +17,13 @@ interface Template {
   updated_at: string;
 }
 
+const TRIGGER_MAP: Record<string, string> = {
+  welcome: "Criação de conta de cliente (automático)",
+  ticket_created: "Criação de novo ticket (automático)",
+  status_changed: "Mudança de estado do ticket (automático)",
+  resolution_decision: "Registo de decisão formal no ticket (automático)",
+};
+
 const VARIABLE_LIST = [
   { var: "{nome_cliente}", desc: "Nome do cliente" },
   { var: "{email}", desc: "Email do cliente" },
@@ -98,6 +105,11 @@ export default function EmailTemplatesTab() {
             <div>
               <CardTitle className="text-base">{t.id}</CardTitle>
               {t.description && <p className="text-xs text-muted-foreground mt-1">{t.description}</p>}
+              {TRIGGER_MAP[t.id] && (
+                <Badge variant="secondary" className="text-xs mt-1 font-normal">
+                  ⚡ {TRIGGER_MAP[t.id]}
+                </Badge>
+              )}
             </div>
             {isSupervisor && editing !== t.id && (
               <Button variant="ghost" size="icon" onClick={() => startEdit(t)}>
