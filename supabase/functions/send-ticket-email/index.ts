@@ -175,7 +175,28 @@ Deno.serve(async (req) => {
       });
     }
 
-    await sendEmail(smtpCfg, clientEmail, subject, body);
+    try {
+      await sendEmail(smtpCfg, clientEmail, subject, body);
+      await adminClient.from("email_logs").insert({
+        recipient: clientEmail,
+        subject,
+        status: "sent",
+        source: "send-ticket-email",
+        ticket_id,
+        template_id,
+      });
+    } catch (sendErr) {
+      await adminClient.from("email_logs").insert({
+        recipient: clientEmail,
+        subject,
+        status: "failed",
+        error_message: (sendErr as Error).message,
+        source: "send-ticket-email",
+        ticket_id,
+        template_id,
+      });
+      throw sendErr;
+    }
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

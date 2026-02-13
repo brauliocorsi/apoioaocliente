@@ -9,6 +9,7 @@ import AgentsTab from "@/components/settings/AgentsTab";
 import EmailTemplatesTab from "@/components/settings/EmailTemplatesTab";
 import FaqTab from "@/components/settings/FaqTab";
 import SmtpSettingsTab from "@/components/settings/SmtpSettingsTab";
+import EmailLogsTab from "@/components/settings/EmailLogsTab";
 
 export default function SettingsPage() {
   const { profile, role } = useAuth();
@@ -30,6 +31,7 @@ export default function SettingsPage() {
           <TabsTrigger value="templates">Templates Email</TabsTrigger>
           <TabsTrigger value="faq">FAQs</TabsTrigger>
           <TabsTrigger value="smtp">Email SMTP</TabsTrigger>
+          <TabsTrigger value="email-logs">Logs Email</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="max-w-2xl space-y-6">
@@ -86,6 +88,10 @@ export default function SettingsPage() {
 
         <TabsContent value="smtp">
           <SmtpSettingsTab />
+        </TabsContent>
+
+        <TabsContent value="email-logs">
+          <EmailLogsTab />
         </TabsContent>
       </Tabs>
     </div>

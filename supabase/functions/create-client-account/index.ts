@@ -192,8 +192,25 @@ Deno.serve(async (req) => {
           try {
             await sendEmail(smtpCfg, email, subject, body);
             console.log("Welcome email sent via SMTP to", email);
+            await adminClient.from("email_logs").insert({
+              recipient: email,
+              subject,
+              status: "sent",
+              source: "create-client-account",
+              ticket_id: ticket_id || null,
+              template_id: "welcome",
+            });
           } catch (emailErr) {
             console.error("SMTP send error:", (emailErr as Error).message);
+            await adminClient.from("email_logs").insert({
+              recipient: email,
+              subject,
+              status: "failed",
+              error_message: (emailErr as Error).message,
+              source: "create-client-account",
+              ticket_id: ticket_id || null,
+              template_id: "welcome",
+            });
           }
         } else {
           console.warn("SMTP not configured, skipping welcome email");
