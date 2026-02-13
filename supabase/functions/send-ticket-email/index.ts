@@ -41,7 +41,7 @@ async function sendEmail(cfg: Record<string, string>, to: string, subject: strin
     html,
   });
 
-  await client.close();
+  try { await client.close(); } catch { /* ignore */ }
 }
 
 Deno.serve(async (req) => {
