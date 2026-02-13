@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save, Plug, CheckCircle2, XCircle, Mail } from "lucide-react";
+import { Loader2, Save, Plug, CheckCircle2, XCircle, Mail, Send } from "lucide-react";
 
 interface SmtpConfig {
   smtp_host: string;
@@ -33,6 +33,9 @@ export default function SmtpSettingsTab() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testEmail, setTestEmail] = useState("");
+  const [sendingTest, setSendingTest] = useState(false);
+  const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -233,6 +236,63 @@ export default function SmtpSettingsTab() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Send className="h-4 w-4" />
+            Enviar Email de Teste
+          </CardTitle>
+          <CardDescription>Envia um email de prova para verificar que o SMTP está a funcionar corretamente</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-3">
+            <div className="flex-1 space-y-2">
+              <Label htmlFor="test_email">Email de destino</Label>
+              <Input
+                id="test_email"
+                type="email"
+                placeholder="exemplo@email.com"
+                value={testEmail}
+                onChange={(e) => setTestEmail(e.target.value)}
+              />
+            </div>
+            <div className="flex items-end">
+              <Button
+                onClick={async () => {
+                  if (!testEmail) return;
+                  setSendingTest(true);
+                  setSendResult(null);
+                  try {
+                    const res = await supabase.functions.invoke("test-smtp", {
+                      body: { send_to: testEmail },
+                    });
+                    if (res.error) {
+                      setSendResult({ success: false, message: res.error.message || "Erro ao enviar" });
+                    } else {
+                      setSendResult({ success: res.data.success, message: res.data.message || "Email enviado" });
+                    }
+                  } catch (err) {
+                    setSendResult({ success: false, message: (err as Error).message });
+                  }
+                  setSendingTest(false);
+                }}
+                disabled={sendingTest || !isConfigured || !testEmail}
+              >
+                {sendingTest ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                Enviar
+              </Button>
+            </div>
+          </div>
+
+          {sendResult && (
+            <div className={`flex items-center gap-2 text-sm ${sendResult.success ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>
+              {sendResult.success ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <XCircle className="h-4 w-4 shrink-0" />}
+              <span>{sendResult.message}</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
