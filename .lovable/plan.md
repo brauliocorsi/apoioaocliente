@@ -1,48 +1,22 @@
 
 
-# Corrigir Teste de Conexão SMTP
+# Enviar Email ao Mudar Estado no Kanban
 
 ## Problema
-A função `test-smtp` cria um `SMTPClient` e chama `client.close()` imediatamente para testar a conexão. Mas o `denomailer` só estabelece a conexão TCP quando se envia um email (`client.send()`). Como nunca houve conexão real, `close()` falha com `"Cannot read properties of undefined (reading 'close')"`.
-
-## Dados SMTP do utilizador (da imagem)
-- Host: `mail.upmoveis.pt`
-- Porta: `465` (SSL)
-- Utilizador: `encomendas@upmoveis.pt`
-- Password: fornecida
+Ao arrastar um ticket no Kanban, o estado e atualizado na base de dados mas a funcao `send-ticket-email` nao e chamada. O email de notificacao so e enviado quando o estado muda pela pagina de detalhe do ticket.
 
 ## Solucao
+Adicionar a chamada a `send-ticket-email` no `handleDragEnd` do `KanbanBoard.tsx`, replicando a mesma logica do `TicketDetail.tsx`.
 
-### Ficheiro: `supabase/functions/test-smtp/index.ts`
+## Detalhes tecnicos
 
-Substituir o teste de conexao que usa `client.close()` por um teste real usando `Deno.connect()` com TLS nativo do Deno para verificar se o servidor SMTP responde. Isto valida:
-1. Que o hostname resolve corretamente
-2. Que a porta esta aberta e aceita conexoes TLS
-3. Que o servidor responde com um banner SMTP (codigo 220)
+### Ficheiro: `src/components/KanbanBoard.tsx`
 
-Fluxo do teste de conexao (sem envio):
-```text
-+-------------------+     +------------------+     +----------------+
-| Deno.connectTls() | --> | Ler banner SMTP  | --> | Verificar 220  |
-| host:465 (SSL)    |     | (resposta server)|     | = Conexao OK   |
-+-------------------+     +------------------+     +----------------+
-```
+Na funcao `handleDragEnd`, apos a atualizacao bem-sucedida do estado, adicionar:
 
-Para porta 587 (STARTTLS), usar `Deno.connect()` sem TLS para ler o banner.
+1. Verificar se o ticket tem `client_user_id` ou `client_email` (para garantir que ha destinatario)
+2. Chamar `supabase.functions.invoke("send-ticket-email", { body: { ticket_id, template_id: "status_changed" } })`
+3. Nao bloquear o fluxo principal — o envio sera feito em background (sem `await` no fluxo critico, ou com try/catch silencioso)
 
-O fluxo de envio de email de teste (com `send_to`) continua a usar o `denomailer` normalmente, pois ai a conexao e estabelecida pelo `send()`. Adicionar try/catch robusto no `client.close()` para evitar crashes.
+A alteracao e apenas adicionar ~5 linhas dentro do bloco `else` (sucesso) do `handleDragEnd`, antes de `onTicketMoved?.()`.
 
-### Alteracoes especificas
-
-1. **Teste de conexao** (quando nao ha `send_to`):
-   - Usar `Deno.connectTls()` (porta 465) ou `Deno.connect()` (porta 587/25) para abrir uma conexao TCP ao servidor
-   - Ler os primeiros bytes da resposta e verificar se comeca com "220" (banner SMTP padrao)
-   - Fechar a conexao e retornar sucesso/falha
-   - Timeout de 10 segundos para evitar bloqueio
-
-2. **Envio de email de teste** (quando ha `send_to`):
-   - Manter a logica atual com `denomailer`
-   - Envolver `client.close()` em try/catch para evitar crash se a conexao falhar
-
-3. **Tratamento de erros melhorado**:
-   - Mensagens em portugues mais descritivas (timeout, hostname nao encontrado, autenticacao falhada)
