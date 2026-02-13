@@ -178,6 +178,12 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: K
       toast({ title: "Erro ao mover ticket", description: error.message, variant: "destructive" });
     } else {
       toast({ title: `Ticket #${ticket.ticket_number} → ${statusLabels[newStatus]}` });
+
+      // Send email notification in background
+      supabase.functions.invoke("send-ticket-email", {
+        body: { ticket_id: ticket.id, template_id: "status_changed" },
+      }).catch(() => {});
+
       onTicketMoved?.();
     }
   };
