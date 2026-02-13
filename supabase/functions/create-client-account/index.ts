@@ -152,7 +152,7 @@ Deno.serve(async (req) => {
           .replace("{password}", password)
           .replace(/{portal_url}/g, `${portalUrl}/portal/login`);
 
-        await fetch("https://api.resend.com/emails", {
+        const emailRes = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
             Authorization: `Bearer ${resendApiKey}`,
@@ -165,6 +165,11 @@ Deno.serve(async (req) => {
             html: body,
           }),
         });
+        const emailResult = await emailRes.json();
+        console.log("Resend response:", JSON.stringify(emailResult));
+        if (!emailRes.ok) {
+          console.error("Resend error:", emailResult);
+        }
       }
     }
 
