@@ -6,6 +6,50 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+async function testSmtpConnection(hostname: string, port: number): Promise<string> {
+  const timeout = 10_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    let conn: Deno.Conn;
+    if (port === 465) {
+      conn = await Deno.connectTls({ hostname, port });
+    } else {
+      conn = await Deno.connect({ hostname, port });
+    }
+
+    const buf = new Uint8Array(1024);
+    const n = await conn.read(buf);
+    conn.close();
+    clearTimeout(timer);
+
+    if (n === null) {
+      throw new Error("Servidor não respondeu.");
+    }
+
+    const banner = new TextDecoder().decode(buf.subarray(0, n));
+    if (!banner.startsWith("220")) {
+      throw new Error(`Resposta inesperada do servidor: ${banner.trim()}`);
+    }
+
+    return `Conexão SMTP com ${hostname}:${port} estabelecida com sucesso. Banner: ${banner.trim()}`;
+  } catch (err) {
+    clearTimeout(timer);
+    const msg = (err as Error).message || String(err);
+    if (msg.includes("abort") || msg.includes("timed out") || msg.includes("TimedOut")) {
+      throw new Error(`Timeout: o servidor ${hostname}:${port} não respondeu em ${timeout / 1000}s. Verifique o host e a porta.`);
+    }
+    if (msg.includes("dns") || msg.includes("NotFound") || msg.includes("not known")) {
+      throw new Error(`Hostname não encontrado: ${hostname}. Verifique o endereço do servidor SMTP.`);
+    }
+    if (msg.includes("refused")) {
+      throw new Error(`Conexão recusada em ${hostname}:${port}. Verifique se a porta está correta.`);
+    }
+    throw err;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -34,7 +78,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Parse optional body for send_to
     let sendTo: string | null = null;
     try {
       const body = await req.json();
@@ -60,19 +103,18 @@ Deno.serve(async (req) => {
     }
 
     const port = Number(cfg.smtp_port) || 465;
-    const client = new SMTPClient({
-      connection: {
-        hostname: cfg.smtp_host,
-        port,
-        tls: port === 465,
-        auth: {
-          username: cfg.smtp_user,
-          password: cfg.smtp_pass,
-        },
-      },
-    });
 
     if (sendTo) {
+      // Send test email using denomailer
+      const client = new SMTPClient({
+        connection: {
+          hostname: cfg.smtp_host,
+          port,
+          tls: port === 465,
+          auth: { username: cfg.smtp_user, password: cfg.smtp_pass },
+        },
+      });
+
       const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.smtp_from_email || cfg.smtp_user}>`;
       const testSubject = "Email de Teste - Sistema de Tickets";
       try {
@@ -88,7 +130,7 @@ Deno.serve(async (req) => {
             <p style="color:#9ca3af;font-size:12px">Enviado automaticamente pelo sistema.</p>
           </div>`,
         });
-        await client.close();
+        try { await client.close(); } catch { /* ignore */ }
         await adminClient.from("email_logs").insert({
           recipient: sendTo,
           subject: testSubject,
@@ -100,7 +142,7 @@ Deno.serve(async (req) => {
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } catch (sendErr) {
-        await client.close().catch(() => {});
+        try { await client.close(); } catch { /* ignore */ }
         await adminClient.from("email_logs").insert({
           recipient: sendTo,
           subject: testSubject,
@@ -112,10 +154,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Connection test only
-    await client.close();
+    // Connection test only — use raw TCP
+    const message = await testSmtpConnection(cfg.smtp_host, port);
     return new Response(
-      JSON.stringify({ success: true, message: `Conexão SMTP com ${cfg.smtp_host}:${port} estabelecida com sucesso.` }),
+      JSON.stringify({ success: true, message }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
