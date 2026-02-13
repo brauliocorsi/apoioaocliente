@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { email, full_name, phone, ticket_id } = await req.json();
+    const { email, full_name, phone, ticket_id, resend_welcome } = await req.json();
     if (!email || !full_name) {
       return new Response(JSON.stringify({ error: "Email e nome são obrigatórios" }), {
         status: 400,
@@ -83,8 +83,12 @@ Deno.serve(async (req) => {
         .single();
 
       if (existingClient) {
-        // Already exists, just link ticket
         userId = existingUser.id;
+        // Resend welcome email with new password if requested
+        if (resend_welcome) {
+          password = generatePassword();
+          await adminClient.auth.admin.updateUserById(userId, { password });
+        }
       } else {
         // User exists but not as client — add client profile and role
         userId = existingUser.id;
