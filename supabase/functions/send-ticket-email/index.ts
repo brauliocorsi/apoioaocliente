@@ -1,9 +1,48 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+async function getSmtpConfig(adminClient: ReturnType<typeof createClient>) {
+  const { data } = await adminClient
+    .from("system_settings")
+    .select("key, value")
+    .in("key", ["smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from_name", "smtp_from_email"]);
+
+  const cfg: Record<string, string> = {};
+  data?.forEach((s: { key: string; value: string }) => { cfg[s.key] = s.value; });
+  return cfg;
+}
+
+async function sendEmail(cfg: Record<string, string>, to: string, subject: string, html: string) {
+  const port = Number(cfg.smtp_port) || 465;
+  const client = new SMTPClient({
+    connection: {
+      hostname: cfg.smtp_host,
+      port,
+      tls: port === 465,
+      auth: {
+        username: cfg.smtp_user,
+        password: cfg.smtp_pass,
+      },
+    },
+  });
+
+  const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.smtp_from_email || cfg.smtp_user}>`;
+
+  await client.send({
+    from: fromAddr,
+    to,
+    subject,
+    content: subject,
+    html,
+  });
+
+  await client.close();
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -21,16 +60,13 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const resendApiKey = Deno.env.get("RESEND_API_KEY")!;
 
     // Verify caller
     const callerClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: claimsData, error: claimsError } = await callerClient.auth.getClaims(
-      authHeader.replace("Bearer ", "")
-    );
-    if (claimsError || !claimsData?.claims) {
+    const { data: userData, error: userError } = await callerClient.auth.getUser();
+    if (userError || !userData?.user) {
       return new Response(JSON.stringify({ error: "Não autorizado" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -130,26 +166,22 @@ Deno.serve(async (req) => {
       body = body.replaceAll(key, val);
     }
 
-    const emailRes = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "Apoio ao Cliente <noreply@upmoveis.pt>",
-        to: [clientEmail],
-        subject,
-        html: body,
-      }),
-    });
+    // Load SMTP config from DB and send
+    const smtpCfg = await getSmtpConfig(adminClient);
+    if (!smtpCfg.smtp_host || !smtpCfg.smtp_user || !smtpCfg.smtp_pass) {
+      return new Response(JSON.stringify({ error: "Configuração SMTP não definida. Configure em Configurações > Email SMTP." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    const emailResult = await emailRes.json();
+    await sendEmail(smtpCfg, clientEmail, subject, body);
 
-    return new Response(JSON.stringify({ success: true, email_result: emailResult }), {
+    return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
+    console.error("Send email error:", (err as Error).message);
     return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

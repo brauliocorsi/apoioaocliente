@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,6 +11,44 @@ function generatePassword(length = 12): string {
   const array = new Uint8Array(length);
   crypto.getRandomValues(array);
   return Array.from(array, (b) => chars[b % chars.length]).join("");
+}
+
+async function getSmtpConfig(adminClient: ReturnType<typeof createClient>) {
+  const { data } = await adminClient
+    .from("system_settings")
+    .select("key, value")
+    .in("key", ["smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from_name", "smtp_from_email"]);
+
+  const cfg: Record<string, string> = {};
+  data?.forEach((s: { key: string; value: string }) => { cfg[s.key] = s.value; });
+  return cfg;
+}
+
+async function sendEmail(cfg: Record<string, string>, to: string, subject: string, html: string) {
+  const port = Number(cfg.smtp_port) || 465;
+  const client = new SMTPClient({
+    connection: {
+      hostname: cfg.smtp_host,
+      port,
+      tls: port === 465,
+      auth: {
+        username: cfg.smtp_user,
+        password: cfg.smtp_pass,
+      },
+    },
+  });
+
+  const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.smtp_from_email || cfg.smtp_user}>`;
+
+  await client.send({
+    from: fromAddr,
+    to,
+    subject,
+    content: subject,
+    html,
+  });
+
+  await client.close();
 }
 
 Deno.serve(async (req) => {
@@ -28,7 +67,6 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const resendApiKey = Deno.env.get("RESEND_API_KEY")!;
 
     // Verify caller is agent/supervisor
     const callerClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
@@ -75,7 +113,6 @@ Deno.serve(async (req) => {
     let password: string | null = null;
 
     if (existingUser) {
-      // Check if already a client
       const { data: existingClient } = await adminClient
         .from("client_users")
         .select("id")
@@ -84,13 +121,11 @@ Deno.serve(async (req) => {
 
       if (existingClient) {
         userId = existingUser.id;
-        // Resend welcome email with new password if requested
         if (resend_welcome) {
           password = generatePassword();
           await adminClient.auth.admin.updateUserById(userId, { password });
         }
       } else {
-        // User exists but not as client — add client profile and role
         userId = existingUser.id;
         await adminClient.from("client_users").insert({
           id: userId,
@@ -104,7 +139,6 @@ Deno.serve(async (req) => {
         });
       }
     } else {
-      // Create new user
       password = generatePassword();
       const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
         email,
@@ -122,8 +156,6 @@ Deno.serve(async (req) => {
 
       userId = newUser.user!.id;
 
-      // The handle_new_user trigger creates a profile and agent role.
-      // We need to change the role to client and create client_users entry.
       await adminClient.from("user_roles").update({ role: "client" }).eq("user_id", userId);
       await adminClient.from("client_users").insert({
         id: userId,
@@ -147,32 +179,24 @@ Deno.serve(async (req) => {
         .single();
 
       if (template) {
-        const portalUrl = req.headers.get("origin") || "https://portal.exemplo.com";
-        const subject = template.subject
-          .replace("{nome_cliente}", full_name);
-        const body = template.body_html
-          .replace("{nome_cliente}", full_name)
-          .replace("{email}", email)
-          .replace("{password}", password)
-          .replace(/{portal_url}/g, `${portalUrl}/portal/login`);
+        const smtpCfg = await getSmtpConfig(adminClient);
+        if (smtpCfg.smtp_host && smtpCfg.smtp_user && smtpCfg.smtp_pass) {
+          const portalUrl = req.headers.get("origin") || "https://portal.exemplo.com";
+          const subject = template.subject.replace("{nome_cliente}", full_name);
+          const body = template.body_html
+            .replace("{nome_cliente}", full_name)
+            .replace("{email}", email)
+            .replace("{password}", password)
+            .replace(/{portal_url}/g, `${portalUrl}/portal/login`);
 
-        const emailRes = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${resendApiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            from: "Apoio ao Cliente <noreply@upmoveis.pt>",
-            to: [email],
-            subject,
-            html: body,
-          }),
-        });
-        const emailResult = await emailRes.json();
-        console.log("Resend response:", JSON.stringify(emailResult));
-        if (!emailRes.ok) {
-          console.error("Resend error:", emailResult);
+          try {
+            await sendEmail(smtpCfg, email, subject, body);
+            console.log("Welcome email sent via SMTP to", email);
+          } catch (emailErr) {
+            console.error("SMTP send error:", (emailErr as Error).message);
+          }
+        } else {
+          console.warn("SMTP not configured, skipping welcome email");
         }
       }
     }
