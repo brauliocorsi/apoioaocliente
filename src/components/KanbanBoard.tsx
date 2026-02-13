@@ -182,7 +182,11 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: K
       // Send email notification in background
       supabase.functions.invoke("send-ticket-email", {
         body: { ticket_id: ticket.id, template_id: "status_changed" },
-      }).catch(() => {});
+      }).then(({ error }) => {
+        if (error) toast({ title: "Falha ao enviar notificação por email", description: error.message, variant: "destructive" });
+      }).catch(() => {
+        toast({ title: "Falha ao enviar notificação por email", variant: "destructive" });
+      });
 
       onTicketMoved?.();
     }
