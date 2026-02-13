@@ -74,23 +74,42 @@ Deno.serve(async (req) => {
 
     if (sendTo) {
       const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.smtp_from_email || cfg.smtp_user}>`;
-      await client.send({
-        from: fromAddr,
-        to: sendTo,
-        subject: "Email de Teste - Sistema de Tickets",
-        content: "Este é um email de teste enviado pelo sistema de tickets.",
-        html: `<div style="font-family:sans-serif;padding:20px;max-width:500px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px">
-          <h2 style="color:#1f2937;margin-bottom:12px">✅ Email de Teste</h2>
-          <p style="color:#4b5563">Este email confirma que a configuração SMTP do sistema de tickets está a funcionar corretamente.</p>
-          <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0">
-          <p style="color:#9ca3af;font-size:12px">Enviado automaticamente pelo sistema.</p>
-        </div>`,
-      });
-      await client.close();
-      return new Response(
-        JSON.stringify({ success: true, message: `Email de teste enviado com sucesso para ${sendTo}.` }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      const testSubject = "Email de Teste - Sistema de Tickets";
+      try {
+        await client.send({
+          from: fromAddr,
+          to: sendTo,
+          subject: testSubject,
+          content: "Este é um email de teste enviado pelo sistema de tickets.",
+          html: `<div style="font-family:sans-serif;padding:20px;max-width:500px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px">
+            <h2 style="color:#1f2937;margin-bottom:12px">✅ Email de Teste</h2>
+            <p style="color:#4b5563">Este email confirma que a configuração SMTP do sistema de tickets está a funcionar corretamente.</p>
+            <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0">
+            <p style="color:#9ca3af;font-size:12px">Enviado automaticamente pelo sistema.</p>
+          </div>`,
+        });
+        await client.close();
+        await adminClient.from("email_logs").insert({
+          recipient: sendTo,
+          subject: testSubject,
+          status: "sent",
+          source: "test-smtp",
+        });
+        return new Response(
+          JSON.stringify({ success: true, message: `Email de teste enviado com sucesso para ${sendTo}.` }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (sendErr) {
+        await client.close().catch(() => {});
+        await adminClient.from("email_logs").insert({
+          recipient: sendTo,
+          subject: testSubject,
+          status: "failed",
+          error_message: (sendErr as Error).message,
+          source: "test-smtp",
+        });
+        throw sendErr;
+      }
     }
 
     // Connection test only
