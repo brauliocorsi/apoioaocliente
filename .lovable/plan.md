@@ -1,63 +1,65 @@
 
 
-# Resolucao Formal e Cancelamento no Ticket
+# Envio de Emails via SMTP (sem Resend)
 
-## Objetivo
-Adicionar um campo oficial de **Resolucao / Decisao** no detalhe do ticket (lado do agente), onde se regista formalmente a decisao tomada (resolucao ou cancelamento), com o motivo/justificacao. Este campo serve como resposta oficial ao cliente.
+## Resumo
+Substituir o serviço Resend pelo envio direto via SMTP, usando uma biblioteca SMTP compatível com Deno nas funções do backend. Isto permite enviar emails diretamente a partir do teu servidor de email (ex: o SMTP do teu hosting para `upmoveis.pt`).
 
-## Alteracoes na Base de Dados
+## O que vais precisar
+Antes de implementar, vais precisar dos dados SMTP do teu provedor de email:
+- **Host SMTP** (ex: `smtp.upmoveis.pt`, `mail.upmoveis.pt`, ou do teu hosting)
+- **Porta** (normalmente 465 para SSL ou 587 para TLS)
+- **Utilizador** (ex: `noreply@upmoveis.pt`)
+- **Password** do email
 
-Adicionar 3 novas colunas na tabela `tickets`:
+## Alteracoes Tecnicas
 
-| Coluna | Tipo | Descricao |
-|--------|------|-----------|
-| `resolution_type` | `text` (nullable) | Tipo de decisao: `resolved`, `cancelled`, ou `null` (sem decisao) |
-| `resolution_reason` | `text` (nullable) | Motivo/justificacao formal da decisao |
-| `resolution_at` | `timestamptz` (nullable) | Data/hora em que a decisao foi registada |
-| `resolution_by` | `uuid` (nullable) | Agente que registou a decisao |
+### 1. Configurar segredos (secrets)
+Guardar de forma segura as credenciais SMTP:
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USER`
+- `SMTP_PASS`
 
-Nao e necessario criar nova tabela nem alterar RLS -- a tabela `tickets` ja tem politicas de UPDATE para agentes autenticados.
+### 2. Atualizar `send-ticket-email/index.ts`
+- Remover a chamada ao Resend API
+- Usar a biblioteca `denomailer` (compativel com Deno) para enviar via SMTP
+- Usar as credenciais SMTP dos secrets
 
-## Alteracoes no Frontend
+### 3. Atualizar `create-client-account/index.ts`
+- Mesma alteracao: substituir Resend por SMTP com `denomailer`
 
-### 1. Novo componente: `ResolutionCard.tsx`
-Card dedicado no detalhe do ticket com:
-- **Modo de visualizacao**: mostra o tipo de decisao (Resolvido / Cancelado), o motivo, quem decidiu e quando
-- **Modo de edicao** (botao "Registar Decisao"): 
-  - Select para escolher entre "Resolucao" ou "Cancelamento"
-  - Textarea para o motivo/justificacao (obrigatorio)
-  - Botao de confirmar
-- Destaque visual: fundo verde para resolucao, fundo vermelho para cancelamento
-- Possibilidade de editar a decisao ja registada
+### 4. Atualizar `inbound-email/index.ts` (se aplicavel)
+- Verificar se esta funcao tambem usa Resend e atualizar
 
-### 2. Integracao no `TicketDetail.tsx`
-- Colocar o `ResolutionCard` na coluna principal (entre o SLA e a descricao), visivel com destaque
-- Ao registar a decisao, criar tambem um evento na timeline (`ticket_events`) para historico
+### 5. Remover dependencia do Resend
+- O secret `RESEND_API_KEY` deixa de ser necessario
 
-### 3. Visibilidade no Portal do Cliente (`PortalTicketDetail.tsx`)
-- Mostrar a decisao formal ao cliente (apenas leitura) quando existir, com o motivo
-
-## Secao Tecnica
-
+## Exemplo de codigo SMTP (denomailer)
 ```text
-tickets table (alteracoes):
-+--------------------+-------------+----------+
-| resolution_type    | text        | nullable |
-| resolution_reason  | text        | nullable |
-| resolution_at      | timestamptz | nullable |
-| resolution_by      | uuid        | nullable |
-+--------------------+-------------+----------+
+import { SmtpClient } from "https://deno.land/x/denomailer/mod.ts";
+
+const client = new SmtpClient();
+await client.connectTLS({
+  hostname: Deno.env.get("SMTP_HOST"),
+  port: Number(Deno.env.get("SMTP_PORT")),
+  username: Deno.env.get("SMTP_USER"),
+  password: Deno.env.get("SMTP_PASS"),
+});
+
+await client.send({
+  from: "Apoio ao Cliente <noreply@upmoveis.pt>",
+  to: clientEmail,
+  subject: subject,
+  content: body,    // texto simples
+  html: body,       // HTML
+});
+
+await client.close();
 ```
 
-Migration SQL:
-- `ALTER TABLE public.tickets ADD COLUMN resolution_type text;`
-- `ALTER TABLE public.tickets ADD COLUMN resolution_reason text;`
-- `ALTER TABLE public.tickets ADD COLUMN resolution_at timestamptz;`
-- `ALTER TABLE public.tickets ADD COLUMN resolution_by uuid;`
-
-Ficheiros a criar/editar:
-- **Criar**: `src/components/ticket/ResolutionCard.tsx`
-- **Editar**: `src/pages/TicketDetail.tsx` (adicionar ResolutionCard)
-- **Editar**: `src/pages/portal/PortalTicketDetail.tsx` (mostrar decisao ao cliente)
-- **Migration**: nova migracao para as 4 colunas
+## Sequencia
+1. Pedir-te os dados SMTP e guardar como secrets
+2. Atualizar as duas funcoes (`send-ticket-email` e `create-client-account`)
+3. Testar o envio de email
 
