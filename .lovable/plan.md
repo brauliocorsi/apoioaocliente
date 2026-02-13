@@ -1,65 +1,48 @@
 
 
-# Envio de Emails via SMTP (sem Resend)
+# Corrigir Teste de Conexão SMTP
 
-## Resumo
-Substituir o serviço Resend pelo envio direto via SMTP, usando uma biblioteca SMTP compatível com Deno nas funções do backend. Isto permite enviar emails diretamente a partir do teu servidor de email (ex: o SMTP do teu hosting para `upmoveis.pt`).
+## Problema
+A função `test-smtp` cria um `SMTPClient` e chama `client.close()` imediatamente para testar a conexão. Mas o `denomailer` só estabelece a conexão TCP quando se envia um email (`client.send()`). Como nunca houve conexão real, `close()` falha com `"Cannot read properties of undefined (reading 'close')"`.
 
-## O que vais precisar
-Antes de implementar, vais precisar dos dados SMTP do teu provedor de email:
-- **Host SMTP** (ex: `smtp.upmoveis.pt`, `mail.upmoveis.pt`, ou do teu hosting)
-- **Porta** (normalmente 465 para SSL ou 587 para TLS)
-- **Utilizador** (ex: `noreply@upmoveis.pt`)
-- **Password** do email
+## Dados SMTP do utilizador (da imagem)
+- Host: `mail.upmoveis.pt`
+- Porta: `465` (SSL)
+- Utilizador: `encomendas@upmoveis.pt`
+- Password: fornecida
 
-## Alteracoes Tecnicas
+## Solucao
 
-### 1. Configurar segredos (secrets)
-Guardar de forma segura as credenciais SMTP:
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_USER`
-- `SMTP_PASS`
+### Ficheiro: `supabase/functions/test-smtp/index.ts`
 
-### 2. Atualizar `send-ticket-email/index.ts`
-- Remover a chamada ao Resend API
-- Usar a biblioteca `denomailer` (compativel com Deno) para enviar via SMTP
-- Usar as credenciais SMTP dos secrets
+Substituir o teste de conexao que usa `client.close()` por um teste real usando `Deno.connect()` com TLS nativo do Deno para verificar se o servidor SMTP responde. Isto valida:
+1. Que o hostname resolve corretamente
+2. Que a porta esta aberta e aceita conexoes TLS
+3. Que o servidor responde com um banner SMTP (codigo 220)
 
-### 3. Atualizar `create-client-account/index.ts`
-- Mesma alteracao: substituir Resend por SMTP com `denomailer`
-
-### 4. Atualizar `inbound-email/index.ts` (se aplicavel)
-- Verificar se esta funcao tambem usa Resend e atualizar
-
-### 5. Remover dependencia do Resend
-- O secret `RESEND_API_KEY` deixa de ser necessario
-
-## Exemplo de codigo SMTP (denomailer)
+Fluxo do teste de conexao (sem envio):
 ```text
-import { SmtpClient } from "https://deno.land/x/denomailer/mod.ts";
-
-const client = new SmtpClient();
-await client.connectTLS({
-  hostname: Deno.env.get("SMTP_HOST"),
-  port: Number(Deno.env.get("SMTP_PORT")),
-  username: Deno.env.get("SMTP_USER"),
-  password: Deno.env.get("SMTP_PASS"),
-});
-
-await client.send({
-  from: "Apoio ao Cliente <noreply@upmoveis.pt>",
-  to: clientEmail,
-  subject: subject,
-  content: body,    // texto simples
-  html: body,       // HTML
-});
-
-await client.close();
++-------------------+     +------------------+     +----------------+
+| Deno.connectTls() | --> | Ler banner SMTP  | --> | Verificar 220  |
+| host:465 (SSL)    |     | (resposta server)|     | = Conexao OK   |
++-------------------+     +------------------+     +----------------+
 ```
 
-## Sequencia
-1. Pedir-te os dados SMTP e guardar como secrets
-2. Atualizar as duas funcoes (`send-ticket-email` e `create-client-account`)
-3. Testar o envio de email
+Para porta 587 (STARTTLS), usar `Deno.connect()` sem TLS para ler o banner.
 
+O fluxo de envio de email de teste (com `send_to`) continua a usar o `denomailer` normalmente, pois ai a conexao e estabelecida pelo `send()`. Adicionar try/catch robusto no `client.close()` para evitar crashes.
+
+### Alteracoes especificas
+
+1. **Teste de conexao** (quando nao ha `send_to`):
+   - Usar `Deno.connectTls()` (porta 465) ou `Deno.connect()` (porta 587/25) para abrir uma conexao TCP ao servidor
+   - Ler os primeiros bytes da resposta e verificar se comeca com "220" (banner SMTP padrao)
+   - Fechar a conexao e retornar sucesso/falha
+   - Timeout de 10 segundos para evitar bloqueio
+
+2. **Envio de email de teste** (quando ha `send_to`):
+   - Manter a logica atual com `denomailer`
+   - Envolver `client.close()` em try/catch para evitar crash se a conexao falhar
+
+3. **Tratamento de erros melhorado**:
+   - Mensagens em portugues mais descritivas (timeout, hostname nao encontrado, autenticacao falhada)
