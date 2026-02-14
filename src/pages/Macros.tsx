@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, Search, Loader2, Pencil, Trash2, Save, X } from "lucide-react";
+import { Copy, Search, Loader2, Pencil, Trash2, Save, X, Plus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -60,6 +60,7 @@ export default function Macros() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [editingMacro, setEditingMacro] = useState<MacroForm | null>(null);
+  const [creatingMacro, setCreatingMacro] = useState<MacroForm | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
@@ -92,6 +93,42 @@ export default function Macros() {
       macro_category: m.macro_category,
       variables: m.variables || [],
     });
+  };
+
+  const handleCreate = () => {
+    const nextId = `M${String(macros.length + 1).padStart(2, "0")}`;
+    setCreatingMacro({
+      id: nextId,
+      title: "",
+      content: "",
+      macro_category: "geral",
+      variables: [],
+    });
+  };
+
+  const handleSaveNew = async () => {
+    if (!creatingMacro || !creatingMacro.title.trim() || !creatingMacro.content.trim()) {
+      toast({ title: "Preencha título e conteúdo", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    const vars = [...new Set((creatingMacro.content.match(/\{(\w+)\}/g) || []).map(v => v.slice(1, -1)))];
+    const { error } = await supabase.from("macros").insert({
+      id: creatingMacro.id,
+      title: creatingMacro.title,
+      content: creatingMacro.content,
+      macro_category: creatingMacro.macro_category,
+      variables: vars,
+      sort_order: macros.length + 1,
+    });
+    setSaving(false);
+    if (error) {
+      toast({ title: "Erro ao criar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Macro criada" });
+      setCreatingMacro(null);
+      fetchMacros();
+    }
   };
 
   const handleSave = async () => {
@@ -137,9 +174,14 @@ export default function Macros() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Macros de Resposta</h1>
-        <p className="text-muted-foreground">{macros.length} modelos pré-definidos para email e WhatsApp</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Macros de Resposta</h1>
+          <p className="text-muted-foreground">{macros.length} modelos pré-definidos para email e WhatsApp</p>
+        </div>
+        <Button onClick={handleCreate}>
+          <Plus className="mr-1 h-4 w-4" /> Nova Macro
+        </Button>
       </div>
 
       <div className="flex gap-3 flex-wrap">
@@ -241,6 +283,68 @@ export default function Macros() {
             <Button onClick={handleSave} disabled={saving}>
               {saving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Save className="mr-1 h-3 w-3" />}
               Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Dialog */}
+      <Dialog open={!!creatingMacro} onOpenChange={(open) => !open && setCreatingMacro(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Nova Macro</DialogTitle>
+            <DialogDescription>Crie uma nova macro de resposta.</DialogDescription>
+          </DialogHeader>
+          {creatingMacro && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>ID</Label>
+                <Input
+                  value={creatingMacro.id}
+                  onChange={(e) => setCreatingMacro({ ...creatingMacro, id: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Título</Label>
+                <Input
+                  value={creatingMacro.title}
+                  onChange={(e) => setCreatingMacro({ ...creatingMacro, title: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Categoria</Label>
+                <Select
+                  value={creatingMacro.macro_category}
+                  onValueChange={(v) => setCreatingMacro({ ...creatingMacro, macro_category: v as MacroCategory })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(categoryLabels).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Conteúdo</Label>
+                <Textarea
+                  rows={8}
+                  value={creatingMacro.content}
+                  onChange={(e) => setCreatingMacro({ ...creatingMacro, content: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">Use {`{variavel}`} para variáveis dinâmicas. São detetadas automaticamente.</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreatingMacro(null)}>
+              <X className="mr-1 h-3 w-3" /> Cancelar
+            </Button>
+            <Button onClick={handleSaveNew} disabled={saving}>
+              {saving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Plus className="mr-1 h-3 w-3" />}
+              Criar
             </Button>
           </DialogFooter>
         </DialogContent>
