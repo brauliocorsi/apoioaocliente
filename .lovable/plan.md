@@ -1,152 +1,123 @@
 
 
-# Modulo de Controle de Ligacoes Telefonicas
+# Melhorias no Modulo de Ligacoes Telefonicas
 
-## Visao geral
+## Resumo
 
-Criar um modulo completo para registrar, acompanhar e gerir ligacoes telefonicas recebidas, com controle de status, prioridades e sistema de lembretes para retorno ao cliente. O modulo seguira os mesmos padroes visuais e tecnicos ja utilizados no projeto (cards, badges, filtros, toasts, prioridades P1/P2/P3).
-
----
-
-## Estrutura da solucao
-
-### Fase 1 -- Base de dados (2 tabelas + RLS + trigger)
-
-**Tabela `phone_calls`**
-
-| Coluna | Tipo | Default | Descricao |
-|---|---|---|---|
-| id | uuid PK | gen_random_uuid() | Identificador unico |
-| client_name | text NOT NULL | -- | Nome do cliente |
-| client_phone | text NOT NULL | -- | Contato telefonico |
-| invoice_number | text | NULL | Numero da nota |
-| subject | text NOT NULL | -- | Assunto da ligacao |
-| notes | text | NULL | Observacoes livres |
-| status | text NOT NULL | 'pendente' | pendente / em_andamento / concluido / cancelado |
-| priority | text NOT NULL | 'P2' | P1 / P2 / P3 |
-| created_by | uuid NOT NULL | auth.uid() | Agente que registrou |
-| assigned_to | uuid | NULL | Agente responsavel |
-| ticket_id | uuid | NULL | Vincular a ticket existente (opcional) |
-| created_at | timestamptz | now() | Data de criacao |
-| updated_at | timestamptz | now() | Ultima atualizacao (via trigger) |
-
-**Tabela `phone_call_reminders`**
-
-| Coluna | Tipo | Default | Descricao |
-|---|---|---|---|
-| id | uuid PK | gen_random_uuid() | Identificador unico |
-| phone_call_id | uuid NOT NULL FK | -- | Referencia a ligacao |
-| remind_at | timestamptz NOT NULL | -- | Data/hora do lembrete |
-| message | text NOT NULL | -- | Descricao do lembrete |
-| is_completed | boolean | false | Lembrete concluido? |
-| created_by | uuid NOT NULL | auth.uid() | Quem criou |
-| created_at | timestamptz | now() | Data de criacao |
-
-**RLS**: Ambas as tabelas acessiveis apenas por agentes autenticados (usando `is_authenticated_agent()`), com SELECT, INSERT, UPDATE e DELETE.
-
-**Trigger**: Reutilizar `update_updated_at()` na tabela `phone_calls` para atualizar `updated_at` automaticamente.
+Tres grandes melhorias: (1) busca automatica de clientes e tickets ao preencher o formulario, (2) visual mais profissional em todo o modulo, (3) lista de ligacoes em formato Kanban com drag-and-drop.
 
 ---
 
-### Fase 2 -- Pagina principal `/phone-calls`
+## 1. Formulario inteligente com busca automatica
 
-Uma pagina com 3 secoes principais:
+### Comportamento atual
+O formulario exige que o utilizador pesquise manualmente um ticket para vincular.
 
-**2.1 -- Barra de resumo (topo)**
-4 cards com contadores:
-- Total de ligacoes (hoje)
-- Pendentes
-- Em andamento
-- Concluidas
+### Novo comportamento
+- Ao digitar o **Nome do Cliente**, o sistema pesquisa automaticamente:
+  - Tickets abertos com `client_name` igual/semelhante
+  - Ligacoes anteriores do mesmo cliente
+- Ao digitar o **Numero da Nota**, o sistema pesquisa:
+  - Tickets com `order_number` igual ao numero digitado
+- Se encontrar tickets correspondentes, mostra uma secao "Tickets encontrados" abaixo dos campos, com os tickets abertos que correspondem
+- O utilizador pode clicar num ticket para vincular automaticamente
+- Se nao vincular, o registo e criado sem vinculo (como hoje)
 
-**2.2 -- Formulario de registo rapido**
-Formulario inline (card expansivel) com os campos:
-- Nome do Cliente (obrigatorio)
-- Contato/Telefone (obrigatorio)
-- Numero da Nota (opcional)
-- Assunto (obrigatorio)
-- Prioridade (select: P1/P2/P3, default P2)
+### Fluxo
 
-Ao submeter, a ligacao e criada com status "pendente" e aparece na lista.
-
-**2.3 -- Lista de ligacoes com filtros**
-Tabela/lista com:
-- Filtros por status (Todos / Pendente / Em andamento / Concluido / Cancelado)
-- Filtro por prioridade (Todas / P1 / P2 / P3)
-- Campo de pesquisa (nome, telefone, nota, assunto)
-- Cada linha mostra: nome, contato, nota, assunto, prioridade (badge colorido), status (badge), indicador de lembretes pendentes (icone de sino com contador), data de criacao
-- Clicar numa linha abre o dialog de detalhes
-
-**2.4 -- Dialog de detalhes da ligacao**
-Ao clicar numa ligacao, abre um dialog com:
-- Dados completos da ligacao (editaveis: status, prioridade, notas)
-- Secao de lembretes:
-  - Formulario para adicionar lembrete (data/hora + mensagem)
-  - Lista de lembretes existentes ordenados por data
-  - Botao para marcar como concluido (checkbox)
-  - Lembretes proximos (menos de 1 hora) destacados em amarelo
-  - Lembretes concluidos com opacidade reduzida e riscado
-- Botao para vincular a um ticket existente (opcional)
+```text
+Utilizador digita nome do cliente
+       |
+       v
+Pesquisa tickets WHERE client_name ILIKE '%nome%' AND status nao fechado
+       |
+       v
+Utilizador digita numero da nota
+       |
+       v
+Pesquisa tickets WHERE order_number = numero_nota
+       |
+       v
+Combina resultados e mostra "Tickets sugeridos" automaticamente
+       |
+       v
+Utilizador clica para vincular OU ignora e submete
+```
 
 ---
 
-### Fase 3 -- Indicador de lembretes no Dashboard
+## 2. Lista de Ligacoes em formato Kanban
 
-Adicionar ao Dashboard um pequeno card "Lembretes Proximos" que mostra os lembretes pendentes com `remind_at` na proxima hora, com link direto para a ligacao.
+### Comportamento atual
+Lista simples de ligacoes com filtros por tabs.
+
+### Novo comportamento
+- 4 colunas Kanban: **Pendente**, **Em Andamento**, **Concluido**, **Cancelado**
+- Cada card mostra: nome do cliente, assunto, prioridade (badge), telefone, indicador de lembrete (sino), numero da nota se existir
+- **Drag-and-drop** para mover ligacoes entre colunas (muda o status automaticamente)
+- Clicar num card abre o dialog de detalhes (como hoje)
+- Manter a barra de pesquisa e filtro de prioridade no topo
+- Reutilizar os mesmos padroes do `KanbanBoard.tsx` existente (DndContext, useDraggable, useDroppable)
+- Header de cada coluna com contador de itens e cor distintiva
+
+### Cores das colunas
+- Pendente: amarelo/warning
+- Em Andamento: azul/primary
+- Concluido: verde/success
+- Cancelado: cinza/muted
 
 ---
 
-### Fase 4 -- Navegacao
+## 3. Melhorias visuais e profissionais
 
-- Adicionar "Ligacoes" ao sidebar com icone `Phone` (entre Tickets e Macros)
-- Registar rota `/phone-calls` no `App.tsx` dentro do layout autenticado
+### Dashboard (cards de resumo)
+- Adicionar subtitulo em cada card (ex: "ligacoes registadas hoje")
+- Adicionar variacao percentual ou indicador contextual
+- Melhorar espacamento e tipografia dos numeros
+- Adicionar bordas coloridas no topo de cada card (como as colunas Kanban)
+
+### Formulario
+- Layout mais limpo com secoes bem separadas
+- Campos obrigatorios com asterisco estilizado
+- Botao "Registar" com icone e estilo primario mais destacado
+- Botao de cancelar/limpar formulario
+- Secao de "Tickets Sugeridos" com cards visuais (nao so texto)
+
+### Dialog de detalhes
+- Header com badge de status colorido ao lado do nome
+- Secoes com titulos mais destacados e separadores visuais
+- Botoes de acao (Guardar, Vincular) mais profissionais com icones
 
 ---
 
-## Ficheiros a criar e editar
+## Ficheiros a editar
 
-| Ficheiro | Acao | Descricao |
-|---|---|---|
-| Migracao SQL | Criar | Tabelas, RLS, trigger |
-| `src/pages/PhoneCalls.tsx` | Criar | Pagina principal com resumo, formulario, lista |
-| `src/components/phone/PhoneCallForm.tsx` | Criar | Formulario de registo rapido |
-| `src/components/phone/PhoneCallList.tsx` | Criar | Lista filtrada de ligacoes |
-| `src/components/phone/PhoneCallDetailDialog.tsx` | Criar | Dialog com detalhes + lembretes |
-| `src/components/phone/ReminderForm.tsx` | Criar | Formulario de lembrete (data/hora + mensagem) |
-| `src/components/phone/ReminderList.tsx` | Criar | Lista de lembretes com toggle concluido |
-| `src/components/AppSidebar.tsx` | Editar | Adicionar item "Ligacoes" ao menu |
-| `src/App.tsx` | Editar | Adicionar rota /phone-calls |
-| `src/pages/Dashboard.tsx` | Editar | Adicionar card "Lembretes Proximos" |
+| Ficheiro | Descricao |
+|---|---|
+| `src/components/phone/PhoneCallForm.tsx` | Reescrever com busca automatica por nome/nota, sugestoes de tickets, visual melhorado |
+| `src/pages/PhoneCalls.tsx` | Substituir lista por Kanban, melhorar dashboard cards |
+| `src/components/phone/PhoneCallList.tsx` | Remover (substituido pelo Kanban inline) |
+| `src/components/phone/PhoneCallKanban.tsx` | **Novo** -- componente Kanban com 4 colunas e drag-and-drop |
+| `src/components/phone/PhoneCallDetailDialog.tsx` | Melhorar visual com badges, icones e layout mais profissional |
 
 ---
 
 ## Detalhes tecnicos
 
-### Estados das ligacoes
-- `pendente` -- Registada, aguarda tratamento
-- `em_andamento` -- Em curso
-- `concluido` -- Resolvida/retorno feito
-- `cancelado` -- Cancelada
+### Busca automatica no formulario
+- Debounce de 400ms nos campos `client_name` e `invoice_number`
+- Query para `client_name`: `supabase.from("tickets").select(...).ilike("client_name", "%nome%").not("status", "in", "(fechados)")` -- busca tickets nao fechados
+- Query para `invoice_number`: `supabase.from("tickets").select(...).eq("order_number", invoice_number)` -- correspondencia exata com numero de encomenda
+- Combinar resultados sem duplicatas (por `id`)
+- Mostrar secao "Tickets sugeridos" apenas quando ha resultados
 
-### Prioridades
-Reutilizar o componente `PriorityFlag` ja existente (P1 vermelho, P2 amarelo, P3 cinza).
+### Kanban de ligacoes
+- Usar `@dnd-kit/core` (ja instalado) com `useDraggable` e `useDroppable`
+- 4 estados fixos (nao dinamicos como os tickets): pendente, em_andamento, concluido, cancelado
+- Ao soltar numa coluna diferente, faz `UPDATE phone_calls SET status = novo_status WHERE id = call_id`
+- Aplicar filtro de prioridade e pesquisa antes de agrupar nas colunas
+- Scroll vertical dentro de cada coluna com `ScrollArea`
 
-### Lembretes -- logica de destaque
-- `remind_at` dentro de 1 hora e `is_completed = false` --> badge amarelo de aviso
-- `remind_at` ja passou e `is_completed = false` --> badge vermelho (atrasado)
-- `is_completed = true` --> texto riscado, opacidade 50%
-
-### Consulta de lembretes proximos (Dashboard)
-```text
-SELECT r.*, pc.client_name, pc.client_phone, pc.subject
-FROM phone_call_reminders r
-JOIN phone_calls pc ON pc.id = r.phone_call_id
-WHERE r.is_completed = false
-  AND r.remind_at <= now() + interval '1 hour'
-ORDER BY r.remind_at ASC
-LIMIT 5
-```
-
-### Padrao de dados
-Seguir o mesmo padrao do projeto: queries diretas com `supabase.from()`, estados locais com `useState`, sem React Query para manter consistencia com as paginas existentes (Tickets, Dashboard).
+### Nenhuma alteracao de base de dados necessaria
+Todas as colunas ja existem (`order_number` nos tickets, `client_name` em ambas as tabelas).
 
