@@ -19,6 +19,7 @@ type PhoneCall = {
   status: string;
   priority: string;
   created_at: string;
+  ticket_id?: string | null;
   reminder_count?: number;
 };
 
