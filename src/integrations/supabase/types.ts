@@ -314,6 +314,30 @@ export type Database = {
           },
         ]
       }
+      phone_call_statuses: {
+        Row: {
+          color: string | null
+          id: string
+          is_default: boolean | null
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          color?: string | null
+          id: string
+          is_default?: boolean | null
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          color?: string | null
+          id?: string
+          is_default?: boolean | null
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       phone_calls: {
         Row: {
           assigned_to: string | null

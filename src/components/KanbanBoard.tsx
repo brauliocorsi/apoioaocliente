@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import { getTicketSlaStatus, calcRemaining, type SlaStatus } from "@/components/ticket/SlaDashboard";
-import { AlertTriangle, Clock, CheckCircle, Timer } from "lucide-react";
+import { AlertTriangle, Clock, CheckCircle, Timer, Pencil, Check, X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DndContext,
@@ -130,9 +132,76 @@ function DroppableColumn({ statusId, color, children, isOver }: { statusId: stri
   );
 }
 
+function InlineStatusHeader({
+  statusId,
+  name,
+  color,
+  count,
+  onRename,
+}: {
+  statusId: string;
+  name: string;
+  color: string;
+  count: number;
+  onRename: (id: string, newName: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  const save = () => {
+    const trimmed = editName.trim();
+    if (trimmed && trimmed !== name) {
+      onRename(statusId, trimmed);
+    } else {
+      setEditName(name);
+    }
+    setEditing(false);
+  };
+
+  return (
+    <div className="px-3 py-2 border-b">
+      <div className="flex items-center justify-between gap-1">
+        {editing ? (
+          <div className="flex items-center gap-1 flex-1">
+            <Input
+              ref={inputRef}
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") { setEditName(name); setEditing(false); } }}
+              className="h-6 text-xs px-1.5 py-0"
+            />
+            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={save}><Check className="h-3 w-3" /></Button>
+            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => { setEditName(name); setEditing(false); }}><X className="h-3 w-3" /></Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 flex-1 group">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {name}
+            </h3>
+            <button
+              onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+              className="opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+            </button>
+          </div>
+        )}
+        <Badge variant="secondary" className="text-xs h-5 min-w-[20px] justify-center">
+          {count}
+        </Badge>
+      </div>
+    </div>
+  );
+}
+
 export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: KanbanBoardProps) {
   const { toast } = useToast();
-  const { statuses, statusLabels } = useTicketStatuses();
+  const { statuses, statusLabels, refetch: refetchStatuses } = useTicketStatuses();
   const [activeTicket, setActiveTicket] = useState<TicketRow | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
 
@@ -179,7 +248,6 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: K
     } else {
       toast({ title: `Ticket #${ticket.ticket_number} → ${statusLabels[newStatus]}` });
 
-      // Send email notification in background
       supabase.functions.invoke("send-ticket-email", {
         body: { ticket_id: ticket.id, template_id: "status_changed" },
       }).then(({ error }) => {
@@ -189,6 +257,19 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: K
       });
 
       onTicketMoved?.();
+    }
+  };
+
+  const handleRenameStatus = async (id: string, newName: string) => {
+    const { error } = await supabase
+      .from("ticket_statuses")
+      .update({ name: newName })
+      .eq("id", id);
+    if (error) {
+      toast({ title: "Erro ao renomear status", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Status renomeado → ${newName}` });
+      refetchStatuses();
     }
   };
 
@@ -204,16 +285,13 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: K
       <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
         {statuses.map((s) => (
           <DroppableColumn key={s.id} statusId={s.id} color={s.color} isOver={overColumn === s.id}>
-            <div className="px-3 py-2 border-b">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {s.name}
-                </h3>
-                <Badge variant="secondary" className="text-xs h-5 min-w-[20px] justify-center">
-                  {(grouped[s.id] || []).length}
-                </Badge>
-              </div>
-            </div>
+            <InlineStatusHeader
+              statusId={s.id}
+              name={s.name}
+              color={s.color}
+              count={(grouped[s.id] || []).length}
+              onRename={handleRenameStatus}
+            />
             <ScrollArea className="h-[calc(100vh-320px)]">
               <div className="p-2 space-y-2">
                 {(grouped[s.id] || []).map((t) => (
