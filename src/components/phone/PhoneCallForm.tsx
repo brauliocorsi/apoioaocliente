@@ -30,9 +30,7 @@ export default function PhoneCallForm({ onCreated }: PhoneCallFormProps) {
   // Auto-search tickets by client_name
   useEffect(() => {
     if (!form.client_name || form.client_name.length < 2) {
-      if (!form.invoice_number || form.invoice_number.length < 1) {
-        setSuggestedTickets([]);
-      }
+      if (!form.invoice_number && !form.client_phone) setSuggestedTickets([]);
       return;
     }
     const timeout = setTimeout(async () => {
@@ -46,12 +44,26 @@ export default function PhoneCallForm({ onCreated }: PhoneCallFormProps) {
     return () => clearTimeout(timeout);
   }, [form.client_name]);
 
+  // Auto-search tickets by client_phone
+  useEffect(() => {
+    if (!form.client_phone || form.client_phone.length < 3) {
+      return;
+    }
+    const timeout = setTimeout(async () => {
+      const { data } = await supabase
+        .from("tickets")
+        .select("id, ticket_number, subject, client_name, client_phone, order_number, status")
+        .ilike("client_phone", `%${form.client_phone}%`)
+        .limit(10);
+      mergeSuggestions(data || [], "phone");
+    }, 400);
+    return () => clearTimeout(timeout);
+  }, [form.client_phone]);
+
   // Auto-search tickets by invoice_number → order_number
   useEffect(() => {
     if (!form.invoice_number || form.invoice_number.length < 1) {
-      if (!form.client_name || form.client_name.length < 2) {
-        setSuggestedTickets([]);
-      }
+      if (!form.client_name && !form.client_phone) setSuggestedTickets([]);
       return;
     }
     const timeout = setTimeout(async () => {
