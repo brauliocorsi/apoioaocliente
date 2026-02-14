@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
-import { Phone, Bell, FileText } from "lucide-react";
+import { usePhoneCallStatuses, type PhoneCallStatus } from "@/hooks/usePhoneCallStatuses";
+import { Phone, Bell, FileText, Plus, Trash2, Check, X, Pencil } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -30,13 +33,6 @@ type PhoneCall = {
   ticket_id?: string | null;
   reminder_count?: number;
 };
-
-const COLUMNS = [
-  { id: "pendente", label: "Pendente", color: "hsl(38, 92%, 50%)" },
-  { id: "em_andamento", label: "Em Andamento", color: "hsl(215, 70%, 45%)" },
-  { id: "concluido", label: "Concluído", color: "hsl(142, 71%, 45%)" },
-  { id: "cancelado", label: "Cancelado", color: "hsl(215, 15%, 47%)" },
-];
 
 interface PhoneCallKanbanProps {
   calls: PhoneCall[];
@@ -122,18 +118,98 @@ function DroppableColumn({ columnId, color, children, isOver }: { columnId: stri
   );
 }
 
+function InlineEditHeader({
+  status,
+  count,
+  onRename,
+  onDelete,
+}: {
+  status: PhoneCallStatus;
+  count: number;
+  onRename: (id: string, newName: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(status.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  const save = () => {
+    const trimmed = name.trim();
+    if (trimmed && trimmed !== status.name) {
+      onRename(status.id, trimmed);
+    } else {
+      setName(status.name);
+    }
+    setEditing(false);
+  };
+
+  return (
+    <div className="px-3 py-2.5 border-b">
+      <div className="flex items-center justify-between gap-1">
+        {editing ? (
+          <div className="flex items-center gap-1 flex-1">
+            <Input
+              ref={inputRef}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") { setName(status.name); setEditing(false); } }}
+              className="h-6 text-xs px-1.5 py-0"
+            />
+            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={save}><Check className="h-3 w-3" /></Button>
+            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => { setName(status.name); setEditing(false); }}><X className="h-3 w-3" /></Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 flex-1 group">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {status.name}
+            </h3>
+            <button
+              onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+              className="opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+            </button>
+          </div>
+        )}
+        <div className="flex items-center gap-1">
+          <Badge variant="secondary" className="text-xs h-5 min-w-[20px] justify-center">
+            {count}
+          </Badge>
+          {!status.is_default && count === 0 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(status.id); }}
+              className="opacity-0 group-hover:opacity-100 hover:text-destructive text-muted-foreground transition-all"
+              title="Excluir coluna"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PhoneCallKanban({ calls, onSelect, onStatusChanged }: PhoneCallKanbanProps) {
+  const { statuses, refetch: refetchStatuses } = usePhoneCallStatuses();
   const [activeCall, setActiveCall] = useState<PhoneCall | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
+  const [addingColumn, setAddingColumn] = useState(false);
+  const [newColumnName, setNewColumnName] = useState("");
+  const newColRef = useRef<HTMLInputElement>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  const columnIds = COLUMNS.map((c) => c.id);
+  const columnIds = statuses.map((s) => s.id);
 
-  const grouped = COLUMNS.reduce((acc, col) => {
-    acc[col.id] = calls.filter((c) => c.status === col.id);
+  const grouped = statuses.reduce((acc, s) => {
+    acc[s.id] = calls.filter((c) => c.status === s.id);
     return acc;
   }, {} as Record<string, PhoneCall[]>);
 
@@ -166,11 +242,65 @@ export default function PhoneCallKanban({ calls, onSelect, onStatusChanged }: Ph
     if (error) {
       toast({ title: "Erro ao mover ligação", description: error.message, variant: "destructive" });
     } else {
-      const label = COLUMNS.find((c) => c.id === newStatus)?.label || newStatus;
+      const label = statuses.find((s) => s.id === newStatus)?.name || newStatus;
       toast({ title: `Ligação movida → ${label}` });
       onStatusChanged();
     }
   };
+
+  const handleRename = async (id: string, newName: string) => {
+    const { error } = await supabase
+      .from("phone_call_statuses" as any)
+      .update({ name: newName } as any)
+      .eq("id", id);
+    if (error) {
+      toast({ title: "Erro ao renomear", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Coluna renomeada → ${newName}` });
+      refetchStatuses();
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    const count = (grouped[id] || []).length;
+    if (count > 0) {
+      toast({ title: "Não é possível excluir", description: "Mova todas as ligações antes de excluir.", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase
+      .from("phone_call_statuses" as any)
+      .delete()
+      .eq("id", id);
+    if (error) {
+      toast({ title: "Erro ao excluir", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Coluna excluída" });
+      refetchStatuses();
+    }
+  };
+
+  const handleAddColumn = async () => {
+    const trimmed = newColumnName.trim();
+    if (!trimmed) return;
+    const id = trimmed.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    const maxOrder = statuses.reduce((max, s) => Math.max(max, s.sort_order), 0);
+
+    const { error } = await supabase
+      .from("phone_call_statuses" as any)
+      .insert({ id, name: trimmed, color: "#6b7280", sort_order: maxOrder + 1, is_default: false } as any);
+    if (error) {
+      toast({ title: "Erro ao criar coluna", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Coluna "${trimmed}" criada` });
+      setNewColumnName("");
+      setAddingColumn(false);
+      refetchStatuses();
+    }
+  };
+
+  useEffect(() => {
+    if (addingColumn) newColRef.current?.focus();
+  }, [addingColumn]);
 
   return (
     <DndContext
@@ -180,19 +310,15 @@ export default function PhoneCallKanban({ calls, onSelect, onStatusChanged }: Ph
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3" style={{ minHeight: 300 }}>
-        {COLUMNS.map((col) => (
+      <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 300 }}>
+        {statuses.map((col) => (
           <DroppableColumn key={col.id} columnId={col.id} color={col.color} isOver={overColumn === col.id}>
-            <div className="px-3 py-2.5 border-b">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {col.label}
-                </h3>
-                <Badge variant="secondary" className="text-xs h-5 min-w-[20px] justify-center">
-                  {(grouped[col.id] || []).length}
-                </Badge>
-              </div>
-            </div>
+            <InlineEditHeader
+              status={col}
+              count={(grouped[col.id] || []).length}
+              onRename={handleRename}
+              onDelete={handleDelete}
+            />
             <ScrollArea className="h-[calc(100vh-420px)] min-h-[200px]">
               <div className="p-2 space-y-2">
                 {(grouped[col.id] || []).map((c) => (
@@ -205,6 +331,37 @@ export default function PhoneCallKanban({ calls, onSelect, onStatusChanged }: Ph
             </ScrollArea>
           </DroppableColumn>
         ))}
+
+        {/* Add column button */}
+        <div className="flex-shrink-0 w-[240px]">
+          {addingColumn ? (
+            <div className="rounded-lg border border-dashed p-3 space-y-2 bg-muted/20">
+              <Input
+                ref={newColRef}
+                value={newColumnName}
+                onChange={(e) => setNewColumnName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleAddColumn(); if (e.key === "Escape") { setAddingColumn(false); setNewColumnName(""); } }}
+                placeholder="Nome da coluna..."
+                className="h-8 text-sm"
+              />
+              <div className="flex gap-1">
+                <Button size="sm" className="h-7 text-xs flex-1 gap-1" onClick={handleAddColumn}>
+                  <Check className="h-3 w-3" /> Criar
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setAddingColumn(false); setNewColumnName(""); }}>
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAddingColumn(true)}
+              className="w-full h-20 rounded-lg border-2 border-dashed border-muted-foreground/20 hover:border-primary/40 hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 text-muted-foreground hover:text-primary text-sm"
+            >
+              <Plus className="h-4 w-4" /> Adicionar Coluna
+            </button>
+          )}
+        </div>
       </div>
 
       <DragOverlay>
