@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Ticket, Clock, AlertTriangle, CheckCircle2, Loader2, Users } from "lucide-react";
+import { Ticket, Clock, AlertTriangle, CheckCircle2, Loader2, Users, Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 import { pt } from "date-fns/locale";
 
 type TicketRow = {
@@ -29,6 +29,15 @@ type ClientRow = {
   last_seen_at: string | null;
 };
 
+type ReminderRow = {
+  id: string;
+  remind_at: string;
+  message: string;
+  phone_call_id: string;
+  client_name?: string;
+  subject?: string;
+};
+
 const statusLabels: Record<string, string> = {
   novo: "Novo",
   em_analise: "Em análise",
@@ -48,6 +57,7 @@ const priorityColors: Record<string, string> = {
 export default function Dashboard() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [clients, setClients] = useState<ClientRow[]>([]);
+  const [upcomingReminders, setUpcomingReminders] = useState<ReminderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -67,6 +77,31 @@ export default function Dashboard() {
       ]);
       setTickets((ticketsRes.data as TicketRow[]) || []);
       setClients((clientsRes.data as ClientRow[]) || []);
+
+      // Fetch upcoming reminders (next hour)
+      const { data: remData } = await supabase
+        .from("phone_call_reminders" as any)
+        .select("id, remind_at, message, phone_call_id")
+        .eq("is_completed", false)
+        .lte("remind_at", new Date(Date.now() + 60 * 60 * 1000).toISOString())
+        .order("remind_at", { ascending: true })
+        .limit(5);
+      
+      const rems = ((remData as any[]) || []) as ReminderRow[];
+      // Enrich with call data
+      if (rems.length > 0) {
+        const callIds = [...new Set(rems.map((r) => r.phone_call_id))];
+        const { data: callsData } = await supabase
+          .from("phone_calls" as any)
+          .select("id, client_name, subject")
+          .in("id", callIds);
+        const callMap = new Map(((callsData as any[]) || []).map((c: any) => [c.id, c]));
+        rems.forEach((r) => {
+          const call = callMap.get(r.phone_call_id);
+          if (call) { r.client_name = call.client_name; r.subject = call.subject; }
+        });
+      }
+      setUpcomingReminders(rems);
       setLoading(false);
     };
     fetch();
@@ -128,6 +163,33 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {upcomingReminders.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2"><Bell className="h-4 w-4 text-warning" /> Lembretes Próximos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {upcomingReminders.map((r) => (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between rounded-lg border border-warning/30 bg-warning/5 p-3 cursor-pointer hover:bg-warning/10 transition-colors"
+                  onClick={() => navigate("/phone-calls")}
+                >
+                  <div>
+                    <p className="text-sm font-medium">{r.message}</p>
+                    <p className="text-xs text-muted-foreground">{r.client_name} – {r.subject}</p>
+                  </div>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {format(new Date(r.remind_at), "HH:mm", { locale: pt })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
