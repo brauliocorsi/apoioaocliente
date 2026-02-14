@@ -38,7 +38,7 @@ export default function PhoneCallForm({ onCreated }: PhoneCallFormProps) {
     const timeout = setTimeout(async () => {
       const { data } = await supabase
         .from("tickets")
-        .select("id, ticket_number, subject, client_name, order_number, status")
+        .select("id, ticket_number, subject, client_name, client_phone, order_number, status")
         .ilike("client_name", `%${form.client_name}%`)
         .limit(10);
       mergeSuggestions(data || [], "name");
@@ -57,7 +57,7 @@ export default function PhoneCallForm({ onCreated }: PhoneCallFormProps) {
     const timeout = setTimeout(async () => {
       const { data } = await supabase
         .from("tickets")
-        .select("id, ticket_number, subject, client_name, order_number, status")
+        .select("id, ticket_number, subject, client_name, client_phone, order_number, status")
         .eq("order_number", form.invoice_number)
         .limit(10);
       mergeSuggestions(data || [], "invoice");
@@ -75,9 +75,11 @@ export default function PhoneCallForm({ onCreated }: PhoneCallFormProps) {
 
   const selectTicket = (ticket: any) => {
     setSelectedTicket(ticket);
-    if (ticket.client_name && !form.client_name) {
-      setForm((prev) => ({ ...prev, client_name: ticket.client_name }));
-    }
+    setForm((prev) => ({
+      ...prev,
+      client_name: ticket.client_name || prev.client_name,
+      client_phone: ticket.client_phone || prev.client_phone,
+    }));
   };
 
   const clearForm = () => {
@@ -151,6 +153,17 @@ export default function PhoneCallForm({ onCreated }: PhoneCallFormProps) {
                 </h4>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   <div className="space-y-1.5">
+                    <Label htmlFor="invoice_number" className="text-sm flex items-center gap-1">
+                      <FileText className="h-3 w-3" /> Nº da Nota / Encomenda
+                    </Label>
+                    <Input
+                      id="invoice_number"
+                      placeholder="Nº da encomenda..."
+                      value={form.invoice_number}
+                      onChange={(e) => setForm({ ...form, invoice_number: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
                     <Label htmlFor="client_name" className="text-sm">
                       Nome do Cliente <span className="text-destructive">*</span>
                     </Label>
@@ -172,17 +185,6 @@ export default function PhoneCallForm({ onCreated }: PhoneCallFormProps) {
                       value={form.client_phone}
                       onChange={(e) => setForm({ ...form, client_phone: e.target.value })}
                       required
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="invoice_number" className="text-sm flex items-center gap-1">
-                      <FileText className="h-3 w-3" /> Nº da Nota
-                    </Label>
-                    <Input
-                      id="invoice_number"
-                      placeholder="Nº da encomenda..."
-                      value={form.invoice_number}
-                      onChange={(e) => setForm({ ...form, invoice_number: e.target.value })}
                     />
                   </div>
                 </div>
