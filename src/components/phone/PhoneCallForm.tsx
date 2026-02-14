@@ -254,6 +254,11 @@ export default function PhoneCallForm({ onCreated }: PhoneCallFormProps) {
                         </div>
                         <p className="text-sm font-medium line-clamp-1">{t.subject}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">{t.client_name}</p>
+                        {t.client_phone && (
+                          <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                            <Phone className="h-3 w-3" /> {t.client_phone}
+                          </p>
+                        )}
                         {t.order_number && (
                           <p className="text-xs text-muted-foreground mt-0.5">Encomenda: {t.order_number}</p>
                         )}
