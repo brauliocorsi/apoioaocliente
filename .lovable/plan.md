@@ -1,123 +1,129 @@
 
 
-# Melhorias no Modulo de Ligacoes Telefonicas
+# Indicador de Ligacoes Vinculadas e Notificacoes de Mensagens do Cliente
 
 ## Resumo
 
-Tres grandes melhorias: (1) busca automatica de clientes e tickets ao preencher o formulario, (2) visual mais profissional em todo o modulo, (3) lista de ligacoes em formato Kanban com drag-and-drop.
+Duas melhorias: (1) mostrar um indicador visual com o numero de ligacoes telefonicas vinculadas a cada ticket (na lista, Kanban e detalhe), e (2) criar notificacoes automaticas para agentes quando um cliente envia uma nova mensagem pelo portal.
 
 ---
 
-## 1. Formulario inteligente com busca automatica
+## 1. Indicador visual de ligacoes vinculadas no ticket
 
-### Comportamento atual
-O formulario exige que o utilizador pesquise manualmente um ticket para vincular.
+### Onde aparece
+- **Lista de tickets** (`Tickets.tsx`): icone de telefone com badge numerico ao lado do status
+- **Kanban de tickets** (`KanbanBoard.tsx`): icone de telefone pequeno no card com contador
+- **Detalhe do ticket** (`TicketSidebar.tsx`): nova seccao "Ligacoes" na sidebar com contagem e link para cada ligacao
 
-### Novo comportamento
-- Ao digitar o **Nome do Cliente**, o sistema pesquisa automaticamente:
-  - Tickets abertos com `client_name` igual/semelhante
-  - Ligacoes anteriores do mesmo cliente
-- Ao digitar o **Numero da Nota**, o sistema pesquisa:
-  - Tickets com `order_number` igual ao numero digitado
-- Se encontrar tickets correspondentes, mostra uma secao "Tickets encontrados" abaixo dos campos, com os tickets abertos que correspondem
-- O utilizador pode clicar num ticket para vincular automaticamente
-- Se nao vincular, o registo e criado sem vinculo (como hoje)
+### Implementacao
 
-### Fluxo
+**Busca de dados**: Ao carregar os tickets, fazer uma query adicional para contar ligacoes por ticket:
 
 ```text
-Utilizador digita nome do cliente
-       |
-       v
-Pesquisa tickets WHERE client_name ILIKE '%nome%' AND status nao fechado
-       |
-       v
-Utilizador digita numero da nota
-       |
-       v
-Pesquisa tickets WHERE order_number = numero_nota
-       |
-       v
-Combina resultados e mostra "Tickets sugeridos" automaticamente
-       |
-       v
-Utilizador clica para vincular OU ignora e submete
+SELECT ticket_id, COUNT(*) as call_count
+FROM phone_calls
+WHERE ticket_id IN (lista de ticket ids)
+GROUP BY ticket_id
 ```
 
----
+- Na pagina `Tickets.tsx`: buscar contagens e passar como prop `callCounts: Record<string, number>` ao `KanbanBoard` e usar na lista
+- No `KanbanBoard.tsx`: receber `callCounts` e mostrar icone `Phone` com numero no card quando > 0
+- No `TicketSidebar.tsx`: buscar ligacoes vinculadas ao ticket e mostrar seccao com contagem e lista resumida
 
-## 2. Lista de Ligacoes em formato Kanban
-
-### Comportamento atual
-Lista simples de ligacoes com filtros por tabs.
-
-### Novo comportamento
-- 4 colunas Kanban: **Pendente**, **Em Andamento**, **Concluido**, **Cancelado**
-- Cada card mostra: nome do cliente, assunto, prioridade (badge), telefone, indicador de lembrete (sino), numero da nota se existir
-- **Drag-and-drop** para mover ligacoes entre colunas (muda o status automaticamente)
-- Clicar num card abre o dialog de detalhes (como hoje)
-- Manter a barra de pesquisa e filtro de prioridade no topo
-- Reutilizar os mesmos padroes do `KanbanBoard.tsx` existente (DndContext, useDraggable, useDroppable)
-- Header de cada coluna com contador de itens e cor distintiva
-
-### Cores das colunas
-- Pendente: amarelo/warning
-- Em Andamento: azul/primary
-- Concluido: verde/success
-- Cancelado: cinza/muted
+### Visual
+- Icone `Phone` do lucide-react com um badge numerico pequeno (ex: telefone + "2")
+- Cor neutra (muted) para nao competir com prioridade/SLA
+- No detalhe, cards clicaveis que navegam para a ligacao
 
 ---
 
-## 3. Melhorias visuais e profissionais
+## 2. Notificacoes para agentes quando cliente responde no chat
 
-### Dashboard (cards de resumo)
-- Adicionar subtitulo em cada card (ex: "ligacoes registadas hoje")
-- Adicionar variacao percentual ou indicador contextual
-- Melhorar espacamento e tipografia dos numeros
-- Adicionar bordas coloridas no topo de cada card (como as colunas Kanban)
+### Comportamento
+Quando um cliente envia uma mensagem pelo portal (`PortalTicketDetail.tsx`), o sistema cria automaticamente uma notificacao para o agente atribuido ao ticket.
 
-### Formulario
-- Layout mais limpo com secoes bem separadas
-- Campos obrigatorios com asterisco estilizado
-- Botao "Registar" com icone e estilo primario mais destacado
-- Botao de cancelar/limpar formulario
-- Secao de "Tickets Sugeridos" com cards visuais (nao so texto)
+### Implementacao
 
-### Dialog de detalhes
-- Header com badge de status colorido ao lado do nome
-- Secoes com titulos mais destacados e separadores visuais
-- Botoes de acao (Guardar, Vincular) mais profissionais com icones
+**Opcao escolhida**: Trigger no banco de dados -- e a forma mais robusta pois funciona independentemente de onde a mensagem e inserida.
+
+Criar uma funcao e trigger no banco de dados:
+
+```text
+Quando INSERT em ticket_messages WHERE sender_type = 'client':
+  1. Buscar o ticket (assigned_to)
+  2. Se assigned_to existe e e diferente do sender_id:
+     - INSERT em agent_notifications com:
+       - recipient_id = assigned_to
+       - sender_id = NEW.sender_id
+       - ticket_id = NEW.ticket_id
+       - type = 'client_message'
+       - content = 'enviou uma nova mensagem no ticket #X'
+```
+
+### Porque um trigger
+- Funciona automaticamente sem alterar codigo do portal
+- Funciona mesmo que mensagens venham de outras fontes (email, API)
+- O `NotificationBell.tsx` ja tem realtime configurado e vai mostrar a notificacao instantaneamente
 
 ---
 
-## Ficheiros a editar
+## Ficheiros a modificar
 
-| Ficheiro | Descricao |
+| Ficheiro | Alteracao |
 |---|---|
-| `src/components/phone/PhoneCallForm.tsx` | Reescrever com busca automatica por nome/nota, sugestoes de tickets, visual melhorado |
-| `src/pages/PhoneCalls.tsx` | Substituir lista por Kanban, melhorar dashboard cards |
-| `src/components/phone/PhoneCallList.tsx` | Remover (substituido pelo Kanban inline) |
-| `src/components/phone/PhoneCallKanban.tsx` | **Novo** -- componente Kanban com 4 colunas e drag-and-drop |
-| `src/components/phone/PhoneCallDetailDialog.tsx` | Melhorar visual com badges, icones e layout mais profissional |
+| `src/pages/Tickets.tsx` | Buscar contagem de ligacoes por ticket; mostrar icone Phone na lista; passar callCounts ao KanbanBoard |
+| `src/components/KanbanBoard.tsx` | Receber prop callCounts; mostrar icone Phone no TicketCard quando > 0 |
+| `src/components/ticket/TicketSidebar.tsx` | Nova seccao "Ligacoes" com contagem e lista de ligacoes vinculadas |
+| Nova migracao SQL | Criar funcao e trigger `notify_agent_on_client_message` na tabela `ticket_messages` |
 
 ---
 
 ## Detalhes tecnicos
 
-### Busca automatica no formulario
-- Debounce de 400ms nos campos `client_name` e `invoice_number`
-- Query para `client_name`: `supabase.from("tickets").select(...).ilike("client_name", "%nome%").not("status", "in", "(fechados)")` -- busca tickets nao fechados
-- Query para `invoice_number`: `supabase.from("tickets").select(...).eq("order_number", invoice_number)` -- correspondencia exata com numero de encomenda
-- Combinar resultados sem duplicatas (por `id`)
-- Mostrar secao "Tickets sugeridos" apenas quando ha resultados
+### Query de contagem de ligacoes (em Tickets.tsx)
+```text
+const { data: callData } = await supabase
+  .from("phone_calls")
+  .select("ticket_id")
+  .not("ticket_id", "is", null);
 
-### Kanban de ligacoes
-- Usar `@dnd-kit/core` (ja instalado) com `useDraggable` e `useDroppable`
-- 4 estados fixos (nao dinamicos como os tickets): pendente, em_andamento, concluido, cancelado
-- Ao soltar numa coluna diferente, faz `UPDATE phone_calls SET status = novo_status WHERE id = call_id`
-- Aplicar filtro de prioridade e pesquisa antes de agrupar nas colunas
-- Scroll vertical dentro de cada coluna com `ScrollArea`
+// Agrupar no frontend por ticket_id para criar Record<string, number>
+```
 
-### Nenhuma alteracao de base de dados necessaria
-Todas as colunas ja existem (`order_number` nos tickets, `client_name` em ambas as tabelas).
+### Trigger SQL para notificacoes de mensagem do cliente
+```text
+CREATE FUNCTION notify_agent_on_client_message()
+RETURNS trigger AS $$
+DECLARE
+  v_assigned uuid;
+  v_ticket_number integer;
+BEGIN
+  IF NEW.sender_type = 'client' THEN
+    SELECT assigned_to, ticket_number
+    INTO v_assigned, v_ticket_number
+    FROM tickets WHERE id = NEW.ticket_id;
+
+    IF v_assigned IS NOT NULL AND v_assigned != NEW.sender_id THEN
+      INSERT INTO agent_notifications (recipient_id, sender_id, ticket_id, type, content)
+      VALUES (
+        v_assigned,
+        NEW.sender_id,
+        NEW.ticket_id,
+        'client_message',
+        'enviou uma nova mensagem no ticket #' || v_ticket_number
+      );
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_client_message_notify
+AFTER INSERT ON ticket_messages
+FOR EACH ROW
+EXECUTE FUNCTION notify_agent_on_client_message();
+```
+
+### Nenhuma alteracao na tabela de notificacoes
+A tabela `agent_notifications` ja suporta os campos necessarios (recipient_id, sender_id, ticket_id, type, content). O `NotificationBell.tsx` ja tem realtime e vai captar as novas notificacoes automaticamente.
 
