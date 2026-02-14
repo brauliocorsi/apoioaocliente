@@ -276,6 +276,100 @@ export type Database = {
         }
         Relationships: []
       }
+      phone_call_reminders: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          is_completed: boolean
+          message: string
+          phone_call_id: string
+          remind_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          is_completed?: boolean
+          message: string
+          phone_call_id: string
+          remind_at: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          is_completed?: boolean
+          message?: string
+          phone_call_id?: string
+          remind_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phone_call_reminders_phone_call_id_fkey"
+            columns: ["phone_call_id"]
+            isOneToOne: false
+            referencedRelation: "phone_calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      phone_calls: {
+        Row: {
+          assigned_to: string | null
+          client_name: string
+          client_phone: string
+          created_at: string
+          created_by: string
+          id: string
+          invoice_number: string | null
+          notes: string | null
+          priority: string
+          status: string
+          subject: string
+          ticket_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          client_name: string
+          client_phone: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          invoice_number?: string | null
+          notes?: string | null
+          priority?: string
+          status?: string
+          subject: string
+          ticket_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          client_name?: string
+          client_phone?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          invoice_number?: string | null
+          notes?: string | null
+          priority?: string
+          status?: string
+          subject?: string
+          ticket_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phone_calls_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string

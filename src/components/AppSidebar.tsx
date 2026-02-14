@@ -1,4 +1,4 @@
-import { LayoutDashboard, Ticket, MessageSquareText, Settings, LogOut, Sofa } from "lucide-react";
+import { LayoutDashboard, Ticket, MessageSquareText, Settings, LogOut, Sofa, Phone } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Tickets", url: "/tickets", icon: Ticket },
+  { title: "Ligações", url: "/phone-calls", icon: Phone },
   { title: "Macros", url: "/macros", icon: MessageSquareText },
   { title: "Configurações", url: "/settings", icon: Settings },
 ];

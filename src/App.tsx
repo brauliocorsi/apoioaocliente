@@ -8,6 +8,7 @@ import { ClientAuthProvider } from "@/hooks/useClientAuth";
 import { AppLayout } from "@/components/AppLayout";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import PhoneCalls from "./pages/PhoneCalls";
 import Tickets from "./pages/Tickets";
 import TicketNew from "./pages/TicketNew";
 import TicketDetail from "./pages/TicketDetail";
@@ -35,6 +36,7 @@ const App = () => (
           <Route element={<AuthProvider><AppLayout /></AuthProvider>}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/tickets" element={<Tickets />} />
+            <Route path="/phone-calls" element={<PhoneCalls />} />
             <Route path="/tickets/new" element={<TicketNew />} />
             <Route path="/tickets/:id" element={<TicketDetail />} />
             <Route path="/macros" element={<Macros />} />
