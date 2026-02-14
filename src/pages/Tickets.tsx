@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Search, Loader2, List, LayoutGrid, AlertTriangle, Clock, CheckCircle, Timer } from "lucide-react";
+import { Plus, Search, Loader2, List, LayoutGrid, AlertTriangle, Clock, CheckCircle, Timer, Phone } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import KanbanBoard from "@/components/KanbanBoard";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
@@ -71,6 +71,7 @@ type TicketRow = {
 
 export default function Tickets() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
+  const [callCounts, setCallCounts] = useState<Record<string, number>>({});
   const [categories, setCategories] = useState<Record<string, string>>({});
   const [agents, setAgents] = useState<{ id: string; full_name: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,8 +110,17 @@ export default function Tickets() {
       if (priorityFilter !== "all") query = query.eq("priority", priorityFilter as any);
       if (agentFilter !== "all") query = query.eq("assigned_to", agentFilter);
 
-      const { data } = await query.limit(200);
+      const [{ data }, { data: callData }] = await Promise.all([
+        query.limit(200),
+        supabase.from("phone_calls").select("ticket_id").not("ticket_id", "is", null),
+      ]);
       setTickets((data as TicketRow[]) || []);
+      // Group call counts by ticket_id
+      const counts: Record<string, number> = {};
+      (callData || []).forEach((c: any) => {
+        counts[c.ticket_id] = (counts[c.ticket_id] || 0) + 1;
+      });
+      setCallCounts(counts);
       setLoading(false);
     };
     fetch();
@@ -223,7 +233,7 @@ export default function Tickets() {
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : view === "kanban" ? (
-        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} />
+        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} callCounts={callCounts} />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -249,6 +259,17 @@ export default function Tickets() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {callCounts[t.id] > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-0.5 text-muted-foreground cursor-default">
+                              <Phone className="h-3.5 w-3.5" />
+                              <span className="text-xs">{callCounts[t.id]}</span>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs">{callCounts[t.id]} ligação(ões) vinculada(s)</p></TooltipContent>
+                        </Tooltip>
+                      )}
                       <SlaIcon status={getTicketSlaStatus(t)} ticket={t as SlaTicket} />
                       {t.category_id && <Badge variant="outline" className="text-xs">{categories[t.category_id] || t.category_id}</Badge>}
                       <PriorityFlag priority={t.priority} />
