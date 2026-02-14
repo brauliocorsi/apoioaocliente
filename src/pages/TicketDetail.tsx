@@ -125,13 +125,13 @@ export default function TicketDetail() {
 
     // Send email notification on status change
     if (ticket.client_user_id || ticket.client_email) {
-      try {
-        await supabase.functions.invoke("send-ticket-email", {
-          body: { ticket_id: id, template_id: "status_changed" },
-        });
-      } catch (e) {
-        console.error("Failed to send status email:", e);
-      }
+      supabase.functions.invoke("send-ticket-email", {
+        body: { ticket_id: id, template_id: "status_changed" },
+      }).then(({ error }) => {
+        if (error) toast({ title: "Falha ao enviar notificação por email", description: error.message, variant: "destructive" });
+      }).catch(() => {
+        toast({ title: "Falha ao enviar notificação por email", variant: "destructive" });
+      });
     }
 
     toast({ title: "Estado atualizado" });
