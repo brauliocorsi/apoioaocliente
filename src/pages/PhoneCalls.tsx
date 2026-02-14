@@ -2,11 +2,10 @@ import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Phone, Clock, CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { Phone, Clock, CheckCircle2, Loader2, XCircle, Search } from "lucide-react";
 import PhoneCallForm from "@/components/phone/PhoneCallForm";
-import PhoneCallList from "@/components/phone/PhoneCallList";
+import PhoneCallKanban from "@/components/phone/PhoneCallKanban";
 import PhoneCallDetailDialog from "@/components/phone/PhoneCallDetailDialog";
 
 type PhoneCall = {
@@ -27,7 +26,6 @@ export default function PhoneCalls() {
   const [calls, setCalls] = useState<PhoneCall[]>([]);
   const [reminderCounts, setReminderCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("todos");
   const [priorityFilter, setPriorityFilter] = useState("todas");
   const [search, setSearch] = useState("");
   const [selectedCall, setSelectedCall] = useState<PhoneCall | null>(null);
@@ -40,7 +38,6 @@ export default function PhoneCalls() {
     const rows = (data as any as PhoneCall[]) || [];
     setCalls(rows);
 
-    // fetch pending reminder counts
     const { data: remData } = await supabase
       .from("phone_call_reminders" as any)
       .select("phone_call_id")
@@ -62,7 +59,6 @@ export default function PhoneCalls() {
 
   const filtered = useMemo(() => {
     let result = enrichedCalls;
-    if (statusFilter !== "todos") result = result.filter((c) => c.status === statusFilter);
     if (priorityFilter !== "todas") result = result.filter((c) => c.priority === priorityFilter);
     if (search) {
       const q = search.toLowerCase();
@@ -75,13 +71,20 @@ export default function PhoneCalls() {
       );
     }
     return result;
-  }, [enrichedCalls, statusFilter, priorityFilter, search]);
+  }, [enrichedCalls, priorityFilter, search]);
 
   const today = new Date().toDateString();
   const todayCalls = calls.filter((c) => new Date(c.created_at).toDateString() === today);
   const pendentes = calls.filter((c) => c.status === "pendente").length;
   const emAndamento = calls.filter((c) => c.status === "em_andamento").length;
   const concluidos = todayCalls.filter((c) => c.status === "concluido").length;
+
+  const summaryCards = [
+    { title: "Hoje", subtitle: "Ligações registadas hoje", value: todayCalls.length, icon: Phone, color: "hsl(215, 70%, 45%)", iconBg: "bg-primary/10 text-primary" },
+    { title: "Pendentes", subtitle: "Aguardam tratamento", value: pendentes, icon: Clock, color: "hsl(38, 92%, 50%)", iconBg: "bg-warning/10 text-warning" },
+    { title: "Em Andamento", subtitle: "Em curso", value: emAndamento, icon: Phone, color: "hsl(215, 70%, 45%)", iconBg: "bg-primary/10 text-primary" },
+    { title: "Concluídos", subtitle: "Finalizados hoje", value: concluidos, icon: CheckCircle2, color: "hsl(142, 71%, 45%)", iconBg: "bg-success/10 text-success" },
+  ];
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
@@ -94,69 +97,60 @@ export default function PhoneCalls() {
 
       {/* Summary cards */}
       <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Hoje</CardTitle>
-            <Phone className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent><div className="text-3xl font-bold">{todayCalls.length}</div></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Pendentes</CardTitle>
-            <Clock className="h-4 w-4 text-warning" />
-          </CardHeader>
-          <CardContent><div className="text-3xl font-bold">{pendentes}</div></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Em Andamento</CardTitle>
-            <Phone className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent><div className="text-3xl font-bold">{emAndamento}</div></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Concluídos Hoje</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-success" />
-          </CardHeader>
-          <CardContent><div className="text-3xl font-bold">{concluidos}</div></CardContent>
-        </Card>
+        {summaryCards.map((card) => (
+          <Card key={card.title} className="border-t-4 overflow-hidden" style={{ borderTopColor: card.color }}>
+            <CardHeader className="flex flex-row items-center justify-between pb-1">
+              <div>
+                <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{card.subtitle}</p>
+              </div>
+              <div className={`p-2 rounded-lg ${card.iconBg}`}>
+                <card.icon className="h-4 w-4" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold tracking-tight">{card.value}</div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Quick form */}
       <PhoneCallForm onCreated={fetchCalls} />
 
-      {/* Filters + List */}
+      {/* Kanban */}
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle>Lista de Ligações</CardTitle>
-            <Input placeholder="Pesquisar..." value={search} onChange={(e) => setSearch(e.target.value)} className="sm:max-w-xs" />
-          </div>
-          <div className="flex flex-wrap gap-3 pt-2">
-            <Tabs value={statusFilter} onValueChange={setStatusFilter}>
-              <TabsList>
-                <TabsTrigger value="todos">Todos</TabsTrigger>
-                <TabsTrigger value="pendente">Pendente</TabsTrigger>
-                <TabsTrigger value="em_andamento">Em andamento</TabsTrigger>
-                <TabsTrigger value="concluido">Concluído</TabsTrigger>
-                <TabsTrigger value="cancelado">Cancelado</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas</SelectItem>
-                <SelectItem value="P1">P1</SelectItem>
-                <SelectItem value="P2">P2</SelectItem>
-                <SelectItem value="P3">P3</SelectItem>
-              </SelectContent>
-            </Select>
+            <CardTitle>Quadro de Ligações</CardTitle>
+            <div className="flex gap-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Pesquisar..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 sm:w-56"
+                />
+              </div>
+              <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todas</SelectItem>
+                  <SelectItem value="P1">P1</SelectItem>
+                  <SelectItem value="P2">P2</SelectItem>
+                  <SelectItem value="P3">P3</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          <PhoneCallList calls={filtered} onSelect={setSelectedCall} />
+          <PhoneCallKanban
+            calls={filtered}
+            onSelect={setSelectedCall}
+            onStatusChanged={fetchCalls}
+          />
         </CardContent>
       </Card>
 
