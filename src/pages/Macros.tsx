@@ -4,8 +4,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, Search, Loader2 } from "lucide-react";
+import { Copy, Search, Loader2, Pencil, Trash2, Save, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
 const categoryLabels: Record<string, string> = {
   entrega: "Entrega",
@@ -27,19 +44,34 @@ const categoryColors: Record<string, string> = {
   geral: "bg-gray-100 text-gray-800",
 };
 
+type MacroCategory = "entrega" | "reclamacao" | "garantia" | "devolucao" | "pagamento" | "exposicao" | "geral";
+
+interface MacroForm {
+  id: string;
+  title: string;
+  content: string;
+  macro_category: MacroCategory;
+  variables: string[];
+}
+
 export default function Macros() {
   const [macros, setMacros] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [editingMacro, setEditingMacro] = useState<MacroForm | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
+  const fetchMacros = () => {
     supabase.from("macros").select("*").order("sort_order").then(({ data }) => {
       setMacros(data || []);
       setLoading(false);
     });
-  }, []);
+  };
+
+  useEffect(() => { fetchMacros(); }, []);
 
   const filtered = macros.filter((m) => {
     const matchesSearch = m.title.toLowerCase().includes(search.toLowerCase()) || m.content.toLowerCase().includes(search.toLowerCase());
@@ -52,13 +84,62 @@ export default function Macros() {
     toast({ title: "Copiado para clipboard" });
   };
 
+  const handleEdit = (m: any) => {
+    setEditingMacro({
+      id: m.id,
+      title: m.title,
+      content: m.content,
+      macro_category: m.macro_category,
+      variables: m.variables || [],
+    });
+  };
+
+  const handleSave = async () => {
+    if (!editingMacro) return;
+    setSaving(true);
+
+    // Extract variables from content like {nome_cliente}
+    const vars = [...new Set((editingMacro.content.match(/\{(\w+)\}/g) || []).map(v => v.slice(1, -1)))];
+
+    const { error } = await supabase
+      .from("macros")
+      .update({
+        title: editingMacro.title,
+        content: editingMacro.content,
+        macro_category: editingMacro.macro_category,
+        variables: vars,
+      })
+      .eq("id", editingMacro.id);
+
+    setSaving(false);
+    if (error) {
+      toast({ title: "Erro ao guardar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Macro atualizada" });
+      setEditingMacro(null);
+      fetchMacros();
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    const { error } = await supabase.from("macros").delete().eq("id", deleteId);
+    if (error) {
+      toast({ title: "Erro ao eliminar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Macro eliminada" });
+      setDeleteId(null);
+      fetchMacros();
+    }
+  };
+
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Macros de Resposta</h1>
-        <p className="text-muted-foreground">18 modelos pré-definidos para email e WhatsApp</p>
+        <p className="text-muted-foreground">{macros.length} modelos pré-definidos para email e WhatsApp</p>
       </div>
 
       <div className="flex gap-3 flex-wrap">
@@ -94,13 +175,90 @@ export default function Macros() {
                   ))}
                 </div>
               )}
-              <Button size="sm" variant="outline" onClick={() => copyToClipboard(m.content)}>
-                <Copy className="mr-1 h-3 w-3" /> Copiar
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => copyToClipboard(m.content)}>
+                  <Copy className="mr-1 h-3 w-3" /> Copiar
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handleEdit(m)}>
+                  <Pencil className="mr-1 h-3 w-3" /> Editar
+                </Button>
+                <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleteId(m.id)}>
+                  <Trash2 className="mr-1 h-3 w-3" /> Eliminar
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingMacro} onOpenChange={(open) => !open && setEditingMacro(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Editar Macro</DialogTitle>
+            <DialogDescription>Modifique o título, conteúdo ou categoria da macro.</DialogDescription>
+          </DialogHeader>
+          {editingMacro && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Título</Label>
+                <Input
+                  value={editingMacro.title}
+                  onChange={(e) => setEditingMacro({ ...editingMacro, title: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Categoria</Label>
+                <Select
+                  value={editingMacro.macro_category}
+                  onValueChange={(v) => setEditingMacro({ ...editingMacro, macro_category: v as MacroCategory })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(categoryLabels).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Conteúdo</Label>
+                <Textarea
+                  rows={8}
+                  value={editingMacro.content}
+                  onChange={(e) => setEditingMacro({ ...editingMacro, content: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">Use {`{variavel}`} para variáveis dinâmicas. São detetadas automaticamente.</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingMacro(null)}>
+              <X className="mr-1 h-3 w-3" /> Cancelar
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Save className="mr-1 h-3 w-3" />}
+              Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <Dialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminar Macro</DialogTitle>
+            <DialogDescription>Tem a certeza que deseja eliminar esta macro? Esta ação não pode ser desfeita.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteId(null)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleDelete}>Eliminar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
