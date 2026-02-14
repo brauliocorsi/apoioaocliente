@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import { getTicketSlaStatus, calcRemaining, type SlaStatus } from "@/components/ticket/SlaDashboard";
-import { AlertTriangle, Clock, CheckCircle, Timer, Pencil, Check, X } from "lucide-react";
+import { AlertTriangle, Clock, CheckCircle, Timer, Pencil, Check, X, Phone } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DndContext,
@@ -43,6 +43,7 @@ interface KanbanBoardProps {
   tickets: TicketRow[];
   categoryNames?: Record<string, string>;
   onTicketMoved?: () => void;
+  callCounts?: Record<string, number>;
 }
 
 function formatSlaTime(ms: number): string {
@@ -79,12 +80,18 @@ function KanbanSlaIcon({ ticket }: { ticket: TicketRow }) {
   );
 }
 
-function TicketCard({ ticket, isDragging, categoryNames }: { ticket: TicketRow; isDragging?: boolean; categoryNames?: Record<string, string> }) {
+function TicketCard({ ticket, isDragging, categoryNames, callCount }: { ticket: TicketRow; isDragging?: boolean; categoryNames?: Record<string, string>; callCount?: number }) {
   return (
     <div className={`bg-background border rounded-md p-3 transition-shadow ${isDragging ? "shadow-lg opacity-80 rotate-2" : "hover:shadow-md"}`}>
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs font-mono text-muted-foreground">#{ticket.ticket_number}</span>
         <div className="flex items-center gap-1.5">
+          {callCount && callCount > 0 && (
+            <span className="inline-flex items-center gap-0.5 text-muted-foreground">
+              <Phone className="h-3 w-3" />
+              <span className="text-[10px]">{callCount}</span>
+            </span>
+          )}
           <KanbanSlaIcon ticket={ticket} />
           <PriorityFlag priority={ticket.priority} size={14} />
         </div>
@@ -98,7 +105,7 @@ function TicketCard({ ticket, isDragging, categoryNames }: { ticket: TicketRow; 
   );
 }
 
-function DraggableTicket({ ticket, categoryNames }: { ticket: TicketRow; categoryNames?: Record<string, string> }) {
+function DraggableTicket({ ticket, categoryNames, callCount }: { ticket: TicketRow; categoryNames?: Record<string, string>; callCount?: number }) {
   const navigate = useNavigate();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: ticket.id,
@@ -113,7 +120,7 @@ function DraggableTicket({ ticket, categoryNames }: { ticket: TicketRow; categor
       className={`cursor-grab active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}
       onClick={() => navigate(`/tickets/${ticket.id}`)}
     >
-      <TicketCard ticket={ticket} categoryNames={categoryNames} />
+      <TicketCard ticket={ticket} categoryNames={categoryNames} callCount={callCount} />
     </div>
   );
 }
@@ -199,7 +206,7 @@ function InlineStatusHeader({
   );
 }
 
-export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: KanbanBoardProps) {
+export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, callCounts }: KanbanBoardProps) {
   const { toast } = useToast();
   const { statuses, statusLabels, refetch: refetchStatuses } = useTicketStatuses();
   const [activeTicket, setActiveTicket] = useState<TicketRow | null>(null);
@@ -295,7 +302,7 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: K
             <ScrollArea className="h-[calc(100vh-320px)]">
               <div className="p-2 space-y-2">
                 {(grouped[s.id] || []).map((t) => (
-                  <DraggableTicket key={t.id} ticket={t} categoryNames={categoryNames} />
+                  <DraggableTicket key={t.id} ticket={t} categoryNames={categoryNames} callCount={callCounts?.[t.id]} />
                 ))}
                 {(grouped[s.id] || []).length === 0 && (
                   <p className="text-xs text-muted-foreground text-center py-8">Sem tickets</p>
@@ -307,7 +314,7 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved }: K
       </div>
 
       <DragOverlay>
-        {activeTicket && <TicketCard ticket={activeTicket} isDragging categoryNames={categoryNames} />}
+        {activeTicket && <TicketCard ticket={activeTicket} isDragging categoryNames={categoryNames} callCount={callCounts?.[activeTicket.id]} />}
       </DragOverlay>
     </DndContext>
     </TooltipProvider>

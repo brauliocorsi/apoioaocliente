@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, Check, X, UserPlus, Loader2 } from "lucide-react";
+import { Pencil, Check, X, UserPlus, Loader2, Phone } from "lucide-react";
 import TagSelector from "./TagSelector";
+import { useNavigate } from "react-router-dom";
 
 interface TicketSidebarProps {
   ticket: any;
@@ -22,12 +23,14 @@ type Subcategory = { id: string; category_id: string; name: string };
 
 export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: TicketSidebarProps) {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [creatingClient, setCreatingClient] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [agents, setAgents] = useState<{ id: string; full_name: string; role: string }[]>([]);
   const [form, setForm] = useState<any>({});
+  const [linkedCalls, setLinkedCalls] = useState<any[]>([]);
 
   useEffect(() => {
     Promise.all([
@@ -40,6 +43,17 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
       setAgents((profs as { id: string; full_name: string; role: string }[]) || []);
     });
   }, []);
+
+  useEffect(() => {
+    if (ticket?.id) {
+      supabase
+        .from("phone_calls")
+        .select("id, subject, client_name, status, created_at")
+        .eq("ticket_id", ticket.id)
+        .order("created_at", { ascending: false })
+        .then(({ data }) => setLinkedCalls(data || []));
+    }
+  }, [ticket?.id]);
 
   useEffect(() => {
     if (ticket) {
@@ -386,6 +400,30 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
           <TagSelector ticketId={ticket.id} selectedTags={tags} onTagsChange={onUpdate} />
         </CardContent>
       </Card>
+
+      {/* Linked Calls */}
+      {linkedCalls.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-1.5">
+              <Phone className="h-3.5 w-3.5" />
+              Ligações ({linkedCalls.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {linkedCalls.map((call) => (
+              <div
+                key={call.id}
+                className="text-xs p-2 border rounded-md cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={() => navigate("/phone-calls")}
+              >
+                <p className="font-medium truncate">{call.subject}</p>
+                <p className="text-muted-foreground">{call.client_name} · {new Date(call.created_at).toLocaleDateString("pt-PT")}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {clauses.length > 0 && (
         <Card>
