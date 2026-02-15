@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ClientAuthProvider } from "@/hooks/useClientAuth";
 import { AppLayout } from "@/components/AppLayout";
@@ -25,38 +26,40 @@ import PortalFAQ from "./pages/portal/PortalFAQ";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          {/* Agent routes */}
-          <Route path="/auth" element={<AuthProvider><Auth /></AuthProvider>} />
-          <Route element={<AuthProvider><AppLayout /></AuthProvider>}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/tickets" element={<Tickets />} />
-            <Route path="/phone-calls" element={<PhoneCalls />} />
-            <Route path="/tickets/new" element={<TicketNew />} />
-            <Route path="/tickets/:id" element={<TicketDetail />} />
-            <Route path="/macros" element={<Macros />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Route>
+  <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            {/* Agent routes */}
+            <Route path="/auth" element={<AuthProvider><Auth /></AuthProvider>} />
+            <Route element={<AuthProvider><AppLayout /></AuthProvider>}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/tickets" element={<Tickets />} />
+              <Route path="/phone-calls" element={<PhoneCalls />} />
+              <Route path="/tickets/new" element={<TicketNew />} />
+              <Route path="/tickets/:id" element={<TicketDetail />} />
+              <Route path="/macros" element={<Macros />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Route>
 
-          {/* Portal (client) routes */}
-          <Route path="/portal/login" element={<ClientAuthProvider><PortalLogin /></ClientAuthProvider>} />
-          <Route element={<ClientAuthProvider><PortalLayout /></ClientAuthProvider>}>
-            <Route path="/portal/tickets" element={<PortalTickets />} />
-            <Route path="/portal/tickets/new" element={<PortalNewTicket />} />
-            <Route path="/portal/tickets/:id" element={<PortalTicketDetail />} />
-            <Route path="/portal/faq" element={<PortalFAQ />} />
-          </Route>
+            {/* Portal (client) routes */}
+            <Route path="/portal/login" element={<ClientAuthProvider><PortalLogin /></ClientAuthProvider>} />
+            <Route element={<ClientAuthProvider><PortalLayout /></ClientAuthProvider>}>
+              <Route path="/portal/tickets" element={<PortalTickets />} />
+              <Route path="/portal/tickets/new" element={<PortalNewTicket />} />
+              <Route path="/portal/tickets/:id" element={<PortalTicketDetail />} />
+              <Route path="/portal/faq" element={<PortalFAQ />} />
+            </Route>
 
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ThemeProvider>
 );
 
 export default App;
