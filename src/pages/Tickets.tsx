@@ -73,7 +73,7 @@ export default function Tickets() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [callCounts, setCallCounts] = useState<Record<string, number>>({});
   const [categories, setCategories] = useState<Record<string, string>>({});
-  const [agents, setAgents] = useState<{ id: string; full_name: string }[]>([]);
+  const [agents, setAgents] = useState<{ id: string; full_name: string; avatar_url?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -91,11 +91,23 @@ export default function Tickets() {
     Promise.all([
       supabase.from("categories").select("id, name"),
       supabase.rpc("get_agent_profiles"),
-    ]).then(([{ data: cats }, { data: profs }]) => {
+    ]).then(async ([{ data: cats }, { data: profs }]) => {
       const map: Record<string, string> = {};
       (cats || []).forEach((c: any) => { map[c.id] = c.name; });
       setCategories(map);
-      setAgents((profs as { id: string; full_name: string }[]) || []);
+      
+      const agentIds = ((profs as any[]) || []).map((p: any) => p.id);
+      let avatarMap: Record<string, string | null> = {};
+      if (agentIds.length > 0) {
+        const { data: profiles } = await supabase.from("profiles").select("id, avatar_url").in("id", agentIds);
+        (profiles as any[] || []).forEach((p: any) => { avatarMap[p.id] = p.avatar_url; });
+      }
+      
+      setAgents(((profs as any[]) || []).map((p: any) => ({
+        id: p.id,
+        full_name: p.full_name,
+        avatar_url: avatarMap[p.id] || null,
+      })));
     });
   }, []);
 
@@ -158,6 +170,11 @@ export default function Tickets() {
     if (!id) return null;
     return agents.find((a) => a.id === id)?.full_name;
   };
+
+  const agentProfiles = agents.reduce((acc, a) => {
+    acc[a.id] = { full_name: a.full_name, avatar_url: a.avatar_url || null };
+    return acc;
+  }, {} as Record<string, { full_name: string; avatar_url: string | null }>);
 
   return (
     <TooltipProvider>
@@ -233,7 +250,7 @@ export default function Tickets() {
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : view === "kanban" ? (
-        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} callCounts={callCounts} />
+        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} callCounts={callCounts} agentProfiles={agentProfiles} />
       ) : (
         <Card>
           <CardContent className="p-0">

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ type TicketRow = {
   sla_paused_at: string | null;
   sla_paused_total_seconds: number | null;
   resolved_at: string | null;
+  assigned_to: string | null;
 };
 
 interface KanbanBoardProps {
@@ -44,6 +46,7 @@ interface KanbanBoardProps {
   categoryNames?: Record<string, string>;
   onTicketMoved?: () => void;
   callCounts?: Record<string, number>;
+  agentProfiles?: Record<string, { full_name: string; avatar_url: string | null }>;
 }
 
 function formatSlaTime(ms: number): string {
@@ -80,7 +83,11 @@ function KanbanSlaIcon({ ticket }: { ticket: TicketRow }) {
   );
 }
 
-function TicketCard({ ticket, isDragging, categoryNames, callCount }: { ticket: TicketRow; isDragging?: boolean; categoryNames?: Record<string, string>; callCount?: number }) {
+function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile }: { ticket: TicketRow; isDragging?: boolean; categoryNames?: Record<string, string>; callCount?: number; agentProfile?: { full_name: string; avatar_url: string | null } }) {
+  const initials = agentProfile
+    ? agentProfile.full_name.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase()
+    : null;
+
   return (
     <div className={`bg-background border rounded-md p-3 transition-shadow ${isDragging ? "shadow-lg opacity-80 rotate-2" : "hover:shadow-md"}`}>
       <div className="flex items-center justify-between mb-1">
@@ -97,7 +104,22 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount }: { ticket: 
         </div>
       </div>
       <p className="text-sm font-medium leading-tight line-clamp-2">{ticket.subject}</p>
-      <p className="text-xs text-muted-foreground mt-1 truncate">{ticket.client_name}</p>
+      <div className="flex items-center justify-between mt-1.5">
+        <p className="text-xs text-muted-foreground truncate">{ticket.client_name}</p>
+        {agentProfile && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Avatar className="h-5 w-5 shrink-0">
+                <AvatarImage src={agentProfile.avatar_url || undefined} />
+                <AvatarFallback className="text-[8px] bg-primary/10 text-primary font-semibold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+            </TooltipTrigger>
+            <TooltipContent><p className="text-xs">{agentProfile.full_name}</p></TooltipContent>
+          </Tooltip>
+        )}
+      </div>
       {ticket.category_id && (
         <Badge variant="outline" className="text-[10px] mt-1.5">{categoryNames?.[ticket.category_id] || ticket.category_id}</Badge>
       )}
@@ -105,7 +127,7 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount }: { ticket: 
   );
 }
 
-function DraggableTicket({ ticket, categoryNames, callCount }: { ticket: TicketRow; categoryNames?: Record<string, string>; callCount?: number }) {
+function DraggableTicket({ ticket, categoryNames, callCount, agentProfile }: { ticket: TicketRow; categoryNames?: Record<string, string>; callCount?: number; agentProfile?: { full_name: string; avatar_url: string | null } }) {
   const navigate = useNavigate();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: ticket.id,
@@ -120,7 +142,7 @@ function DraggableTicket({ ticket, categoryNames, callCount }: { ticket: TicketR
       className={`cursor-grab active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}
       onClick={() => navigate(`/tickets/${ticket.id}`)}
     >
-      <TicketCard ticket={ticket} categoryNames={categoryNames} callCount={callCount} />
+      <TicketCard ticket={ticket} categoryNames={categoryNames} callCount={callCount} agentProfile={agentProfile} />
     </div>
   );
 }
@@ -206,7 +228,7 @@ function InlineStatusHeader({
   );
 }
 
-export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, callCounts }: KanbanBoardProps) {
+export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, callCounts, agentProfiles }: KanbanBoardProps) {
   const { toast } = useToast();
   const { statuses, statusLabels, refetch: refetchStatuses } = useTicketStatuses();
   const [activeTicket, setActiveTicket] = useState<TicketRow | null>(null);
@@ -302,7 +324,7 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, cal
             <ScrollArea className="h-[calc(100vh-320px)]">
               <div className="p-2 space-y-2">
                 {(grouped[s.id] || []).map((t) => (
-                  <DraggableTicket key={t.id} ticket={t} categoryNames={categoryNames} callCount={callCounts?.[t.id]} />
+                  <DraggableTicket key={t.id} ticket={t} categoryNames={categoryNames} callCount={callCounts?.[t.id]} agentProfile={t.assigned_to ? agentProfiles?.[t.assigned_to] : undefined} />
                 ))}
                 {(grouped[s.id] || []).length === 0 && (
                   <p className="text-xs text-muted-foreground text-center py-8">Sem tickets</p>
@@ -314,7 +336,7 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, cal
       </div>
 
       <DragOverlay>
-        {activeTicket && <TicketCard ticket={activeTicket} isDragging categoryNames={categoryNames} callCount={callCounts?.[activeTicket.id]} />}
+        {activeTicket && <TicketCard ticket={activeTicket} isDragging categoryNames={categoryNames} callCount={callCounts?.[activeTicket.id]} agentProfile={activeTicket.assigned_to ? agentProfiles?.[activeTicket.assigned_to] : undefined} />}
       </DragOverlay>
     </DndContext>
     </TooltipProvider>

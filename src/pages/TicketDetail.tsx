@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Loader2, Clock, Send, MessageSquare } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DecisionEngine, type RuleSuggestion } from "@/lib/decisionEngine";
 import FileUpload from "@/components/FileUpload";
 import MacroSelector from "@/components/ticket/MacroSelector";
@@ -37,6 +38,7 @@ export default function TicketDetail() {
   const [suggestions, setSuggestions] = useState<RuleSuggestion[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
   const [agents, setAgents] = useState<{ id: string; full_name: string }[]>([]);
+  const [senderProfiles, setSenderProfiles] = useState<Record<string, { full_name: string; avatar_url?: string | null }>>({});
 
   const fetchTicket = async () => {
     if (!id) return;
@@ -67,11 +69,27 @@ export default function TicketDetail() {
 
   useEffect(() => { fetchTicket(); }, [id]);
 
-  // Load agents for mentions
+  // Load agents for mentions + sender profiles for chat avatars
   useEffect(() => {
-    supabase.from("profiles").select("id, full_name").then(({ data }) => {
-      setAgents((data as { id: string; full_name: string }[]) || []);
-    });
+    const loadProfiles = async () => {
+      const { data: agentData } = await supabase.from("profiles").select("id, full_name, avatar_url");
+      const agentList = (agentData as any[] || []).map((p: any) => ({ id: p.id, full_name: p.full_name }));
+      setAgents(agentList);
+      
+      const profileMap: Record<string, { full_name: string; avatar_url?: string | null }> = {};
+      (agentData as any[] || []).forEach((p: any) => {
+        profileMap[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url };
+      });
+
+      // Also load client profiles
+      const { data: clientData } = await supabase.from("client_users").select("id, full_name, avatar_url");
+      (clientData as any[] || []).forEach((p: any) => {
+        profileMap[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url };
+      });
+      
+      setSenderProfiles(profileMap);
+    };
+    loadProfiles();
   }, []);
 
   // Realtime for messages
@@ -295,28 +313,41 @@ export default function TicketDetail() {
                 <p className="text-sm text-muted-foreground text-center py-4">Sem mensagens do cliente</p>
               ) : (
                 <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                  {messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`flex ${msg.sender_type === "agent" ? "justify-end" : "justify-start"}`}
-                    >
+                  {messages.map((msg) => {
+                    const sender = senderProfiles[msg.sender_id];
+                    const senderName = sender?.full_name || (msg.sender_type === "agent" ? "Agente" : "Cliente");
+                    const senderInitials = senderName.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase();
+                    const isAgent = msg.sender_type === "agent";
+
+                    return (
                       <div
-                        className={`max-w-[75%] rounded-lg px-4 py-2 text-sm ${
-                          msg.sender_type === "agent"
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-200"
-                        }`}
+                        key={msg.id}
+                        className={`flex gap-2 ${isAgent ? "flex-row-reverse" : "flex-row"}`}
                       >
-                        <p className="text-xs font-medium mb-1">
-                          {msg.sender_type === "agent" ? "Agente" : "Cliente"}
-                        </p>
-                        <p className="whitespace-pre-wrap">{msg.content}</p>
-                        <p className={`text-xs mt-1 opacity-70`}>
-                          {new Date(msg.created_at).toLocaleString("pt-PT")}
-                        </p>
+                        <Avatar className="h-7 w-7 shrink-0 mt-1">
+                          <AvatarImage src={sender?.avatar_url || undefined} />
+                          <AvatarFallback className={`text-[9px] font-semibold ${isAgent ? "bg-primary/20 text-primary" : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"}`}>
+                            {senderInitials}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div
+                          className={`max-w-[70%] rounded-lg px-4 py-2 text-sm ${
+                            isAgent
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-200"
+                          }`}
+                        >
+                          <p className="text-xs font-medium mb-1">
+                            {senderName}
+                          </p>
+                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                          <p className="text-xs mt-1 opacity-70">
+                            {new Date(msg.created_at).toLocaleString("pt-PT")}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
               <div className="border-t pt-3 space-y-2">
