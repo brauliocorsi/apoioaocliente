@@ -20,6 +20,8 @@ type PhoneCall = {
   created_at: string;
   ticket_id?: string | null;
   reminder_count?: number;
+  created_by?: string;
+  created_by_name?: string;
 };
 
 export default function PhoneCalls() {
@@ -36,7 +38,25 @@ export default function PhoneCalls() {
       .select("*")
       .order("created_at", { ascending: false });
     const rows = (data as any as PhoneCall[]) || [];
-    setCalls(rows);
+
+    // Fetch creator profiles
+    const creatorIds = [...new Set(rows.map((r) => r.created_by).filter(Boolean))];
+    let profileMap: Record<string, string> = {};
+    if (creatorIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", creatorIds);
+      (profiles || []).forEach((p) => {
+        profileMap[p.id] = p.full_name;
+      });
+    }
+
+    const enrichedRows = rows.map((r) => ({
+      ...r,
+      created_by_name: r.created_by ? profileMap[r.created_by] || "" : "",
+    }));
+    setCalls(enrichedRows);
 
     const { data: remData } = await supabase
       .from("phone_call_reminders" as any)
