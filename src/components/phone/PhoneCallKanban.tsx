@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from "react";
+import { format } from "date-fns";
+import { pt } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { usePhoneCallStatuses, type PhoneCallStatus } from "@/hooks/usePhoneCallStatuses";
-import { Phone, Bell, FileText, Plus, Trash2, Check, X, Pencil, User } from "lucide-react";
+import { Phone, Bell, FileText, Plus, Trash2, Check, X, Pencil, User, Clock } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -82,11 +84,16 @@ function CallCard({ call, isDragging }: { call: PhoneCall; isDragging?: boolean 
         <span className="text-[11px] text-muted-foreground flex items-center gap-1">
           <Phone className="h-3 w-3" /> {call.client_phone}
         </span>
-        {call.invoice_number && (
+        <div className="flex items-center gap-2">
+          {call.invoice_number && (
+            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+              <FileText className="h-3 w-3" /> {call.invoice_number}
+            </span>
+          )}
           <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-            <FileText className="h-3 w-3" /> {call.invoice_number}
+            <Clock className="h-3 w-3" /> {format(new Date(call.created_at), "dd/MM HH:mm", { locale: pt })}
           </span>
-        )}
+        </div>
       </div>
     </div>
   );
