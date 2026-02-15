@@ -6,6 +6,7 @@ interface ClientProfile {
   full_name: string;
   email: string;
   phone: string | null;
+  avatar_url?: string | null;
 }
 
 interface ClientAuthContextType {
@@ -29,7 +30,7 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
   const fetchProfile = async (userId: string) => {
     const { data } = await supabase
       .from("client_users")
-      .select("full_name, email, phone")
+      .select("full_name, email, phone, avatar_url")
       .eq("id", userId)
       .single();
     if (data) setProfile(data);
