@@ -23,6 +23,7 @@ type PhoneCall = {
   created_by?: string;
   created_by_name?: string;
   created_by_color?: string;
+  created_by_avatar?: string | null;
 };
 
 export default function PhoneCalls() {
@@ -42,14 +43,14 @@ export default function PhoneCalls() {
 
     // Fetch creator profiles with colors
     const creatorIds = [...new Set(rows.map((r) => r.created_by).filter(Boolean))];
-    let profileMap: Record<string, { name: string; color: string }> = {};
+    let profileMap: Record<string, { name: string; color: string; avatar_url?: string | null }> = {};
     if (creatorIds.length > 0) {
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, full_name, agent_color")
+        .select("id, full_name, agent_color, avatar_url")
         .in("id", creatorIds);
       (profiles || []).forEach((p: any) => {
-        profileMap[p.id] = { name: p.full_name, color: p.agent_color || '#6b7280' };
+        profileMap[p.id] = { name: p.full_name, color: p.agent_color || '#6b7280', avatar_url: p.avatar_url };
       });
     }
 
@@ -57,6 +58,7 @@ export default function PhoneCalls() {
       ...r,
       created_by_name: r.created_by ? profileMap[r.created_by]?.name || "" : "",
       created_by_color: r.created_by ? profileMap[r.created_by]?.color || "#6b7280" : "#6b7280",
+      created_by_avatar: r.created_by ? profileMap[r.created_by]?.avatar_url || null : null,
     }));
     setCalls(enrichedRows);
 
