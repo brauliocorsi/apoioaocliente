@@ -4,9 +4,11 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { Loader2 } from "lucide-react";
 import NotificationBell from "@/components/NotificationBell";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 export function AppLayout() {
-  const { session, loading } = useAuth();
+  const { session, user, loading } = useAuth();
+  usePushNotifications(user?.id);
 
   if (loading) {
     return (
