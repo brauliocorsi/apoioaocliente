@@ -16,6 +16,7 @@ type Agent = {
   email: string;
   created_at: string;
   role: string;
+  agent_color: string;
 };
 
 export default function AgentsTab() {
@@ -42,14 +43,15 @@ export default function AgentsTab() {
       email: "",
       created_at: "",
       role: roleMap[p.id] || p.role || "agent",
+      agent_color: "#6b7280",
     }));
 
-    // Fetch emails for the filtered agents
+    // Fetch emails and colors for the filtered agents
     if (agentList.length > 0) {
-      const { data: profiles } = await supabase.from("profiles").select("id, email, created_at").in("id", agentList.map((a) => a.id));
-      profiles?.forEach((p) => {
+      const { data: profiles } = await supabase.from("profiles").select("id, email, created_at, agent_color").in("id", agentList.map((a) => a.id));
+      (profiles as any[] || []).forEach((p: any) => {
         const agent = agentList.find((a) => a.id === p.id);
-        if (agent) { agent.email = p.email; agent.created_at = p.created_at; }
+        if (agent) { agent.email = p.email; agent.created_at = p.created_at; agent.agent_color = p.agent_color || "#6b7280"; }
       });
     }
 
@@ -138,7 +140,10 @@ export default function AgentsTab() {
             {agents.map((agent) => (
               <div key={agent.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <div
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-white"
+                    style={{ backgroundColor: agent.agent_color }}
+                  >
                     {agent.role === "supervisor" ? <Shield className="h-4 w-4" /> : <User className="h-4 w-4" />}
                   </div>
                   <div>
@@ -146,9 +151,25 @@ export default function AgentsTab() {
                     <p className="text-xs text-muted-foreground">{agent.email}</p>
                   </div>
                 </div>
-                <Badge variant={agent.role === "supervisor" ? "default" : "secondary"} className="capitalize">
-                  {agent.role === "supervisor" ? "Supervisor" : "Agente"}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {isSupervisor && (
+                    <input
+                      type="color"
+                      value={agent.agent_color}
+                      onChange={async (e) => {
+                        const newColor = e.target.value;
+                        setAgents((prev) => prev.map((a) => a.id === agent.id ? { ...a, agent_color: newColor } : a));
+                        await supabase.from("profiles").update({ agent_color: newColor } as any).eq("id", agent.id);
+                        toast({ title: `Cor de ${agent.full_name} atualizada` });
+                      }}
+                      className="h-7 w-7 rounded cursor-pointer border-0 p-0"
+                      title="Cor do agente"
+                    />
+                  )}
+                  <Badge variant={agent.role === "supervisor" ? "default" : "secondary"} className="capitalize">
+                    {agent.role === "supervisor" ? "Supervisor" : "Agente"}
+                  </Badge>
+                </div>
               </div>
             ))}
           </div>

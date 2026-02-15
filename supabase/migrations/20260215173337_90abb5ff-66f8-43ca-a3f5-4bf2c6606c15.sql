@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN agent_color text DEFAULT '#6b7280';
