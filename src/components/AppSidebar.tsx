@@ -1,6 +1,7 @@
 import { LayoutDashboard, Ticket, MessageSquareText, Settings, LogOut, Phone, Sparkles } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
+import ProfileDialog from "@/components/ProfileDialog";
 import { useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -13,7 +14,7 @@ import {
   SidebarFooter,
   SidebarHeader,
 } from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const navItems = [
@@ -25,7 +26,7 @@ const navItems = [
 ];
 
 export function AppSidebar() {
-  const { profile, role, signOut } = useAuth();
+  const { user, profile, role, signOut } = useAuth();
   const location = useLocation();
 
   const initials = (profile?.full_name || "A")
@@ -105,11 +106,23 @@ export function AppSidebar() {
       <SidebarFooter className="p-4">
         <div className="rounded-xl bg-sidebar-accent/60 p-3 backdrop-blur-sm">
           <div className="flex items-center gap-3">
-            <Avatar className="h-9 w-9 border-2 border-sidebar-primary/30">
-              <AvatarFallback className="bg-gradient-to-br from-sidebar-primary to-[hsl(260,60%,55%)] text-[11px] font-bold text-white">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
+            <ProfileDialog
+              userId={user?.id || ""}
+              fullName={profile?.full_name || ""}
+              email={profile?.email || ""}
+              avatarUrl={profile?.avatar_url}
+              table="profiles"
+              trigger={
+                <button className="shrink-0 group relative">
+                  <Avatar className="h-9 w-9 border-2 border-sidebar-primary/30 transition-all group-hover:border-sidebar-primary">
+                    <AvatarImage src={profile?.avatar_url || undefined} />
+                    <AvatarFallback className="bg-gradient-to-br from-sidebar-primary to-[hsl(260,60%,55%)] text-[11px] font-bold text-white">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
+              }
+            />
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-sidebar-foreground truncate">
                 {profile?.full_name || "Agente"}

@@ -129,6 +129,7 @@ export type Database = {
       }
       client_users: {
         Row: {
+          avatar_url: string | null
           created_at: string
           email: string
           full_name: string
@@ -137,6 +138,7 @@ export type Database = {
           phone: string | null
         }
         Insert: {
+          avatar_url?: string | null
           created_at?: string
           email: string
           full_name: string
@@ -145,6 +147,7 @@ export type Database = {
           phone?: string | null
         }
         Update: {
+          avatar_url?: string | null
           created_at?: string
           email?: string
           full_name?: string
@@ -397,6 +400,7 @@ export type Database = {
       profiles: {
         Row: {
           agent_color: string | null
+          avatar_url: string | null
           created_at: string
           email: string
           full_name: string
@@ -405,6 +409,7 @@ export type Database = {
         }
         Insert: {
           agent_color?: string | null
+          avatar_url?: string | null
           created_at?: string
           email?: string
           full_name?: string
@@ -413,6 +418,7 @@ export type Database = {
         }
         Update: {
           agent_color?: string | null
+          avatar_url?: string | null
           created_at?: string
           email?: string
           full_name?: string
