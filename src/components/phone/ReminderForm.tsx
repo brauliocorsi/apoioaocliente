@@ -8,10 +8,12 @@ import { Bell } from "lucide-react";
 
 interface ReminderFormProps {
   phoneCallId: string;
+  callSubject?: string;
+  callClientName?: string;
   onCreated: () => void;
 }
 
-export default function ReminderForm({ phoneCallId, onCreated }: ReminderFormProps) {
+export default function ReminderForm({ phoneCallId, callSubject, callClientName, onCreated }: ReminderFormProps) {
   const [remindAt, setRemindAt] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,7 +31,8 @@ export default function ReminderForm({ phoneCallId, onCreated }: ReminderFormPro
     if (error) {
       toast({ title: "Erro ao criar lembrete", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Lembrete criado" });
+      const callLabel = [callClientName, callSubject].filter(Boolean).join(" — ");
+      toast({ title: "Lembrete criado", description: callLabel ? `Ligação: ${callLabel}` : undefined });
       setRemindAt("");
       setMessage("");
       onCreated();

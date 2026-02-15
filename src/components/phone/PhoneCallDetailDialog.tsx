@@ -253,7 +253,7 @@ export default function PhoneCallDetailDialog({ call, open, onClose, onUpdated }
             <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
               <Bell className="h-3.5 w-3.5" /> Lembretes
             </h4>
-            <ReminderForm phoneCallId={call.id} onCreated={() => fetchReminders(call.id)} />
+            <ReminderForm phoneCallId={call.id} callSubject={call.subject} callClientName={call.client_name} onCreated={() => fetchReminders(call.id)} />
             <ReminderList reminders={reminders} onUpdated={() => fetchReminders(call.id)} />
           </div>
         </div>
