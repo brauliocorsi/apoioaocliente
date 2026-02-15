@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { usePhoneCallStatuses, type PhoneCallStatus } from "@/hooks/usePhoneCallStatuses";
-import { Phone, Bell, FileText, Plus, Trash2, Check, X, Pencil } from "lucide-react";
+import { Phone, Bell, FileText, Plus, Trash2, Check, X, Pencil, User } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -32,6 +32,8 @@ type PhoneCall = {
   created_at: string;
   ticket_id?: string | null;
   reminder_count?: number;
+  created_by?: string;
+  created_by_name?: string;
 };
 
 interface PhoneCallKanbanProps {
@@ -71,6 +73,11 @@ function CallCard({ call, isDragging }: { call: PhoneCall; isDragging?: boolean 
       </div>
       <p className="text-sm font-medium leading-tight line-clamp-2 mb-1">{call.subject}</p>
       <p className="text-xs text-muted-foreground truncate">{call.client_name}</p>
+      {call.created_by_name && (
+        <p className="text-[10px] text-muted-foreground/70 flex items-center gap-1 mt-0.5">
+          <User className="h-2.5 w-2.5" /> {call.created_by_name}
+        </p>
+      )}
       <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-dashed">
         <span className="text-[11px] text-muted-foreground flex items-center gap-1">
           <Phone className="h-3 w-3" /> {call.client_phone}
