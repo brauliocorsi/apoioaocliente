@@ -396,6 +396,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          agent_color: string | null
           created_at: string
           email: string
           full_name: string
@@ -403,6 +404,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          agent_color?: string | null
           created_at?: string
           email?: string
           full_name?: string
@@ -410,6 +412,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          agent_color?: string | null
           created_at?: string
           email?: string
           full_name?: string

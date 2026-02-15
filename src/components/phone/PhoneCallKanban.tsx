@@ -36,6 +36,7 @@ type PhoneCall = {
   reminder_count?: number;
   created_by?: string;
   created_by_name?: string;
+  created_by_color?: string;
 };
 
 interface PhoneCallKanbanProps {
@@ -51,7 +52,10 @@ function CallCard({ call, isDragging }: { call: PhoneCall; isDragging?: boolean 
     "bg-muted text-muted-foreground border-border";
 
   return (
-    <div className={`bg-card border rounded-lg p-3 transition-all ${isDragging ? "shadow-xl opacity-80 rotate-1 scale-105" : "hover:shadow-md hover:border-primary/20"}`}>
+    <div
+      className={`bg-card border rounded-lg p-3 transition-all ${isDragging ? "shadow-xl opacity-80 rotate-1 scale-105" : "hover:shadow-md hover:border-primary/20"}`}
+      style={{ borderLeftWidth: 3, borderLeftColor: call.created_by_color || '#6b7280' }}
+    >
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5">
           <PriorityFlag priority={call.priority} size={14} />
@@ -77,7 +81,8 @@ function CallCard({ call, isDragging }: { call: PhoneCall; isDragging?: boolean 
       <p className="text-xs text-muted-foreground truncate">{call.client_name}</p>
       {call.created_by_name && (
         <p className="text-[10px] text-muted-foreground/70 flex items-center gap-1 mt-0.5">
-          <User className="h-2.5 w-2.5" /> {call.created_by_name}
+          <span className="inline-block h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: call.created_by_color || '#6b7280' }} />
+          {call.created_by_name}
         </p>
       )}
       <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-dashed">

@@ -22,6 +22,7 @@ type PhoneCall = {
   reminder_count?: number;
   created_by?: string;
   created_by_name?: string;
+  created_by_color?: string;
 };
 
 export default function PhoneCalls() {
@@ -39,22 +40,23 @@ export default function PhoneCalls() {
       .order("created_at", { ascending: false });
     const rows = (data as any as PhoneCall[]) || [];
 
-    // Fetch creator profiles
+    // Fetch creator profiles with colors
     const creatorIds = [...new Set(rows.map((r) => r.created_by).filter(Boolean))];
-    let profileMap: Record<string, string> = {};
+    let profileMap: Record<string, { name: string; color: string }> = {};
     if (creatorIds.length > 0) {
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("id, full_name")
+        .select("id, full_name, agent_color")
         .in("id", creatorIds);
-      (profiles || []).forEach((p) => {
-        profileMap[p.id] = p.full_name;
+      (profiles || []).forEach((p: any) => {
+        profileMap[p.id] = { name: p.full_name, color: p.agent_color || '#6b7280' };
       });
     }
 
     const enrichedRows = rows.map((r) => ({
       ...r,
-      created_by_name: r.created_by ? profileMap[r.created_by] || "" : "",
+      created_by_name: r.created_by ? profileMap[r.created_by]?.name || "" : "",
+      created_by_color: r.created_by ? profileMap[r.created_by]?.color || "#6b7280" : "#6b7280",
     }));
     setCalls(enrichedRows);
 
