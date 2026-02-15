@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
@@ -37,6 +38,7 @@ type PhoneCall = {
   created_by?: string;
   created_by_name?: string;
   created_by_color?: string;
+  created_by_avatar?: string | null;
 };
 
 interface PhoneCallKanbanProps {
@@ -80,10 +82,15 @@ function CallCard({ call, isDragging }: { call: PhoneCall; isDragging?: boolean 
       <p className="text-sm font-medium leading-tight line-clamp-2 mb-1">{call.subject}</p>
       <p className="text-xs text-muted-foreground truncate">{call.client_name}</p>
       {call.created_by_name && (
-        <p className="text-[10px] text-muted-foreground/70 flex items-center gap-1 mt-0.5">
-          <span className="inline-block h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: call.created_by_color || '#6b7280' }} />
-          {call.created_by_name}
-        </p>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <Avatar className="h-4 w-4">
+            <AvatarImage src={call.created_by_avatar || undefined} />
+            <AvatarFallback className="text-[7px] font-semibold bg-muted text-muted-foreground">
+              {call.created_by_name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <span className="text-[10px] text-muted-foreground/70">{call.created_by_name}</span>
+        </div>
       )}
       <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-dashed">
         <span className="text-[11px] text-muted-foreground flex items-center gap-1">

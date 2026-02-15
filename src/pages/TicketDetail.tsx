@@ -371,22 +371,36 @@ export default function TicketDetail() {
           <Card>
             <CardHeader><CardTitle className="text-sm">Timeline (Notas Internas)</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              {events.map((ev) => (
-                <div key={ev.id} className="flex gap-3 text-sm">
-                  <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                  <div>
-                    <p dangerouslySetInnerHTML={{
-                      __html: (ev.content || "").replace(
-                        /@([\w\s]+?)(?=\s@|\s*$|[.,!?])/g,
-                        '<span class="font-semibold text-primary">@$1</span>'
-                      )
-                    }} />
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(ev.created_at).toLocaleString("pt-PT")}
-                    </p>
+          {events.map((ev) => {
+                const evSender = ev.user_id ? senderProfiles[ev.user_id] : null;
+                const evInitials = evSender?.full_name
+                  ? evSender.full_name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()
+                  : "?";
+                return (
+                  <div key={ev.id} className="flex gap-3 text-sm">
+                    <Avatar className="h-6 w-6 shrink-0 mt-0.5">
+                      <AvatarImage src={evSender?.avatar_url || undefined} />
+                      <AvatarFallback className="text-[9px] font-semibold bg-muted text-muted-foreground">
+                        {evInitials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      {evSender?.full_name && (
+                        <p className="text-xs font-medium text-foreground">{evSender.full_name}</p>
+                      )}
+                      <p dangerouslySetInnerHTML={{
+                        __html: (ev.content || "").replace(
+                          /@([\w\s]+?)(?=\s@|\s*$|[.,!?])/g,
+                          '<span class="font-semibold text-primary">@$1</span>'
+                        )
+                      }} />
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(ev.created_at).toLocaleString("pt-PT")}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <div className="pt-2 border-t space-y-2">
                 <div className="flex items-center gap-2">
                   <MacroSelector ticket={ticket} onSelect={(content) => setNote(content)} />
