@@ -40,7 +40,10 @@ export default function PortalLayout() {
       <header className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
         <div className="max-w-5xl mx-auto flex items-center justify-between h-14 px-4">
           <div className="flex items-center gap-6">
-            <h1 className="text-lg font-bold text-primary tracking-tight">Portal do Cliente</h1>
+            <div className="flex items-center gap-2">
+              <img src="/images/logo-upmoveis-red.jpeg" alt="UP Móveis" className="h-8 rounded" />
+              <h1 className="text-lg font-bold text-primary tracking-tight">Portal do Cliente</h1>
+            </div>
             <nav className="flex items-center gap-1">
               <Button
                 variant={location.pathname.startsWith("/portal/tickets") ? "secondary" : "ghost"}

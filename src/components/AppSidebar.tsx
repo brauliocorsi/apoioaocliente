@@ -1,4 +1,4 @@
-import { LayoutDashboard, Ticket, MessageSquareText, Settings, LogOut, Phone, Sparkles } from "lucide-react";
+import { LayoutDashboard, Ticket, MessageSquareText, Settings, LogOut, Phone } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import ProfileDialog from "@/components/ProfileDialog";
@@ -44,10 +44,7 @@ export function AppSidebar() {
       {/* Brand header with gradient accent */}
       <SidebarHeader className="p-5 pb-6">
         <div className="flex items-center gap-3">
-          <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sidebar-primary to-[hsl(260,60%,55%)] text-white shadow-lg shadow-sidebar-primary/25">
-            <Sparkles className="h-5 w-5" />
-            <div className="absolute -inset-0.5 rounded-xl bg-gradient-to-br from-sidebar-primary to-[hsl(260,60%,55%)] opacity-20 blur-sm" />
-          </div>
+          <img src="/images/logo-upmoveis-red.jpeg" alt="UP Móveis" className="h-10 w-10 rounded-xl object-cover shadow-lg" />
           <div className="flex flex-col">
             <span className="text-sm font-bold tracking-tight text-sidebar-foreground">UP Móveis</span>
             <span className="text-[10px] font-medium uppercase tracking-widest text-sidebar-foreground/40">Suporte</span>
