@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Create user via admin API (auto-confirms email)
+    // Try to create user via admin API (auto-confirms email)
     const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
       email,
       password,
@@ -65,22 +65,69 @@ Deno.serve(async (req) => {
       user_metadata: { full_name },
     });
 
+    let userId: string | undefined;
+
     if (createError) {
-      return new Response(JSON.stringify({ error: createError.message }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      // If user already exists, try to find them and promote to agent/supervisor
+      if (createError.message.includes("already been registered")) {
+        const { data: { users } } = await adminClient.auth.admin.listUsers();
+        const existingUser = users?.find((u) => u.email === email);
+        if (!existingUser) {
+          return new Response(JSON.stringify({ error: "Utilizador não encontrado" }), {
+            status: 404,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        userId = existingUser.id;
+
+        // Update password and metadata
+        await adminClient.auth.admin.updateUserById(userId, {
+          password,
+          user_metadata: { full_name },
+        });
+
+        // Update or insert the role to agent/supervisor
+        const targetRole = role === "supervisor" ? "supervisor" : "agent";
+        const { data: existingRole } = await adminClient
+          .from("user_roles")
+          .select("id")
+          .eq("user_id", userId)
+          .single();
+
+        if (existingRole) {
+          await adminClient
+            .from("user_roles")
+            .update({ role: targetRole })
+            .eq("user_id", userId);
+        } else {
+          await adminClient
+            .from("user_roles")
+            .insert({ user_id: userId, role: targetRole });
+        }
+
+        // Update profile name
+        await adminClient
+          .from("profiles")
+          .update({ full_name })
+          .eq("id", userId);
+      } else {
+        return new Response(JSON.stringify({ error: createError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    } else {
+      userId = newUser.user?.id;
+      // If role is supervisor, update the auto-created agent role
+      if (role === "supervisor" && userId) {
+        await adminClient
+          .from("user_roles")
+          .update({ role: "supervisor" })
+          .eq("user_id", userId);
+      }
     }
 
-    // If role is supervisor, update the auto-created agent role
-    if (role === "supervisor" && newUser.user) {
-      await adminClient
-        .from("user_roles")
-        .update({ role: "supervisor" })
-        .eq("user_id", newUser.user.id);
-    }
-
-    return new Response(JSON.stringify({ success: true, user_id: newUser.user?.id }), {
+    return new Response(JSON.stringify({ success: true, user_id: userId }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
