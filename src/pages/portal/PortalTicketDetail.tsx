@@ -56,7 +56,17 @@ export default function PortalTicketDetail() {
       .channel(`ticket-messages-${id}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "ticket_messages", filter: `ticket_id=eq.${id}` },
         (payload) => {
-          setMessages((prev) => [...prev, payload.new]);
+          setMessages((prev) => {
+            // Avoid duplicating optimistic messages
+            if (prev.some((m) => m.content === (payload.new as any).content && m.sender_id === (payload.new as any).sender_id && Math.abs(new Date(m.created_at).getTime() - new Date((payload.new as any).created_at).getTime()) < 10000)) {
+              return prev.map((m) => 
+                m.content === (payload.new as any).content && m.sender_id === (payload.new as any).sender_id && Math.abs(new Date(m.created_at).getTime() - new Date((payload.new as any).created_at).getTime()) < 10000
+                  ? payload.new as any
+                  : m
+              );
+            }
+            return [...prev, payload.new];
+          });
         }
       )
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "ticket_attachments", filter: `ticket_id=eq.${id}` },
@@ -135,17 +145,31 @@ export default function PortalTicketDetail() {
     }
 
     if (content) {
+      // Optimistically add message to local state
+      const optimisticMsg = {
+        id: crypto.randomUUID(),
+        ticket_id: id,
+        sender_id: user.id,
+        sender_type: "client",
+        content,
+        created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, optimisticMsg]);
+      setMessage("");
+      setPendingFiles([]);
+      setSending(false);
+
       await supabase.from("ticket_messages").insert({
         ticket_id: id,
         sender_id: user.id,
         sender_type: "client",
         content,
       });
+    } else {
+      setMessage("");
+      setPendingFiles([]);
+      setSending(false);
     }
-
-    setMessage("");
-    setPendingFiles([]);
-    setSending(false);
 
     // Refresh attachments list
     if (uploadedPaths.length > 0) {
