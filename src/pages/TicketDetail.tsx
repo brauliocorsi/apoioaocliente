@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -7,9 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Clock, Send, MessageSquare } from "lucide-react";
+import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage, FileVideo, FileText } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DecisionEngine, type RuleSuggestion } from "@/lib/decisionEngine";
+import { v4 as uuidv4 } from "uuid";
 import FileUpload from "@/components/FileUpload";
 import MacroSelector from "@/components/ticket/MacroSelector";
 import TicketSidebar from "@/components/ticket/TicketSidebar";
@@ -38,6 +39,8 @@ export default function TicketDetail() {
   const [suggestions, setSuggestions] = useState<RuleSuggestion[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
   const [agents, setAgents] = useState<{ id: string; full_name: string }[]>([]);
+  const [replyFiles, setReplyFiles] = useState<File[]>([]);
+  const replyFileRef = useRef<HTMLInputElement>(null);
   const [senderProfiles, setSenderProfiles] = useState<Record<string, { full_name: string; avatar_url?: string | null }>>({});
 
   const fetchTicket = async () => {
@@ -191,16 +194,68 @@ export default function TicketDetail() {
   };
 
   const sendReply = async () => {
-    if (!id || !user || !reply.trim()) return;
+    if (!id || !user) return;
+    if (!reply.trim() && replyFiles.length === 0) return;
     setSendingReply(true);
-    await supabase.from("ticket_messages").insert({
-      ticket_id: id,
-      sender_id: user.id,
-      sender_type: "agent",
-      content: reply.trim(),
-    });
+
+    // Upload files
+    const uploadedCount = replyFiles.length;
+    for (const file of replyFiles) {
+      const ext = file.name.split(".").pop();
+      const filePath = `${id}/${uuidv4()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("ticket-attachments")
+        .upload(filePath, file);
+
+      if (uploadError) {
+        toast({ title: "Erro no upload", description: `${file.name}: ${uploadError.message}`, variant: "destructive" });
+        continue;
+      }
+
+      await supabase.from("ticket_attachments").insert({
+        ticket_id: id,
+        file_name: file.name,
+        file_path: filePath,
+        file_type: file.type,
+        file_size: file.size,
+        uploaded_by: user.id,
+      });
+    }
+
+    // Build message content
+    let content = reply.trim();
+    if (uploadedCount > 0 && !content) {
+      content = `📎 ${uploadedCount} anexo(s) enviado(s)`;
+    } else if (uploadedCount > 0) {
+      content += `\n📎 ${uploadedCount} anexo(s) enviado(s)`;
+    }
+
+    if (content) {
+      await supabase.from("ticket_messages").insert({
+        ticket_id: id,
+        sender_id: user.id,
+        sender_type: "agent",
+        content,
+      });
+    }
+
     setReply("");
+    setReplyFiles([]);
     setSendingReply(false);
+    if (uploadedCount > 0) fetchTicket();
+  };
+
+  const handleReplyFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    const valid = selected.filter((f) => {
+      if (f.size > 20 * 1024 * 1024) {
+        toast({ title: `${f.name} excede 20MB`, variant: "destructive" });
+        return false;
+      }
+      return true;
+    });
+    setReplyFiles((prev) => [...prev, ...valid]);
+    e.target.value = "";
   };
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -351,7 +406,45 @@ export default function TicketDetail() {
                 </div>
               )}
               <div className="border-t pt-3 space-y-2">
+                {replyFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-2 p-2 rounded-md bg-muted/50 border">
+                    {replyFiles.map((file, i) => (
+                      <div key={i} className="flex items-center gap-1.5 bg-background rounded px-2 py-1 text-xs border">
+                        {file.type.startsWith("image/") ? (
+                          <FileImage className="h-3.5 w-3.5 text-primary shrink-0" />
+                        ) : file.type.startsWith("video/") ? (
+                          <FileVideo className="h-3.5 w-3.5 text-primary shrink-0" />
+                        ) : (
+                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        )}
+                        <span className="truncate max-w-[120px]">{file.name}</span>
+                        <span className="text-muted-foreground">({(file.size / 1024 / 1024).toFixed(1)}MB)</span>
+                        <button onClick={() => setReplyFiles((prev) => prev.filter((_, idx) => idx !== i))} className="hover:text-destructive">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="flex gap-2">
+                  <input
+                    ref={replyFileRef}
+                    type="file"
+                    accept="image/*,video/*"
+                    multiple
+                    className="hidden"
+                    onChange={handleReplyFileSelect}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0"
+                    onClick={() => replyFileRef.current?.click()}
+                    disabled={sendingReply}
+                  >
+                    <Paperclip className="h-4 w-4" />
+                  </Button>
                   <Textarea
                     placeholder="Responder ao cliente..."
                     value={reply}
@@ -359,7 +452,7 @@ export default function TicketDetail() {
                     rows={2}
                     className="flex-1"
                   />
-                  <Button size="icon" onClick={sendReply} disabled={sendingReply || !reply.trim()}>
+                  <Button size="icon" onClick={sendReply} disabled={sendingReply || (!reply.trim() && replyFiles.length === 0)}>
                     {sendingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   </Button>
                 </div>
