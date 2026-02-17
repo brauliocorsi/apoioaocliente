@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Loader2, Send, Paperclip, FileText, Download, X, FileImage, FileVideo } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
+import MessageReactions from "@/components/chat/MessageReactions";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 
@@ -296,19 +297,28 @@ export default function PortalTicketDetail() {
               messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`flex ${msg.sender_type === "client" ? "justify-end" : "justify-start"}`}
+                  className={`group flex ${msg.sender_type === "client" ? "justify-end" : "justify-start"}`}
                 >
-                  <div
-                    className={`max-w-[75%] rounded-lg px-4 py-2 text-sm ${
-                      msg.sender_type === "client"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-foreground"
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                    <p className={`text-xs mt-1 ${msg.sender_type === "client" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                      {new Date(msg.created_at).toLocaleString("pt-PT")}
-                    </p>
+                  <div className={`max-w-[75%] space-y-1`}>
+                    <div
+                      className={`rounded-lg px-4 py-2 text-sm ${
+                        msg.sender_type === "client"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-foreground"
+                      }`}
+                    >
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                      <p className={`text-xs mt-1 ${msg.sender_type === "client" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                        {new Date(msg.created_at).toLocaleString("pt-PT")}
+                      </p>
+                    </div>
+                    {user && (
+                      <MessageReactions
+                        messageId={msg.id}
+                        userId={user.id}
+                        align={msg.sender_type === "client" ? "right" : "left"}
+                      />
+                    )}
                   </div>
                 </div>
               ))

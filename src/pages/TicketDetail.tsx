@@ -19,6 +19,7 @@ import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import MentionTextarea from "@/components/MentionTextarea";
 import ResolutionCard from "@/components/ticket/ResolutionCard";
+import MessageReactions from "@/components/chat/MessageReactions";
 
 export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();
@@ -43,6 +44,7 @@ export default function TicketDetail() {
   const [noteFiles, setNoteFiles] = useState<File[]>([]);
   const replyFileRef = useRef<HTMLInputElement>(null);
   const noteFileRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const [senderProfiles, setSenderProfiles] = useState<Record<string, { full_name: string; avatar_url?: string | null }>>({});
 
   const fetchTicket = async () => {
@@ -120,6 +122,18 @@ export default function TicketDetail() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [id]);
+
+  // Auto-scroll messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleReplyKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendReply();
+    }
+  };
 
   const updateStatus = async (newStatus: string) => {
     if (!id || !user) return;
@@ -456,7 +470,7 @@ export default function TicketDetail() {
                     return (
                       <div
                         key={msg.id}
-                        className={`flex gap-2 ${isAgent ? "flex-row-reverse" : "flex-row"}`}
+                        className={`group flex gap-2 ${isAgent ? "flex-row-reverse" : "flex-row"}`}
                       >
                         <Avatar className="h-7 w-7 shrink-0 mt-1">
                           <AvatarImage src={sender?.avatar_url || undefined} />
@@ -464,24 +478,34 @@ export default function TicketDetail() {
                             {senderInitials}
                           </AvatarFallback>
                         </Avatar>
-                        <div
-                          className={`max-w-[70%] rounded-lg px-4 py-2 text-sm ${
-                            isAgent
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-200"
-                          }`}
-                        >
-                          <p className="text-xs font-medium mb-1">
-                            {senderName}
-                          </p>
-                          <p className="whitespace-pre-wrap">{msg.content}</p>
-                          <p className="text-xs mt-1 opacity-70">
-                            {new Date(msg.created_at).toLocaleString("pt-PT")}
-                          </p>
+                        <div className={`max-w-[70%] space-y-1`}>
+                          <div
+                            className={`rounded-lg px-4 py-2 text-sm ${
+                              isAgent
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-200"
+                            }`}
+                          >
+                            <p className="text-xs font-medium mb-1">
+                              {senderName}
+                            </p>
+                            <p className="whitespace-pre-wrap">{msg.content}</p>
+                            <p className="text-xs mt-1 opacity-70">
+                              {new Date(msg.created_at).toLocaleString("pt-PT")}
+                            </p>
+                          </div>
+                          {user && (
+                            <MessageReactions
+                              messageId={msg.id}
+                              userId={user.id}
+                              align={isAgent ? "right" : "left"}
+                            />
+                          )}
                         </div>
                       </div>
                     );
                   })}
+                  <div ref={messagesEndRef} />
                 </div>
               )}
               <div className="border-t pt-3 space-y-2">
@@ -528,8 +552,9 @@ export default function TicketDetail() {
                     placeholder="Responder ao cliente..."
                     value={reply}
                     onChange={(e) => setReply(e.target.value)}
+                    onKeyDown={handleReplyKeyDown}
                     rows={2}
-                    className="flex-1"
+                    className="flex-1 resize-none"
                   />
                   <Button size="icon" onClick={sendReply} disabled={sendingReply || (!reply.trim() && replyFiles.length === 0)}>
                     {sendingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
