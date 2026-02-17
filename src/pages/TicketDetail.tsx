@@ -430,7 +430,7 @@ export default function TicketDetail() {
                   <input
                     ref={replyFileRef}
                     type="file"
-                    accept="image/*,video/*"
+                    accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
                     multiple
                     className="hidden"
                     onChange={handleReplyFileSelect}

@@ -22,7 +22,7 @@ interface FileUploadProps {
   disabled?: boolean;
 }
 
-const ACCEPTED_TYPES = "image/*,video/*";
+const ACCEPTED_TYPES = "image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv";
 const MAX_SIZE = 20 * 1024 * 1024; // 20MB
 
 export default function FileUpload({ ticketId, userId, attachments, onAttachmentsChange, disabled }: FileUploadProps) {
