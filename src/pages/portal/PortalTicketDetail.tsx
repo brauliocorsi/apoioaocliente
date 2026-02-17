@@ -2,16 +2,21 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useClientAuth } from "@/hooks/useClientAuth";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Loader2, Send, Paperclip, FileText, Download } from "lucide-react";
+import { ArrowLeft, Loader2, Send, Paperclip, FileText, Download, X, FileImage, FileVideo } from "lucide-react";
+import { v4 as uuidv4 } from "uuid";
+
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 
 export default function PortalTicketDetail() {
   const { id } = useParams<{ id: string }>();
   const { user, profile } = useClientAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [ticket, setTicket] = useState<any>(null);
   const [attachments, setAttachments] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
@@ -19,7 +24,9 @@ export default function PortalTicketDetail() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchData = async () => {
     if (!id || !user) return;
@@ -43,7 +50,6 @@ export default function PortalTicketDetail() {
 
   useEffect(() => { fetchData(); }, [id, user]);
 
-  // Realtime subscription for new messages
   useEffect(() => {
     if (!id) return;
     const channel = supabase
@@ -51,6 +57,18 @@ export default function PortalTicketDetail() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "ticket_messages", filter: `ticket_id=eq.${id}` },
         (payload) => {
           setMessages((prev) => [...prev, payload.new]);
+        }
+      )
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "ticket_attachments", filter: `ticket_id=eq.${id}` },
+        (payload) => {
+          const a = payload.new as any;
+          setAttachments((prev) => {
+            if (prev.some((x) => x.id === a.id)) return prev;
+            return [...prev, {
+              ...a,
+              url: supabase.storage.from("ticket-attachments").getPublicUrl(a.file_path).data.publicUrl,
+            }];
+          });
         }
       )
       .subscribe();
@@ -61,17 +79,78 @@ export default function PortalTicketDetail() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = async () => {
-    if (!id || !user || !message.trim()) return;
-    setSending(true);
-    await supabase.from("ticket_messages").insert({
-      ticket_id: id,
-      sender_id: user.id,
-      sender_type: "client",
-      content: message.trim(),
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    const valid = selected.filter((f) => {
+      if (f.size > MAX_FILE_SIZE) {
+        toast({ title: `${f.name} excede 20MB`, variant: "destructive" });
+        return false;
+      }
+      return true;
     });
+    setPendingFiles((prev) => [...prev, ...valid]);
+    e.target.value = "";
+  };
+
+  const removePendingFile = (index: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const sendMessage = async () => {
+    if (!id || !user) return;
+    if (!message.trim() && pendingFiles.length === 0) return;
+    setSending(true);
+
+    // Upload files first
+    const uploadedPaths: string[] = [];
+    for (const file of pendingFiles) {
+      const ext = file.name.split(".").pop();
+      const filePath = `${id}/${uuidv4()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("ticket-attachments")
+        .upload(filePath, file);
+
+      if (uploadError) {
+        toast({ title: "Erro no upload", description: `${file.name}: ${uploadError.message}`, variant: "destructive" });
+        continue;
+      }
+
+      await supabase.from("ticket_attachments").insert({
+        ticket_id: id,
+        file_name: file.name,
+        file_path: filePath,
+        file_type: file.type,
+        file_size: file.size,
+        uploaded_by: user.id,
+      });
+      uploadedPaths.push(filePath);
+    }
+
+    // Build message content with attachment references
+    let content = message.trim();
+    if (uploadedPaths.length > 0 && !content) {
+      content = `📎 ${pendingFiles.length} anexo(s) enviado(s)`;
+    } else if (uploadedPaths.length > 0) {
+      content += `\n📎 ${uploadedPaths.length} anexo(s) enviado(s)`;
+    }
+
+    if (content) {
+      await supabase.from("ticket_messages").insert({
+        ticket_id: id,
+        sender_id: user.id,
+        sender_type: "client",
+        content,
+      });
+    }
+
     setMessage("");
+    setPendingFiles([]);
     setSending(false);
+
+    // Refresh attachments list
+    if (uploadedPaths.length > 0) {
+      fetchData();
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -205,7 +284,48 @@ export default function PortalTicketDetail() {
             )}
             <div ref={messagesEndRef} />
           </div>
+
+          {/* Pending files preview */}
+          {pendingFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3 p-2 rounded-md bg-muted/50 border">
+              {pendingFiles.map((file, i) => (
+                <div key={i} className="flex items-center gap-1.5 bg-background rounded px-2 py-1 text-xs border">
+                  {file.type.startsWith("image/") ? (
+                    <FileImage className="h-3.5 w-3.5 text-primary shrink-0" />
+                  ) : file.type.startsWith("video/") ? (
+                    <FileVideo className="h-3.5 w-3.5 text-primary shrink-0" />
+                  ) : (
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  )}
+                  <span className="truncate max-w-[120px]">{file.name}</span>
+                  <span className="text-muted-foreground">({(file.size / 1024 / 1024).toFixed(1)}MB)</span>
+                  <button onClick={() => removePendingFile(i)} className="hover:text-destructive">
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="flex gap-2 border-t pt-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="shrink-0"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sending}
+            >
+              <Paperclip className="h-4 w-4" />
+            </Button>
             <Textarea
               placeholder="Escreva a sua mensagem..."
               value={message}
@@ -214,7 +334,11 @@ export default function PortalTicketDetail() {
               rows={2}
               className="flex-1 resize-none"
             />
-            <Button size="icon" onClick={sendMessage} disabled={sending || !message.trim()}>
+            <Button
+              size="icon"
+              onClick={sendMessage}
+              disabled={sending || (!message.trim() && pendingFiles.length === 0)}
+            >
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </div>
