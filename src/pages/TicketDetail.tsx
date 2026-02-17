@@ -40,7 +40,9 @@ export default function TicketDetail() {
   const [attachments, setAttachments] = useState<any[]>([]);
   const [agents, setAgents] = useState<{ id: string; full_name: string }[]>([]);
   const [replyFiles, setReplyFiles] = useState<File[]>([]);
+  const [noteFiles, setNoteFiles] = useState<File[]>([]);
   const replyFileRef = useRef<HTMLInputElement>(null);
+  const noteFileRef = useRef<HTMLInputElement>(null);
   const [senderProfiles, setSenderProfiles] = useState<Record<string, { full_name: string; avatar_url?: string | null }>>({});
 
   const fetchTicket = async () => {
@@ -160,14 +162,50 @@ export default function TicketDetail() {
   };
 
   const addNote = async () => {
-    if (!id || !user || !note.trim()) return;
+    if (!id || !user) return;
+    if (!note.trim() && noteFiles.length === 0) return;
     setAddingNote(true);
-    await supabase.from("ticket_events").insert({
-      ticket_id: id,
-      user_id: user.id,
-      event_type: "note",
-      content: note,
-    });
+
+    // Upload note files
+    const uploadedNames: string[] = [];
+    for (const file of noteFiles) {
+      const ext = file.name.split(".").pop();
+      const filePath = `${id}/${uuidv4()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("ticket-attachments")
+        .upload(filePath, file);
+
+      if (uploadError) {
+        toast({ title: "Erro no upload", description: `${file.name}: ${uploadError.message}`, variant: "destructive" });
+        continue;
+      }
+
+      await supabase.from("ticket_attachments").insert({
+        ticket_id: id,
+        file_name: file.name,
+        file_path: filePath,
+        file_type: file.type,
+        file_size: file.size,
+        uploaded_by: user.id,
+      });
+      uploadedNames.push(file.name);
+    }
+
+    let content = note.trim();
+    if (uploadedNames.length > 0 && !content) {
+      content = `📎 Anexo(s): ${uploadedNames.join(", ")}`;
+    } else if (uploadedNames.length > 0) {
+      content += `\n📎 Anexo(s): ${uploadedNames.join(", ")}`;
+    }
+
+    if (content) {
+      await supabase.from("ticket_events").insert({
+        ticket_id: id,
+        user_id: user.id,
+        event_type: "note",
+        content,
+      });
+    }
 
     // Extract @mentions and create notifications
     const mentionRegex = /@([\w\s]+?)(?=\s@|\s*$|[.,!?])/g;
@@ -189,8 +227,22 @@ export default function TicketDetail() {
     }
 
     setNote("");
+    setNoteFiles([]);
     setAddingNote(false);
     fetchTicket();
+  };
+
+  const handleNoteFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    const valid = selected.filter((f) => {
+      if (f.size > 20 * 1024 * 1024) {
+        toast({ title: `${f.name} excede 20MB`, variant: "destructive" });
+        return false;
+      }
+      return true;
+    });
+    setNoteFiles((prev) => [...prev, ...valid]);
+    e.target.value = "";
   };
 
   const sendReply = async () => {
@@ -498,7 +550,45 @@ export default function TicketDetail() {
                 <div className="flex items-center gap-2">
                   <MacroSelector ticket={ticket} onSelect={(content) => setNote(content)} />
                 </div>
+                {noteFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-2 p-2 rounded-md bg-muted/50 border">
+                    {noteFiles.map((file, i) => (
+                      <div key={i} className="flex items-center gap-1.5 bg-background rounded px-2 py-1 text-xs border">
+                        {file.type.startsWith("image/") ? (
+                          <FileImage className="h-3.5 w-3.5 text-primary shrink-0" />
+                        ) : file.type.startsWith("video/") ? (
+                          <FileVideo className="h-3.5 w-3.5 text-primary shrink-0" />
+                        ) : (
+                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        )}
+                        <span className="truncate max-w-[120px]">{file.name}</span>
+                        <span className="text-muted-foreground">({(file.size / 1024 / 1024).toFixed(1)}MB)</span>
+                        <button onClick={() => setNoteFiles((prev) => prev.filter((_, idx) => idx !== i))} className="hover:text-destructive">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="flex gap-2">
+                  <input
+                    ref={noteFileRef}
+                    type="file"
+                    accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                    multiple
+                    className="hidden"
+                    onChange={handleNoteFileSelect}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0"
+                    onClick={() => noteFileRef.current?.click()}
+                    disabled={addingNote}
+                  >
+                    <Paperclip className="h-4 w-4" />
+                  </Button>
                   <MentionTextarea
                     value={note}
                     onChange={setNote}
@@ -506,7 +596,7 @@ export default function TicketDetail() {
                     placeholder="Adicionar nota interna... Use @ para mencionar agentes"
                     rows={3}
                   />
-                  <Button size="icon" onClick={addNote} disabled={addingNote || !note.trim()}>
+                  <Button size="icon" onClick={addNote} disabled={addingNote || (!note.trim() && noteFiles.length === 0)}>
                     {addingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   </Button>
                 </div>
