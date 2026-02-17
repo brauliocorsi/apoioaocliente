@@ -224,6 +224,7 @@ export default function PortalTicketDetail() {
               {attachments.map((att) => {
                 const isImage = att.file_type?.startsWith("image/");
                 const isVideo = att.file_type?.startsWith("video/");
+                const isPdf = att.file_type === "application/pdf";
                 return (
                   <a
                     key={att.id}
@@ -236,6 +237,12 @@ export default function PortalTicketDetail() {
                       <img src={att.url} alt={att.file_name} className="w-full h-32 object-cover" />
                     ) : isVideo ? (
                       <video src={att.url} className="w-full h-32 object-cover" />
+                    ) : isPdf ? (
+                      <iframe
+                        src={`${att.url}#toolbar=0&navpanes=0`}
+                        className="w-full h-32 pointer-events-none"
+                        title={att.file_name}
+                      />
                     ) : (
                       <div className="w-full h-32 flex items-center justify-center bg-muted">
                         <FileText className="h-8 w-8 text-muted-foreground" />

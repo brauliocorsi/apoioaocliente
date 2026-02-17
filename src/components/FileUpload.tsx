@@ -75,6 +75,7 @@ export default function FileUpload({ ticketId, userId, attachments, onAttachment
 
   const isImage = (type: string) => type.startsWith("image/");
   const isVideo = (type: string) => type.startsWith("video/");
+  const isPdf = (type: string) => type === "application/pdf";
 
   return (
     <div className="space-y-3">
@@ -102,15 +103,25 @@ export default function FileUpload({ ticketId, userId, attachments, onAttachment
           {attachments.map((att, i) => (
             <div key={i} className="relative group border rounded-md overflow-hidden bg-muted">
               {isImage(att.file_type) ? (
-                <img src={att.url} alt={att.file_name} className="w-full h-24 object-cover" />
+                <a href={att.url} target="_blank" rel="noopener noreferrer">
+                  <img src={att.url} alt={att.file_name} className="w-full h-24 object-cover" />
+                </a>
               ) : isVideo(att.file_type) ? (
-                <div className="w-full h-24 flex items-center justify-center">
+                <a href={att.url} target="_blank" rel="noopener noreferrer" className="w-full h-24 flex items-center justify-center">
                   <Film className="h-8 w-8 text-muted-foreground" />
-                </div>
+                </a>
+              ) : isPdf(att.file_type) ? (
+                <a href={att.url} target="_blank" rel="noopener noreferrer" className="block">
+                  <iframe
+                    src={`${att.url}#toolbar=0&navpanes=0`}
+                    className="w-full h-24 pointer-events-none"
+                    title={att.file_name}
+                  />
+                </a>
               ) : (
-                <div className="w-full h-24 flex items-center justify-center">
+                <a href={att.url} target="_blank" rel="noopener noreferrer" className="w-full h-24 flex items-center justify-center">
                   <Image className="h-8 w-8 text-muted-foreground" />
-                </div>
+                </a>
               )}
               <p className="text-xs truncate px-1 py-0.5">{att.file_name}</p>
               {!disabled && (
