@@ -103,7 +103,19 @@ export default function TicketDetail() {
     const channel = supabase
       .channel(`agent-ticket-messages-${id}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "ticket_messages", filter: `ticket_id=eq.${id}` },
-        (payload) => { setMessages((prev) => [...prev, payload.new]); }
+        (payload) => {
+          setMessages((prev) => {
+            const newMsg = payload.new as any;
+            // Replace optimistic message if it matches
+            if (prev.some((m) => m.content === newMsg.content && m.sender_id === newMsg.sender_id && Math.abs(new Date(m.created_at).getTime() - new Date(newMsg.created_at).getTime()) < 10000)) {
+              return prev.map((m) =>
+                m.content === newMsg.content && m.sender_id === newMsg.sender_id && Math.abs(new Date(m.created_at).getTime() - new Date(newMsg.created_at).getTime()) < 10000
+                  ? newMsg : m
+              );
+            }
+            return [...prev, newMsg];
+          });
+        }
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -283,18 +295,33 @@ export default function TicketDetail() {
     }
 
     if (content) {
+      // Optimistically add message to local state
+      const optimisticMsg = {
+        id: crypto.randomUUID(),
+        ticket_id: id,
+        sender_id: user.id,
+        sender_type: "agent",
+        content,
+        created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, optimisticMsg]);
+      setReply("");
+      setReplyFiles([]);
+      setSendingReply(false);
+
       await supabase.from("ticket_messages").insert({
         ticket_id: id,
         sender_id: user.id,
         sender_type: "agent",
         content,
       });
+      if (uploadedCount > 0) fetchTicket();
+    } else {
+      setReply("");
+      setReplyFiles([]);
+      setSendingReply(false);
+      if (uploadedCount > 0) fetchTicket();
     }
-
-    setReply("");
-    setReplyFiles([]);
-    setSendingReply(false);
-    if (uploadedCount > 0) fetchTicket();
   };
 
   const handleReplyFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
