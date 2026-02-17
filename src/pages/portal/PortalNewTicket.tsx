@@ -137,20 +137,20 @@ export default function PortalNewTicket() {
 
             {/* File Upload */}
             <div className="space-y-2">
-              <Label>Fotos e Vídeos</Label>
+              <Label>Anexos</Label>
               <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
                 <input
                   type="file"
                   id="file-upload"
                   className="hidden"
                   multiple
-                  accept="image/*,video/*"
+                  accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
                   onChange={handleFileChange}
                 />
                 <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
                   <Upload className="h-8 w-8" />
-                  <span className="text-sm">Clique para enviar fotos ou vídeos</span>
-                  <span className="text-xs">Máx. 20MB por ficheiro</span>
+                  <span className="text-sm">Clique para enviar ficheiros</span>
+                  <span className="text-xs">Fotos, vídeos, PDFs, documentos · Máx. 20MB</span>
                 </label>
               </div>
 
