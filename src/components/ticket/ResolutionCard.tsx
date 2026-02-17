@@ -32,6 +32,7 @@ export default function ResolutionCard({ ticket, userId, onUpdate }: ResolutionC
   const [editing, setEditing] = useState(false);
   const [type, setType] = useState<string>(ticket.resolution_type || "");
   const [reason, setReason] = useState<string>(ticket.resolution_reason || "");
+  const [clientReason, setClientReason] = useState<string>(ticket.resolution_client_reason || "");
   const [saving, setSaving] = useState(false);
 
   // Approval flow state
@@ -104,6 +105,7 @@ export default function ResolutionCard({ ticket, userId, onUpdate }: ResolutionC
     await supabase.from("tickets").update({
       resolution_type: type,
       resolution_reason: reason.trim(),
+      resolution_client_reason: clientReason.trim() || null,
       resolution_at: now,
       resolution_by: userId,
     } as any).eq("id", ticket.id);
@@ -143,7 +145,8 @@ export default function ResolutionCard({ ticket, userId, onUpdate }: ResolutionC
       supervisor_id: selectedSupervisor,
       proposed_type: type,
       proposed_reason: reason.trim(),
-    });
+      proposed_client_reason: clientReason.trim() || null,
+    } as any);
 
     // Notify supervisor
     const supName = approvalProfiles[selectedSupervisor] || "Supervisor";
@@ -186,6 +189,7 @@ export default function ResolutionCard({ ticket, userId, onUpdate }: ResolutionC
       await supabase.from("tickets").update({
         resolution_type: pendingApproval.proposed_type,
         resolution_reason: pendingApproval.proposed_reason,
+        resolution_client_reason: (pendingApproval as any).proposed_client_reason || null,
         resolution_at: now,
         resolution_by: userId,
       } as any).eq("id", ticket.id);
@@ -227,6 +231,7 @@ export default function ResolutionCard({ ticket, userId, onUpdate }: ResolutionC
     await supabase.from("tickets").update({
       resolution_type: null,
       resolution_reason: null,
+      resolution_client_reason: null,
       resolution_at: null,
       resolution_by: null,
     } as any).eq("id", ticket.id);
@@ -243,6 +248,7 @@ export default function ResolutionCard({ ticket, userId, onUpdate }: ResolutionC
     setEditing(false);
     setType("");
     setReason("");
+    setClientReason("");
     onUpdate();
   };
 
@@ -360,7 +366,7 @@ export default function ResolutionCard({ ticket, userId, onUpdate }: ResolutionC
                 </Badge>
               )}
             </span>
-            <Button variant="ghost" size="sm" onClick={() => { setType(ticket.resolution_type); setReason(ticket.resolution_reason); setEditing(true); }}>
+            <Button variant="ghost" size="sm" onClick={() => { setType(ticket.resolution_type); setReason(ticket.resolution_reason); setClientReason(ticket.resolution_client_reason || ""); setEditing(true); }}>
               <Pencil className="h-3 w-3 mr-1" /> Editar
             </Button>
           </CardTitle>
@@ -397,6 +403,13 @@ export default function ResolutionCard({ ticket, userId, onUpdate }: ResolutionC
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           rows={4}
+        />
+        <Textarea
+          placeholder="Texto visível para o cliente (opcional) — se vazio, o cliente verá o texto acima"
+          value={clientReason}
+          onChange={(e) => setClientReason(e.target.value)}
+          rows={3}
+          className="border-dashed"
         />
 
         {/* Toggle: request supervisor approval */}
