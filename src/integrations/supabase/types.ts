@@ -431,6 +431,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          proposed_client_reason: string | null
           proposed_reason: string
           proposed_type: string
           requested_by: string
@@ -443,6 +444,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          proposed_client_reason?: string | null
           proposed_reason: string
           proposed_type: string
           requested_by: string
@@ -455,6 +457,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          proposed_client_reason?: string | null
           proposed_reason?: string
           proposed_type?: string
           requested_by?: string
@@ -821,6 +824,7 @@ export type Database = {
           purchase_date: string | null
           resolution_at: string | null
           resolution_by: string | null
+          resolution_client_reason: string | null
           resolution_reason: string | null
           resolution_type: string | null
           resolved_at: string | null
@@ -864,6 +868,7 @@ export type Database = {
           purchase_date?: string | null
           resolution_at?: string | null
           resolution_by?: string | null
+          resolution_client_reason?: string | null
           resolution_reason?: string | null
           resolution_type?: string | null
           resolved_at?: string | null
@@ -907,6 +912,7 @@ export type Database = {
           purchase_date?: string | null
           resolution_at?: string | null
           resolution_by?: string | null
+          resolution_client_reason?: string | null
           resolution_reason?: string | null
           resolution_type?: string | null
           resolved_at?: string | null

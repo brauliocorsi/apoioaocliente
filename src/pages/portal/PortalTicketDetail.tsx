@@ -31,7 +31,7 @@ export default function PortalTicketDetail() {
   const fetchData = async () => {
     if (!id || !user) return;
     const [{ data: t }, { data: msgs }, { data: sts }, { data: atts }] = await Promise.all([
-      supabase.from("tickets").select("id, ticket_number, subject, status, created_at, description, resolution_type, resolution_reason, resolution_at").eq("id", id).single(),
+      supabase.from("tickets").select("id, ticket_number, subject, status, created_at, description, resolution_type, resolution_reason, resolution_client_reason, resolution_at").eq("id", id).single(),
       supabase.from("ticket_messages").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
       supabase.from("ticket_statuses").select("id, name, color").order("sort_order"),
       supabase.from("ticket_attachments").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
@@ -203,7 +203,7 @@ export default function PortalTicketDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="text-sm whitespace-pre-wrap">{ticket.resolution_reason}</p>
+            <p className="text-sm whitespace-pre-wrap">{ticket.resolution_client_reason || ticket.resolution_reason}</p>
             <p className="text-xs text-muted-foreground">
               Decisão registada em {new Date(ticket.resolution_at).toLocaleString("pt-PT")}
             </p>
