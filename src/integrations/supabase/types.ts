@@ -427,6 +427,53 @@ export type Database = {
         }
         Relationships: []
       }
+      resolution_approvals: {
+        Row: {
+          created_at: string
+          id: string
+          proposed_reason: string
+          proposed_type: string
+          requested_by: string
+          resolved_at: string | null
+          status: string
+          supervisor_id: string
+          supervisor_notes: string | null
+          ticket_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          proposed_reason: string
+          proposed_type: string
+          requested_by: string
+          resolved_at?: string | null
+          status?: string
+          supervisor_id: string
+          supervisor_notes?: string | null
+          ticket_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          proposed_reason?: string
+          proposed_type?: string
+          requested_by?: string
+          resolved_at?: string | null
+          status?: string
+          supervisor_id?: string
+          supervisor_notes?: string | null
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resolution_approvals_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sla_config: {
         Row: {
           category_id: string
