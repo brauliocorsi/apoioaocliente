@@ -1,81 +1,104 @@
 
-# Plano: Badge de mensagens nao lidas + Kanban como vista predefinida
+# Correcção: Eventos, SLA e Timeline para tickets criados pelo portal
 
-## Resumo
-Adicionar um badge visual nos tickets (lista e kanban) que mostra a quantidade de mensagens de clientes por responder. O badge desaparece quando o agente abre o ticket. Alem disso, a vista Kanban passa a ser a predefinida ao abrir a pagina de tickets.
+## Problema Raiz
 
-## 1. Tabela de controlo de leitura
+Existem 3 problemas distintos mas relacionados:
 
-Criar uma nova tabela `ticket_read_status` para registar quando cada agente leu pela ultima vez as mensagens de um ticket:
+**1. Sem eventos na timeline**
+O `PortalNewTicket.tsx` NÃO insere eventos `ticket_events` ao criar um ticket.
+A RLS de `ticket_events_insert` só permite agentes (`is_authenticated_agent()`), por isso um cliente nunca consegue inserir directamente.
+Resultado: tickets criados pelo portal ficam sem histórico.
 
-| Coluna | Tipo | Descricao |
-|---|---|---|
-| ticket_id | uuid | Referencia ao ticket |
-| agent_id | uuid | ID do agente |
-| last_read_at | timestamptz | Ultima vez que o agente abriu o ticket |
+**2. Sem SLA**
+O portal não passa `category_id` nem calcula `sla_first_response_at` / `sla_resolution_at`.
+Resultado: ticket 8 tem `sla_first_response_at = NULL`.
 
-- Chave primaria composta: (ticket_id, agent_id)
-- Politicas RLS: agentes podem ler e fazer upsert nos seus proprios registos
+**3. Notas internas da timeline do agente**
+A timeline interna do `TicketDetail.tsx` também usa `ticket_events`. Como o ticket 8 não tem eventos, aparece vazio.
 
-## 2. Marcar como lido ao abrir o ticket
+## Solução: Triggers automáticos na base de dados
 
-No `TicketDetail.tsx`, ao carregar o ticket, fazer um upsert na tabela `ticket_read_status` com o timestamp atual. Isto faz o badge desaparecer na proxima vez que a lista/kanban carregam.
+Em vez de depender do frontend para inserir eventos (frágil e inconsistente), vamos criar triggers `SECURITY DEFINER` que disparam automaticamente:
 
-## 3. Contar mensagens nao lidas
+### Trigger 1 — Auto evento "created" ao inserir ticket
+Quando qualquer ticket é inserido (por agente OU por cliente), regista automaticamente um evento `created` em `ticket_events`. Isto resolve a timeline para sempre.
 
-No `Tickets.tsx`, apos carregar os tickets, buscar:
-- A contagem de mensagens de clientes (`sender_type = 'client'`) por ticket
-- O `last_read_at` do agente atual para cada ticket
+### Trigger 2 — Auto evento "status_change" ao mudar status
+Quando o campo `status` de um ticket é alterado, regista automaticamente o evento `status_change`. Actualmente isto é feito manualmente no `TicketDetail.tsx` mas pode falhar em actualizações indirectas.
 
-Calcular: mensagens de clientes criadas apos `last_read_at` (ou todas, se nunca lido) = contagem do badge.
+### Trigger 3 — Auto cálculo SLA ao inserir/actualizar ticket
+Quando um ticket é inserido e tem `category_id` e `priority`, ou quando a `category_id` é actualizada depois, calcula automaticamente `sla_first_response_at` e `sla_resolution_at` a partir da tabela `sla_config`. Isto resolve o SLA do ticket 8 (quando o agente atribuir uma categoria) e de todos os futuros tickets do portal.
 
-## 4. Badge visual na lista e no kanban
+### Correcção retroactiva para ticket 8
+A migração também insere os eventos em falta no ticket 8 que já existe (evento `created` e evento `status_change` para `em_analise`).
 
-- **Lista**: Adicionar um badge vermelho com o numero de mensagens nao lidas ao lado do ticket
-- **Kanban**: Adicionar o mesmo badge no cartao do ticket (`TicketCard`)
-- O badge so aparece quando ha mensagens de clientes por responder (contagem > 0)
+## Ficheiros a alterar
 
-## 5. Vista predefinida: Kanban
+| Ficheiro | Alteração |
+|---|---|
+| Migração SQL nova | Criar os 3 triggers + corrigir ticket 8 retroactivamente |
 
-Alterar o estado inicial de `view` em `Tickets.tsx` de `"list"` para `"kanban"`.
+## Porquê triggers em vez de código no frontend?
 
-## 6. Notificacoes inteligentes (ja implementado parcialmente)
+- Funcionam independentemente de quem cria o ticket (agente, cliente, API)
+- Não dependem de permissões RLS para o utilizador que cria
+- Garantem consistência em 100% dos casos
+- A RLS de `ticket_events_select_clients` já filtra o que o cliente vê (exclui `note`, `approval_*`)
 
-O trigger `notify_agent_on_client_message` ja notifica o agente atribuido. Nao sao necessarias alteracoes - o comportamento atual ja verifica `assigned_to` e so notifica esse agente.
-
----
-
-## Detalhes Tecnicos
-
-### Migracao SQL
+## Detalhes técnicos
 
 ```text
-CREATE TABLE ticket_read_status (
-  ticket_id uuid NOT NULL,
-  agent_id uuid NOT NULL,
-  last_read_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (ticket_id, agent_id)
-);
+-- Trigger 1: Auto-criar evento "created"
+CREATE OR REPLACE FUNCTION auto_create_ticket_event()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  INSERT INTO ticket_events (ticket_id, event_type, content, metadata)
+  VALUES (NEW.id, 'created', 'Ticket criado', '{}');
+  RETURN NEW;
+END;
+$$;
 
-ALTER TABLE ticket_read_status ENABLE ROW LEVEL SECURITY;
+-- Trigger 2: Auto-criar evento "status_change"
+CREATE OR REPLACE FUNCTION auto_status_change_event()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF OLD.status IS DISTINCT FROM NEW.status THEN
+    INSERT INTO ticket_events (ticket_id, event_type, content, metadata)
+    VALUES (
+      NEW.id,
+      'status_change',
+      'Estado alterado: ' || OLD.status || ' → ' || NEW.status,
+      jsonb_build_object('from', OLD.status, 'to', NEW.status)
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$;
 
--- Agentes podem ver os seus proprios registos
-CREATE POLICY "read_status_select" ON ticket_read_status
-  FOR SELECT USING (is_authenticated_agent() AND agent_id = auth.uid());
-
--- Agentes podem inserir/atualizar os seus proprios registos
-CREATE POLICY "read_status_upsert" ON ticket_read_status
-  FOR INSERT WITH CHECK (is_authenticated_agent() AND agent_id = auth.uid());
-
-CREATE POLICY "read_status_update" ON ticket_read_status
-  FOR UPDATE USING (is_authenticated_agent() AND agent_id = auth.uid());
+-- Trigger 3: Auto-calcular SLA
+CREATE OR REPLACE FUNCTION auto_calculate_sla()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE v_sla record;
+BEGIN
+  IF NEW.category_id IS NOT NULL AND (
+    OLD IS NULL OR OLD.category_id IS DISTINCT FROM NEW.category_id OR OLD.priority IS DISTINCT FROM NEW.priority
+  ) THEN
+    SELECT first_response_minutes, resolution_minutes
+    INTO v_sla
+    FROM sla_config
+    WHERE category_id = NEW.category_id AND priority = NEW.priority::ticket_priority
+    LIMIT 1;
+    IF FOUND THEN
+      NEW.sla_first_response_at := NEW.created_at + (v_sla.first_response_minutes * interval '1 minute');
+      NEW.sla_resolution_at     := NEW.created_at + (v_sla.resolution_minutes     * interval '1 minute');
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
 ```
 
-### Ficheiros a alterar
-
-| Ficheiro | Alteracao |
-|---|---|
-| Migracao SQL | Criar tabela `ticket_read_status` |
-| `src/pages/Tickets.tsx` | Buscar contagem de mensagens nao lidas; passar ao KanbanBoard e lista; mudar vista predefinida para "kanban" |
-| `src/pages/TicketDetail.tsx` | Upsert em `ticket_read_status` ao abrir ticket |
-| `src/components/KanbanBoard.tsx` | Aceitar e exibir badge de mensagens nao lidas no cartao |
+Depois, correcção retroactiva para o ticket 8:
+- Inserir evento `created` com a data de criação do ticket
+- Inserir evento `status_change` (novo → em_analise) com a data de `updated_at`
