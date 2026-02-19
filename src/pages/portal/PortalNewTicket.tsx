@@ -43,6 +43,10 @@ export default function PortalNewTicket() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !profile) return;
+    if (!orderNumber.trim()) {
+      toast({ title: "Campo obrigatório", description: "Necessita do número da nota de encomenda para registar o ticket.", variant: "destructive" });
+      return;
+    }
     setLoading(true);
 
     const { data, error } = await supabase.from("tickets").insert({
@@ -121,8 +125,8 @@ export default function PortalNewTicket() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Nº Nota de Encomenda</Label>
-                <Input value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} placeholder="Ex: NE-12345" />
+                <Label>Nº Nota de Encomenda *</Label>
+                <Input value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} required placeholder="Ex: NE-12345" />
               </div>
               <div className="space-y-2">
                 <Label>Produto</Label>
@@ -172,7 +176,7 @@ export default function PortalNewTicket() {
 
             <div className="flex gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => navigate("/portal/tickets")}>Cancelar</Button>
-              <Button type="submit" disabled={loading || uploading || !subject.trim() || !description.trim()}>
+              <Button type="submit" disabled={loading || uploading || !subject.trim() || !description.trim() || !orderNumber.trim()}>
                 {(loading || uploading) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Criar Ticket
               </Button>
