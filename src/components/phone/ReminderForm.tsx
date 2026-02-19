@@ -4,16 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Bell } from "lucide-react";
+import { Bell, AlertTriangle } from "lucide-react";
 
 interface ReminderFormProps {
   phoneCallId: string;
   callSubject?: string;
   callClientName?: string;
+  hasAssignedAgent?: boolean;
   onCreated: () => void;
 }
 
-export default function ReminderForm({ phoneCallId, callSubject, callClientName, onCreated }: ReminderFormProps) {
+export default function ReminderForm({ phoneCallId, callSubject, callClientName, hasAssignedAgent = true, onCreated }: ReminderFormProps) {
   const [remindAt, setRemindAt] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -41,6 +42,12 @@ export default function ReminderForm({ phoneCallId, callSubject, callClientName,
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+      {!hasAssignedAgent && (
+        <div className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span>Esta ligação não tem agente atribuído. O lembrete não gerará notificação.</span>
+        </div>
+      )}
       <Label className="flex items-center gap-1 text-sm font-medium"><Bell className="h-3.5 w-3.5" /> Novo Lembrete</Label>
       <div className="flex gap-2">
         <Input type="datetime-local" value={remindAt} onChange={(e) => setRemindAt(e.target.value)} required className="flex-1" />
