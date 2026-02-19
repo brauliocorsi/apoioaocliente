@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Loader2, Send, Paperclip, FileText, Download, X, FileImage, FileVideo } from "lucide-react";
+import TicketStatusStepper from "@/components/portal/TicketStatusStepper";
 import { v4 as uuidv4 } from "uuid";
 import MessageReactions from "@/components/chat/MessageReactions";
 
@@ -22,6 +23,7 @@ export default function PortalTicketDetail() {
   const [attachments, setAttachments] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [statuses, setStatuses] = useState<Record<string, { name: string; color: string }>>({});
+  const [statusList, setStatusList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -42,6 +44,7 @@ export default function PortalTicketDetail() {
     const map: Record<string, { name: string; color: string }> = {};
     (sts || []).forEach((s: any) => { map[s.id] = { name: s.name, color: s.color }; });
     setStatuses(map);
+    setStatusList(sts || []);
     setAttachments((atts || []).map((a: any) => ({
       ...a,
       url: supabase.storage.from("ticket-attachments").getPublicUrl(a.file_path).data.publicUrl,
@@ -210,6 +213,14 @@ export default function PortalTicketDetail() {
           {st?.name || ticket.status}
         </Badge>
       </div>
+
+      {statusList.length > 0 && (
+        <Card>
+          <CardContent className="py-4">
+            <TicketStatusStepper statuses={statusList} currentStatusId={ticket.status} />
+          </CardContent>
+        </Card>
+      )}
 
       {ticket.description && (
         <Card>
