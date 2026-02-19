@@ -7,12 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import ReminderForm from "./ReminderForm";
 import ReminderList from "./ReminderList";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
-import { Link, X, ExternalLink, Save, Phone, Bell, Ticket } from "lucide-react";
+import { Link, X, ExternalLink, Save, Phone, Bell, Ticket, UserPlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface PhoneCall {
@@ -26,6 +27,14 @@ interface PhoneCall {
   priority: string;
   created_at: string;
   ticket_id?: string | null;
+  assigned_to?: string | null;
+}
+
+interface AgentProfile {
+  id: string;
+  full_name: string;
+  avatar_url?: string | null;
+  agent_color?: string | null;
 }
 
 interface PhoneCallDetailDialogProps {
@@ -52,12 +61,19 @@ export default function PhoneCallDetailDialog({ call, open, onClose, onUpdated }
   const [linkedTicket, setLinkedTicket] = useState<any | null>(null);
   const [ticketSearch, setTicketSearch] = useState("");
   const [ticketResults, setTicketResults] = useState<any[]>([]);
+  const [agents, setAgents] = useState<AgentProfile[]>([]);
+  const [assignedTo, setAssignedTo] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchAgents();
+  }, []);
 
   useEffect(() => {
     if (call) {
       setStatus(call.status);
       setPriority(call.priority);
       setNotes(call.notes || "");
+      setAssignedTo(call.assigned_to || null);
       fetchReminders(call.id);
       if (call.ticket_id) {
         fetchLinkedTicket(call.ticket_id);
@@ -66,6 +82,48 @@ export default function PhoneCallDetailDialog({ call, open, onClose, onUpdated }
       }
     }
   }, [call]);
+
+  const fetchAgents = async () => {
+    const { data } = await supabase.rpc("get_agent_profiles");
+    if (data) {
+      const ids = data.map((a: any) => a.id);
+      const { data: profiles } = await supabase.from("profiles").select("id, full_name, avatar_url, agent_color").in("id", ids);
+      setAgents((profiles as AgentProfile[]) || []);
+    }
+  };
+
+  const handleAssign = async (agentId: string) => {
+    if (!call) return;
+    const newValue = agentId === "unassigned" ? null : agentId;
+    const previousAssigned = assignedTo;
+    setAssignedTo(newValue);
+
+    const { error } = await supabase.from("phone_calls" as any).update({ assigned_to: newValue } as any).eq("id", call.id);
+    if (error) {
+      toast({ title: "Erro ao atribuir", description: error.message, variant: "destructive" });
+      setAssignedTo(previousAssigned);
+      return;
+    }
+
+    // Send notification to assigned agent
+    if (newValue && newValue !== previousAssigned) {
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUserId = userData?.user?.id;
+      if (currentUserId && newValue !== currentUserId) {
+        await supabase.from("agent_notifications").insert({
+          recipient_id: newValue,
+          sender_id: currentUserId,
+          type: "phone_call_assigned",
+          content: `atribuiu-lhe a ligação "${call.subject}" de ${call.client_name}`,
+          ticket_id: call.ticket_id || null,
+        });
+      }
+    }
+
+    const agentName = newValue ? agents.find((a) => a.id === newValue)?.full_name || "Agente" : "Ninguém";
+    toast({ title: `Ligação atribuída a ${agentName}` });
+    onUpdated();
+  };
 
   const fetchLinkedTicket = async (ticketId: string) => {
     const { data } = await supabase.from("tickets").select("id, ticket_number, subject, client_name").eq("id", ticketId).single();
@@ -169,6 +227,29 @@ export default function PhoneCallDetailDialog({ call, open, onClose, onUpdated }
             <div className="flex gap-4 text-sm">
               <span><span className="text-muted-foreground font-medium">Nota:</span> {call.invoice_number || "—"}</span>
             </div>
+          </div>
+
+          {/* Agent assignment */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <UserPlus className="h-3.5 w-3.5" /> Atribuição
+            </h4>
+            <Select value={assignedTo || "unassigned"} onValueChange={handleAssign}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecionar agente..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unassigned">Sem atribuição</SelectItem>
+                {agents.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    <span className="flex items-center gap-2">
+                      <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: a.agent_color || '#6b7280' }} />
+                      {a.full_name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Editable fields */}

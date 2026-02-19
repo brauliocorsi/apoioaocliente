@@ -39,6 +39,10 @@ type PhoneCall = {
   created_by_name?: string;
   created_by_color?: string;
   created_by_avatar?: string | null;
+  assigned_to?: string | null;
+  assigned_to_name?: string;
+  assigned_to_color?: string;
+  assigned_to_avatar?: string | null;
 };
 
 interface PhoneCallKanbanProps {
@@ -81,17 +85,31 @@ function CallCard({ call, isDragging }: { call: PhoneCall; isDragging?: boolean 
       </div>
       <p className="text-sm font-medium leading-tight line-clamp-2 mb-1">{call.subject}</p>
       <p className="text-xs text-muted-foreground truncate">{call.client_name}</p>
-      {call.created_by_name && (
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <Avatar className="h-4 w-4">
-            <AvatarImage src={call.created_by_avatar || undefined} />
-            <AvatarFallback className="text-[7px] font-semibold bg-muted text-muted-foreground">
-              {call.created_by_name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <span className="text-[10px] text-muted-foreground/70">{call.created_by_name}</span>
-        </div>
-      )}
+      <div className="flex items-center justify-between mt-0.5">
+        {call.created_by_name && (
+          <div className="flex items-center gap-1">
+            <Avatar className="h-4 w-4">
+              <AvatarImage src={call.created_by_avatar || undefined} />
+              <AvatarFallback className="text-[7px] font-semibold bg-muted text-muted-foreground">
+                {call.created_by_name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <span className="text-[10px] text-muted-foreground/70">{call.created_by_name}</span>
+          </div>
+        )}
+        {call.assigned_to_name && (
+          <div className="flex items-center gap-1" title={`Atribuído a ${call.assigned_to_name}`}>
+            <span className="text-[10px] text-muted-foreground/50">→</span>
+            <Avatar className="h-4 w-4 ring-1 ring-primary/30">
+              <AvatarImage src={call.assigned_to_avatar || undefined} />
+              <AvatarFallback className="text-[7px] font-semibold" style={{ backgroundColor: call.assigned_to_color || '#6b7280', color: 'white' }}>
+                {call.assigned_to_name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <span className="text-[10px] text-primary/70 font-medium">{call.assigned_to_name.split(" ")[0]}</span>
+          </div>
+        )}
+      </div>
       <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-dashed">
         <span className="text-[11px] text-muted-foreground flex items-center gap-1">
           <Phone className="h-3 w-3" /> {call.client_phone}

@@ -25,6 +25,10 @@ type PhoneCall = {
   created_by_name?: string;
   created_by_color?: string;
   created_by_avatar?: string | null;
+  assigned_to?: string | null;
+  assigned_to_name?: string;
+  assigned_to_color?: string;
+  assigned_to_avatar?: string | null;
 };
 
 export default function PhoneCalls() {
@@ -43,14 +47,17 @@ export default function PhoneCalls() {
       .order("created_at", { ascending: false });
     const rows = (data as any as PhoneCall[]) || [];
 
-    // Fetch creator profiles with colors
-    const creatorIds = [...new Set(rows.map((r) => r.created_by).filter(Boolean))];
+    // Fetch creator + assigned profiles with colors
+    const allUserIds = [...new Set([
+      ...rows.map((r) => r.created_by).filter(Boolean),
+      ...rows.map((r) => r.assigned_to).filter(Boolean),
+    ])];
     let profileMap: Record<string, { name: string; color: string; avatar_url?: string | null }> = {};
-    if (creatorIds.length > 0) {
+    if (allUserIds.length > 0) {
       const { data: profiles } = await supabase
         .from("profiles")
         .select("id, full_name, agent_color, avatar_url")
-        .in("id", creatorIds);
+        .in("id", allUserIds);
       (profiles || []).forEach((p: any) => {
         profileMap[p.id] = { name: p.full_name, color: p.agent_color || '#6b7280', avatar_url: p.avatar_url };
       });
@@ -61,6 +68,9 @@ export default function PhoneCalls() {
       created_by_name: r.created_by ? profileMap[r.created_by]?.name || "" : "",
       created_by_color: r.created_by ? profileMap[r.created_by]?.color || "#6b7280" : "#6b7280",
       created_by_avatar: r.created_by ? profileMap[r.created_by]?.avatar_url || null : null,
+      assigned_to_name: r.assigned_to ? profileMap[r.assigned_to]?.name || "" : "",
+      assigned_to_color: r.assigned_to ? profileMap[r.assigned_to]?.color || "#6b7280" : "#6b7280",
+      assigned_to_avatar: r.assigned_to ? profileMap[r.assigned_to]?.avatar_url || null : null,
     }));
     setCalls(enrichedRows);
 

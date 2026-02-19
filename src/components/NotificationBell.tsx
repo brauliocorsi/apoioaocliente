@@ -82,8 +82,10 @@ export default function NotificationBell() {
     markRead(n.id);
     if (n.ticket_id) {
       navigate(`/tickets/${n.ticket_id}`);
-      setOpen(false);
+    } else if (n.type === "phone_call_assigned") {
+      navigate("/phone-calls");
     }
+    setOpen(false);
   };
 
   return (
