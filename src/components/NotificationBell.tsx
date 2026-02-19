@@ -24,6 +24,7 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
   const [senderNames, setSenderNames] = useState<Record<string, string>>({});
+  const [unreadMsgCount, setUnreadMsgCount] = useState(0);
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
@@ -48,7 +49,23 @@ export default function NotificationBell() {
     }
   }, [user]);
 
-  useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
+  const fetchUnreadMessages = useCallback(async () => {
+    if (!user) return;
+    const [{ data: readStatuses }, { data: clientMsgs }] = await Promise.all([
+      supabase.from("ticket_read_status").select("ticket_id, last_read_at"),
+      supabase.from("ticket_messages").select("ticket_id, created_at").eq("sender_type", "client"),
+    ]);
+    const readMap: Record<string, string> = {};
+    (readStatuses || []).forEach((r: any) => { readMap[r.ticket_id] = r.last_read_at; });
+    let total = 0;
+    (clientMsgs || []).forEach((m: any) => {
+      const lastRead = readMap[m.ticket_id];
+      if (!lastRead || new Date(m.created_at) > new Date(lastRead)) total++;
+    });
+    setUnreadMsgCount(total);
+  }, [user]);
+
+  useEffect(() => { fetchNotifications(); fetchUnreadMessages(); }, [fetchNotifications, fetchUnreadMessages]);
 
   // Realtime
   useEffect(() => {
@@ -60,12 +77,18 @@ export default function NotificationBell() {
         schema: "public",
         table: "agent_notifications",
         filter: `recipient_id=eq.${user.id}`,
-      }, () => { fetchNotifications(); })
+      }, () => { fetchNotifications(); fetchUnreadMessages(); })
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "ticket_messages",
+      }, () => { fetchUnreadMessages(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, fetchNotifications]);
+  }, [user, fetchNotifications, fetchUnreadMessages]);
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const totalBadge = unreadCount + unreadMsgCount;
 
   const markRead = async (id: string) => {
     await supabase.from("agent_notifications").update({ is_read: true }).eq("id", id);
@@ -93,9 +116,9 @@ export default function NotificationBell() {
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-4 w-4" />
-          {unreadCount > 0 && (
-            <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
-              {unreadCount}
+          {totalBadge > 0 && (
+            <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
+              {totalBadge}
             </Badge>
           )}
         </Button>
