@@ -6,13 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus } from "lucide-react";
-import TicketStatusStepper from "@/components/portal/TicketStatusStepper";
 
 export default function PortalTickets() {
   const { user } = useClientAuth();
   const [tickets, setTickets] = useState<any[]>([]);
   const [statuses, setStatuses] = useState<Record<string, { name: string; color: string }>>({});
-  const [statusList, setStatusList] = useState<any[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -27,7 +26,7 @@ export default function PortalTickets() {
         supabase.from("ticket_statuses").select("id, name, color").order("sort_order"),
       ]);
       setTickets(tix || []);
-      setStatusList(sts || []);
+      
       const map: Record<string, { name: string; color: string }> = {};
       (sts || []).forEach((s: any) => { map[s.id] = { name: s.name, color: s.color }; });
       setStatuses(map);
@@ -69,26 +68,28 @@ export default function PortalTickets() {
                 className="cursor-pointer hover:shadow-md transition-shadow"
                 onClick={() => navigate(`/portal/tickets/${t.id}`)}
               >
-                <CardContent className="py-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono text-muted-foreground">#{t.ticket_number}</span>
-                        <p className="text-sm font-medium">{t.subject}</p>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(t.created_at).toLocaleDateString("pt-PT")}
-                      </p>
+                <CardContent className="flex items-center justify-between py-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-muted-foreground">#{t.ticket_number}</span>
+                      <p className="text-sm font-medium">{t.subject}</p>
                     </div>
-                    <Badge
-                      variant="secondary"
-                      style={st ? { backgroundColor: st.color + "20", color: st.color, borderColor: st.color + "40" } : {}}
-                      className="border"
-                    >
-                      {st?.name || t.status}
-                    </Badge>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(t.created_at).toLocaleDateString("pt-PT")}
+                    </p>
                   </div>
-                  <TicketStatusStepper statuses={statusList} currentStatusId={t.status} compact />
+                  <div
+                    className="flex items-center gap-2 rounded-full px-3 py-1 border"
+                    style={st ? { backgroundColor: st.color + "12", borderColor: st.color + "40" } : {}}
+                  >
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={st ? { backgroundColor: st.color } : {}}
+                    />
+                    <span className="text-xs font-medium" style={st ? { color: st.color } : {}}>
+                      {st?.name || t.status}
+                    </span>
+                  </div>
                 </CardContent>
               </Card>
             );
