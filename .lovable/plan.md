@@ -1,47 +1,52 @@
 
+# Plano: Melhorar Visualizacao de Status no Portal + FAQs dos Termos e Condicoes
 
-## Texto de Resolução Separado para o Cliente
+## 1. Melhorar Visualizacao do Status no Portal do Cliente
 
 ### Problema Atual
-O campo `resolution_reason` e armazenado no ticket e mostrado tanto aos agentes como aos clientes no portal. Nao existe forma de escrever um texto interno (detalhado, tecnico) e um texto diferente, mais adequado, para o cliente ver.
+O status aparece apenas como um pequeno badge com texto. Falta contexto visual para o cliente entender o progresso do seu ticket.
 
 ### Solucao
+- **Lista de Tickets (`PortalTickets.tsx`)**: Adicionar um indicador visual mais rico com icone de status (circulo colorido) e uma barra de progresso simplificada baseada na posicao do status no fluxo (Novo -> Em analise -> Aguarda -> Resolvido -> Encerrado).
+- **Detalhe do Ticket (`PortalTicketDetail.tsx`)**: Adicionar uma timeline/stepper horizontal no topo que mostra todos os estados do fluxo, destacando o estado atual com cor e icone. O cliente ve claramente onde esta o seu ticket no processo.
 
-Adicionar um novo campo `resolution_client_reason` na tabela `tickets` que permite ao agente escrever um texto especifico para o cliente. Se preenchido, o portal mostra esse texto; se vazio, mostra o `resolution_reason` normal como fallback.
+### Componente de Progresso (Stepper)
+Sera criado um componente `TicketStatusStepper` que:
+- Mostra os estados principais do fluxo como etapas visuais
+- Destaca o estado atual com a cor do status
+- Marca estados anteriores como "concluidos"
+- Usa icones para cada estado (circulo, lupa, relogio, check, arquivo)
 
-### Alteracoes
+## 2. Criar FAQs Baseadas nos Termos e Condicoes
 
-**1. Base de dados** - Adicionar coluna `resolution_client_reason` (text, nullable) a tabela `tickets`.
+### Abordagem
+Inserir diretamente na tabela `faq_items` as perguntas frequentes baseadas nos 11 capitulos dos termos e condicoes fornecidos. Cada capitulo sera convertido numa ou mais FAQs com linguagem acessivel.
 
-**2. ResolutionCard.tsx** - Adicionar um campo de texto extra "Texto para o cliente (opcional)" no formulario de decisao. Este campo aparece tanto na criacao direta como no pedido de aprovacao. Quando o supervisor aprova, o texto para o cliente tambem e aplicado ao ticket.
+### FAQs a Criar (11 itens, um por capitulo)
 
-**3. Tabela resolution_approvals** - Adicionar coluna `proposed_client_reason` (text, nullable) para guardar o texto proposto para o cliente durante o fluxo de aprovacao.
+1. **Quais sao as minhas responsabilidades na compra de produtos?** - Resume Capitulo I (medidas, cores, personalizados)
+2. **Quais sao as modalidades de pagamento disponiveis?** - Resume Capitulo II (numerario, multibanco, transferencia, seQura)
+3. **Os precos podem mudar entre a encomenda e a entrega?** - Resume Capitulo III (precos fixos entre encomenda e entrega)
+4. **As datas de entrega sao garantidas?** - Resume Capitulo IV (estimativas, stock 15 dias)
+5. **Como funciona o servico de entrega e montagem?** - Resume Capitulo V (horarios, pagamento, verificacao, criancas)
+6. **Qual e a garantia dos produtos?** - Resume Capitulo VI (3 anos, exclusoes)
+7. **Posso devolver ou trocar um artigo?** - Resume Capitulo VII (15 dias, condicoes, personalizados)
+8. **O que sao artigos de exposicao e quais as condicoes?** - Resume Capitulo VIII (estado, sem trocas)
+9. **Quais sao as condicoes para devolucao?** - Resume Capitulo IX (embalagem original, custos)
+10. **Como funciona o reembolso?** - Resume Capitulo X (5 dias uteis, transferencia)
+11. **Que cuidados devo ter com os moveis?** - Resume Capitulo XI (limpeza, calor, peso)
 
-**4. PortalTicketDetail.tsx** - Alterar para mostrar `resolution_client_reason` em vez de `resolution_reason`. Se `resolution_client_reason` estiver vazio, faz fallback para `resolution_reason`.
+### Implementacao Tecnica
+- Usar a ferramenta de insercao de dados para adicionar as 11 FAQs na tabela `faq_items`
+- Cada FAQ tera `is_active = true`, `sort_order` sequencial
+- O campo `answer` contera o texto formatado em HTML para boa apresentacao
+- Nao sao necessarias alteracoes de schema (tabela `faq_items` ja existe)
 
-### Secao Tecnica
+## Resumo das Alteracoes
 
-```text
-tickets table
-+----------------------------+
-| resolution_reason          | (interno - visivel apenas a agentes)
-| resolution_client_reason   | (NEW - texto para o cliente, nullable)
-+----------------------------+
-
-resolution_approvals table
-+----------------------------+
-| proposed_reason            | (texto interno proposto)
-| proposed_client_reason     | (NEW - texto cliente proposto, nullable)
-+----------------------------+
-
-Portal mostra:
-  resolution_client_reason ?? resolution_reason
-```
-
-- Migracao SQL: `ALTER TABLE tickets ADD COLUMN resolution_client_reason text;` e `ALTER TABLE resolution_approvals ADD COLUMN proposed_client_reason text;`
-- No `ResolutionCard`, novo `<Textarea>` com placeholder "Texto visivel para o cliente (opcional)..."
-- No `save()` e `handleApproval(true)`, guardar o `resolution_client_reason`
-- No `requestApproval()`, guardar `proposed_client_reason`
-- No `PortalTicketDetail.tsx`, usar `ticket.resolution_client_reason || ticket.resolution_reason`
-- Query do portal ja inclui `resolution_reason`; adicionar `resolution_client_reason` ao select
-
+| Ficheiro | Alteracao |
+|---|---|
+| `src/components/portal/TicketStatusStepper.tsx` | Novo componente de stepper visual |
+| `src/pages/portal/PortalTickets.tsx` | Adicionar indicador de progresso nos cards |
+| `src/pages/portal/PortalTicketDetail.tsx` | Adicionar stepper no topo do detalhe |
+| Base de dados `faq_items` | Inserir 11 FAQs dos termos e condicoes |
