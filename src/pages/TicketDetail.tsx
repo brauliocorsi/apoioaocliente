@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage, FileVideo, FileText } from "lucide-react";
+import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage, FileVideo, FileText, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DecisionEngine, type RuleSuggestion } from "@/lib/decisionEngine";
 import { v4 as uuidv4 } from "uuid";
@@ -24,7 +25,7 @@ import MessageReactions from "@/components/chat/MessageReactions";
 export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const { toast } = useToast();
   const { statuses, statusLabels } = useTicketStatuses();
   const [ticket, setTicket] = useState<any>(null);
@@ -367,19 +368,67 @@ export default function TicketDetail() {
           </div>
           <p className="text-sm text-muted-foreground">{ticket.client_name}{ticket.order_number ? ` · Enc. ${ticket.order_number}` : ""}{ticket.service_number ? ` · OS ${ticket.service_number}` : ""}</p>
         </div>
-        <Select value={ticket.status} onValueChange={updateStatus}>
-          <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {statuses.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                <span className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
-                  {s.name}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Select value={ticket.status} onValueChange={updateStatus}>
+            <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {statuses.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  <span className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color }} />
+                    {s.name}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {role === "supervisor" && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="icon" className="text-destructive hover:bg-destructive/10">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Excluir Ticket #{ticket.ticket_number}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta ação é irreversível. Todas as mensagens, eventos, anexos e dados associados serão permanentemente eliminados.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={async () => {
+                      // Delete related data first
+                      await Promise.all([
+                        supabase.from("ticket_messages").delete().eq("ticket_id", id!),
+                        supabase.from("ticket_events").delete().eq("ticket_id", id!),
+                        supabase.from("ticket_tags").delete().eq("ticket_id", id!),
+                        supabase.from("ticket_clauses").delete().eq("ticket_id", id!),
+                        supabase.from("ticket_attachments").delete().eq("ticket_id", id!),
+                        supabase.from("agent_notifications").delete().eq("ticket_id", id!),
+                        supabase.from("phone_calls").update({ ticket_id: null } as any).eq("ticket_id", id!),
+                        supabase.from("resolution_approvals").delete().eq("ticket_id", id!),
+                        supabase.from("email_logs").delete().eq("ticket_id", id!),
+                      ]);
+                      const { error } = await supabase.from("tickets").delete().eq("id", id!);
+                      if (error) {
+                        toast({ title: "Erro ao excluir ticket", description: error.message, variant: "destructive" });
+                      } else {
+                        toast({ title: "Ticket excluído com sucesso" });
+                        navigate("/tickets");
+                      }
+                    }}
+                  >
+                    Excluir
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
       </div>
 
       {suggestions.length > 0 && (
