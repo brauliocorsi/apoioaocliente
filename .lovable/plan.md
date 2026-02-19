@@ -1,52 +1,81 @@
 
-# Plano: Melhorar Visualizacao de Status no Portal + FAQs dos Termos e Condicoes
+# Plano: Badge de mensagens nao lidas + Kanban como vista predefinida
 
-## 1. Melhorar Visualizacao do Status no Portal do Cliente
+## Resumo
+Adicionar um badge visual nos tickets (lista e kanban) que mostra a quantidade de mensagens de clientes por responder. O badge desaparece quando o agente abre o ticket. Alem disso, a vista Kanban passa a ser a predefinida ao abrir a pagina de tickets.
 
-### Problema Atual
-O status aparece apenas como um pequeno badge com texto. Falta contexto visual para o cliente entender o progresso do seu ticket.
+## 1. Tabela de controlo de leitura
 
-### Solucao
-- **Lista de Tickets (`PortalTickets.tsx`)**: Adicionar um indicador visual mais rico com icone de status (circulo colorido) e uma barra de progresso simplificada baseada na posicao do status no fluxo (Novo -> Em analise -> Aguarda -> Resolvido -> Encerrado).
-- **Detalhe do Ticket (`PortalTicketDetail.tsx`)**: Adicionar uma timeline/stepper horizontal no topo que mostra todos os estados do fluxo, destacando o estado atual com cor e icone. O cliente ve claramente onde esta o seu ticket no processo.
+Criar uma nova tabela `ticket_read_status` para registar quando cada agente leu pela ultima vez as mensagens de um ticket:
 
-### Componente de Progresso (Stepper)
-Sera criado um componente `TicketStatusStepper` que:
-- Mostra os estados principais do fluxo como etapas visuais
-- Destaca o estado atual com a cor do status
-- Marca estados anteriores como "concluidos"
-- Usa icones para cada estado (circulo, lupa, relogio, check, arquivo)
+| Coluna | Tipo | Descricao |
+|---|---|---|
+| ticket_id | uuid | Referencia ao ticket |
+| agent_id | uuid | ID do agente |
+| last_read_at | timestamptz | Ultima vez que o agente abriu o ticket |
 
-## 2. Criar FAQs Baseadas nos Termos e Condicoes
+- Chave primaria composta: (ticket_id, agent_id)
+- Politicas RLS: agentes podem ler e fazer upsert nos seus proprios registos
 
-### Abordagem
-Inserir diretamente na tabela `faq_items` as perguntas frequentes baseadas nos 11 capitulos dos termos e condicoes fornecidos. Cada capitulo sera convertido numa ou mais FAQs com linguagem acessivel.
+## 2. Marcar como lido ao abrir o ticket
 
-### FAQs a Criar (11 itens, um por capitulo)
+No `TicketDetail.tsx`, ao carregar o ticket, fazer um upsert na tabela `ticket_read_status` com o timestamp atual. Isto faz o badge desaparecer na proxima vez que a lista/kanban carregam.
 
-1. **Quais sao as minhas responsabilidades na compra de produtos?** - Resume Capitulo I (medidas, cores, personalizados)
-2. **Quais sao as modalidades de pagamento disponiveis?** - Resume Capitulo II (numerario, multibanco, transferencia, seQura)
-3. **Os precos podem mudar entre a encomenda e a entrega?** - Resume Capitulo III (precos fixos entre encomenda e entrega)
-4. **As datas de entrega sao garantidas?** - Resume Capitulo IV (estimativas, stock 15 dias)
-5. **Como funciona o servico de entrega e montagem?** - Resume Capitulo V (horarios, pagamento, verificacao, criancas)
-6. **Qual e a garantia dos produtos?** - Resume Capitulo VI (3 anos, exclusoes)
-7. **Posso devolver ou trocar um artigo?** - Resume Capitulo VII (15 dias, condicoes, personalizados)
-8. **O que sao artigos de exposicao e quais as condicoes?** - Resume Capitulo VIII (estado, sem trocas)
-9. **Quais sao as condicoes para devolucao?** - Resume Capitulo IX (embalagem original, custos)
-10. **Como funciona o reembolso?** - Resume Capitulo X (5 dias uteis, transferencia)
-11. **Que cuidados devo ter com os moveis?** - Resume Capitulo XI (limpeza, calor, peso)
+## 3. Contar mensagens nao lidas
 
-### Implementacao Tecnica
-- Usar a ferramenta de insercao de dados para adicionar as 11 FAQs na tabela `faq_items`
-- Cada FAQ tera `is_active = true`, `sort_order` sequencial
-- O campo `answer` contera o texto formatado em HTML para boa apresentacao
-- Nao sao necessarias alteracoes de schema (tabela `faq_items` ja existe)
+No `Tickets.tsx`, apos carregar os tickets, buscar:
+- A contagem de mensagens de clientes (`sender_type = 'client'`) por ticket
+- O `last_read_at` do agente atual para cada ticket
 
-## Resumo das Alteracoes
+Calcular: mensagens de clientes criadas apos `last_read_at` (ou todas, se nunca lido) = contagem do badge.
+
+## 4. Badge visual na lista e no kanban
+
+- **Lista**: Adicionar um badge vermelho com o numero de mensagens nao lidas ao lado do ticket
+- **Kanban**: Adicionar o mesmo badge no cartao do ticket (`TicketCard`)
+- O badge so aparece quando ha mensagens de clientes por responder (contagem > 0)
+
+## 5. Vista predefinida: Kanban
+
+Alterar o estado inicial de `view` em `Tickets.tsx` de `"list"` para `"kanban"`.
+
+## 6. Notificacoes inteligentes (ja implementado parcialmente)
+
+O trigger `notify_agent_on_client_message` ja notifica o agente atribuido. Nao sao necessarias alteracoes - o comportamento atual ja verifica `assigned_to` e so notifica esse agente.
+
+---
+
+## Detalhes Tecnicos
+
+### Migracao SQL
+
+```text
+CREATE TABLE ticket_read_status (
+  ticket_id uuid NOT NULL,
+  agent_id uuid NOT NULL,
+  last_read_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (ticket_id, agent_id)
+);
+
+ALTER TABLE ticket_read_status ENABLE ROW LEVEL SECURITY;
+
+-- Agentes podem ver os seus proprios registos
+CREATE POLICY "read_status_select" ON ticket_read_status
+  FOR SELECT USING (is_authenticated_agent() AND agent_id = auth.uid());
+
+-- Agentes podem inserir/atualizar os seus proprios registos
+CREATE POLICY "read_status_upsert" ON ticket_read_status
+  FOR INSERT WITH CHECK (is_authenticated_agent() AND agent_id = auth.uid());
+
+CREATE POLICY "read_status_update" ON ticket_read_status
+  FOR UPDATE USING (is_authenticated_agent() AND agent_id = auth.uid());
+```
+
+### Ficheiros a alterar
 
 | Ficheiro | Alteracao |
 |---|---|
-| `src/components/portal/TicketStatusStepper.tsx` | Novo componente de stepper visual |
-| `src/pages/portal/PortalTickets.tsx` | Adicionar indicador de progresso nos cards |
-| `src/pages/portal/PortalTicketDetail.tsx` | Adicionar stepper no topo do detalhe |
-| Base de dados `faq_items` | Inserir 11 FAQs dos termos e condicoes |
+| Migracao SQL | Criar tabela `ticket_read_status` |
+| `src/pages/Tickets.tsx` | Buscar contagem de mensagens nao lidas; passar ao KanbanBoard e lista; mudar vista predefinida para "kanban" |
+| `src/pages/TicketDetail.tsx` | Upsert em `ticket_read_status` ao abrir ticket |
+| `src/components/KanbanBoard.tsx` | Aceitar e exibir badge de mensagens nao lidas no cartao |
