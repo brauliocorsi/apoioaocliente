@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Bell } from "lucide-react";
+import { Bell, MessageSquare } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNavigate } from "react-router-dom";
@@ -18,13 +18,21 @@ interface Notification {
   created_at: string;
 }
 
+interface UnreadTicket {
+  ticket_id: string;
+  ticket_number: number;
+  subject: string;
+  count: number;
+  latest_at: string;
+}
+
 export default function NotificationBell() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
   const [senderNames, setSenderNames] = useState<Record<string, string>>({});
-  const [unreadMsgCount, setUnreadMsgCount] = useState(0);
+  const [unreadTickets, setUnreadTickets] = useState<UnreadTicket[]>([]);
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
@@ -36,7 +44,6 @@ export default function NotificationBell() {
       .limit(20);
     setNotifications((data as Notification[]) || []);
 
-    // Fetch sender names
     const senderIds = [...new Set((data || []).map((n: any) => n.sender_id).filter(Boolean))];
     if (senderIds.length > 0) {
       const { data: profiles } = await supabase
@@ -53,21 +60,55 @@ export default function NotificationBell() {
     if (!user) return;
     const [{ data: readStatuses }, { data: clientMsgs }] = await Promise.all([
       supabase.from("ticket_read_status").select("ticket_id, last_read_at"),
-      supabase.from("ticket_messages").select("ticket_id, created_at").eq("sender_type", "client"),
+      supabase.from("ticket_messages")
+        .select("ticket_id, created_at")
+        .eq("sender_type", "client")
+        .order("created_at", { ascending: false }),
     ]);
+
     const readMap: Record<string, string> = {};
     (readStatuses || []).forEach((r: any) => { readMap[r.ticket_id] = r.last_read_at; });
-    let total = 0;
+
+    // Group unread messages per ticket
+    const ticketUnread: Record<string, { count: number; latest_at: string }> = {};
     (clientMsgs || []).forEach((m: any) => {
       const lastRead = readMap[m.ticket_id];
-      if (!lastRead || new Date(m.created_at) > new Date(lastRead)) total++;
+      if (!lastRead || new Date(m.created_at) > new Date(lastRead)) {
+        if (!ticketUnread[m.ticket_id]) {
+          ticketUnread[m.ticket_id] = { count: 0, latest_at: m.created_at };
+        }
+        ticketUnread[m.ticket_id].count++;
+        if (new Date(m.created_at) > new Date(ticketUnread[m.ticket_id].latest_at)) {
+          ticketUnread[m.ticket_id].latest_at = m.created_at;
+        }
+      }
     });
-    setUnreadMsgCount(total);
+
+    const ticketIds = Object.keys(ticketUnread);
+    if (ticketIds.length === 0) {
+      setUnreadTickets([]);
+      return;
+    }
+
+    // Fetch ticket info for those tickets
+    const { data: tickets } = await supabase
+      .from("tickets")
+      .select("id, ticket_number, subject")
+      .in("id", ticketIds);
+
+    const result: UnreadTicket[] = (tickets || []).map((t: any) => ({
+      ticket_id: t.id,
+      ticket_number: t.ticket_number,
+      subject: t.subject,
+      count: ticketUnread[t.id]?.count || 0,
+      latest_at: ticketUnread[t.id]?.latest_at || "",
+    })).sort((a, b) => new Date(b.latest_at).getTime() - new Date(a.latest_at).getTime());
+
+    setUnreadTickets(result);
   }, [user]);
 
   useEffect(() => { fetchNotifications(); fetchUnreadMessages(); }, [fetchNotifications, fetchUnreadMessages]);
 
-  // Realtime
   useEffect(() => {
     if (!user) return;
     const channel = supabase
@@ -88,6 +129,7 @@ export default function NotificationBell() {
   }, [user, fetchNotifications, fetchUnreadMessages]);
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const unreadMsgCount = unreadTickets.reduce((sum, t) => sum + t.count, 0);
   const totalBadge = unreadCount + unreadMsgCount;
 
   const markRead = async (id: string) => {
@@ -101,7 +143,7 @@ export default function NotificationBell() {
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
   };
 
-  const handleClick = (n: Notification) => {
+  const handleClickNotification = (n: Notification) => {
     markRead(n.id);
     if (n.ticket_id) {
       navigate(`/tickets/${n.ticket_id}`);
@@ -110,6 +152,13 @@ export default function NotificationBell() {
     }
     setOpen(false);
   };
+
+  const handleClickUnreadTicket = (ticketId: string) => {
+    navigate(`/tickets/${ticketId}`);
+    setOpen(false);
+  };
+
+  const hasAny = notifications.length > 0 || unreadTickets.length > 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -132,28 +181,93 @@ export default function NotificationBell() {
             </button>
           )}
         </div>
-        <ScrollArea className="max-h-[400px]">
-          {notifications.length === 0 ? (
+
+        <ScrollArea className="max-h-[420px]">
+          {!hasAny ? (
             <p className="text-sm text-muted-foreground text-center py-8">Sem notificações</p>
           ) : (
-            <div className="divide-y">
-              {notifications.map((n) => (
-                <div
-                  key={n.id}
-                  className={`px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors ${!n.is_read ? "bg-primary/5" : ""}`}
-                  onClick={() => handleClick(n)}
-                >
-                  <p className="text-sm">
-                    {n.sender_id && senderNames[n.sender_id] && (
-                      <span className="font-medium">{senderNames[n.sender_id]} </span>
-                    )}
-                    {n.content}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {new Date(n.created_at).toLocaleString("pt-PT")}
-                  </p>
+            <div>
+              {/* Section: Unread client messages */}
+              {unreadTickets.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 px-4 py-2 bg-muted/40 border-b">
+                    <MessageSquare className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-xs font-semibold text-primary uppercase tracking-wide">
+                      Mensagens de clientes
+                    </span>
+                    <Badge variant="destructive" className="ml-auto h-4 min-w-4 rounded-full px-1 text-[10px]">
+                      {unreadMsgCount}
+                    </Badge>
+                  </div>
+                  <div className="divide-y">
+                    {unreadTickets.map((t) => (
+                      <div
+                        key={t.ticket_id}
+                        className="px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors bg-primary/5 flex items-start gap-3"
+                        onClick={() => handleClickUnreadTicket(t.ticket_id)}
+                      >
+                        <div className="mt-0.5 h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                          <MessageSquare className="h-3.5 w-3.5 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium leading-tight truncate">
+                            #{t.ticket_number} – {t.subject}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {t.count === 1
+                              ? "1 mensagem por responder"
+                              : `${t.count} mensagens por responder`}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+                            {new Date(t.latest_at).toLocaleString("pt-PT")}
+          </p>
+                        </div>
+                        <Badge variant="destructive" className="shrink-0 h-5 min-w-5 rounded-full px-1.5 text-[10px] mt-0.5">
+                          {t.count}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
+
+              {/* Section: System notifications */}
+              {notifications.length > 0 && (
+                <div>
+                  {unreadTickets.length > 0 && (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-muted/40 border-b border-t">
+                      <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Notificações do sistema
+                      </span>
+                      {unreadCount > 0 && (
+                        <Badge className="ml-auto h-4 min-w-4 rounded-full px-1 text-[10px]">
+                          {unreadCount}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                  <div className="divide-y">
+                    {notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className={`px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors ${!n.is_read ? "bg-primary/5" : ""}`}
+                        onClick={() => handleClickNotification(n)}
+                      >
+                        <p className="text-sm">
+                          {n.sender_id && senderNames[n.sender_id] && (
+                            <span className="font-medium">{senderNames[n.sender_id]} </span>
+                          )}
+                          {n.content}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {new Date(n.created_at).toLocaleString("pt-PT")}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </ScrollArea>
