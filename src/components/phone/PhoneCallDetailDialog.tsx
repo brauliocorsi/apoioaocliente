@@ -13,7 +13,8 @@ import { toast } from "@/hooks/use-toast";
 import ReminderForm from "./ReminderForm";
 import ReminderList from "./ReminderList";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
-import { Link, X, ExternalLink, Save, Phone, Bell, Ticket, UserPlus } from "lucide-react";
+import { Link, X, ExternalLink, Save, Phone, Bell, Ticket, UserPlus, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useNavigate } from "react-router-dom";
 
 interface PhoneCall {
@@ -286,10 +287,46 @@ export default function PhoneCallDetailDialog({ call, open, onClose, onUpdated }
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Adicionar observações..." />
           </div>
 
-          <Button onClick={handleSave} disabled={saving} className="w-full gap-1.5">
-            <Save className="h-3.5 w-3.5" />
-            {saving ? "A guardar..." : "Guardar Alterações"}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handleSave} disabled={saving} className="flex-1 gap-1.5">
+              <Save className="h-3.5 w-3.5" />
+              {saving ? "A guardar..." : "Guardar Alterações"}
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="icon" className="text-destructive hover:bg-destructive/10 flex-shrink-0">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Excluir ligação?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta ação é irreversível. A ligação de "{call.client_name}" e todos os lembretes associados serão permanentemente eliminados.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={async () => {
+                      await supabase.from("phone_call_reminders" as any).delete().eq("phone_call_id", call.id);
+                      const { error } = await supabase.from("phone_calls" as any).delete().eq("id", call.id);
+                      if (error) {
+                        toast({ title: "Erro ao excluir", description: error.message, variant: "destructive" });
+                      } else {
+                        toast({ title: "Ligação excluída com sucesso" });
+                        onClose();
+                        onUpdated();
+                      }
+                    }}
+                  >
+                    Excluir
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
 
           <Separator />
 
