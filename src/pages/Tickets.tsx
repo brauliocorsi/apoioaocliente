@@ -80,7 +80,8 @@ export default function Tickets() {
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [slaFilter, setSlaFilter] = useState<string>("all");
-  const [view, setView] = useState<"list" | "kanban">("list");
+  const [view, setView] = useState<"list" | "kanban">("kanban");
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [fetchKey, setFetchKey] = useState(0);
   const navigate = useNavigate();
   const { statuses, statusLabels } = useTicketStatuses();
@@ -134,6 +135,26 @@ export default function Tickets() {
       });
       setCallCounts(counts);
       setLoading(false);
+
+      // Fetch unread message counts for agent
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser && data && data.length > 0) {
+        const ticketIds = data.map((t: any) => t.id);
+        const [{ data: readStatuses }, { data: clientMsgs }] = await Promise.all([
+          supabase.from("ticket_read_status").select("ticket_id, last_read_at").in("ticket_id", ticketIds),
+          supabase.from("ticket_messages").select("ticket_id, created_at").eq("sender_type", "client").in("ticket_id", ticketIds),
+        ]);
+        const readMap: Record<string, string> = {};
+        (readStatuses || []).forEach((r: any) => { readMap[r.ticket_id] = r.last_read_at; });
+        const unread: Record<string, number> = {};
+        (clientMsgs || []).forEach((m: any) => {
+          const lastRead = readMap[m.ticket_id];
+          if (!lastRead || new Date(m.created_at) > new Date(lastRead)) {
+            unread[m.ticket_id] = (unread[m.ticket_id] || 0) + 1;
+          }
+        });
+        setUnreadCounts(unread);
+      }
     };
     fetch();
   }, [statusFilter, priorityFilter, agentFilter, fetchKey]);
@@ -250,7 +271,7 @@ export default function Tickets() {
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : view === "kanban" ? (
-        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} callCounts={callCounts} agentProfiles={agentProfiles} />
+        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} callCounts={callCounts} agentProfiles={agentProfiles} unreadCounts={unreadCounts} />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -289,6 +310,11 @@ export default function Tickets() {
                       )}
                       <SlaIcon status={getTicketSlaStatus(t)} ticket={t as SlaTicket} />
                       {t.category_id && <Badge variant="outline" className="text-xs">{categories[t.category_id] || t.category_id}</Badge>}
+                      {unreadCounts[t.id] > 0 && (
+                        <Badge variant="destructive" className="text-[10px] h-5 min-w-[20px] justify-center">
+                          {unreadCounts[t.id]}
+                        </Badge>
+                      )}
                       <PriorityFlag priority={t.priority} />
                       <Badge variant="secondary">{statusLabels[t.status] || t.status}</Badge>
                     </div>

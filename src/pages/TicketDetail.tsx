@@ -77,6 +77,15 @@ export default function TicketDetail() {
 
   useEffect(() => { fetchTicket(); }, [id]);
 
+  // Mark ticket as read for current agent
+  useEffect(() => {
+    if (!id || !user) return;
+    supabase.from("ticket_read_status").upsert(
+      { ticket_id: id, agent_id: user.id, last_read_at: new Date().toISOString() },
+      { onConflict: "ticket_id,agent_id" }
+    );
+  }, [id, user]);
+
   // Load agents for mentions + sender profiles for chat avatars
   useEffect(() => {
     const loadProfiles = async () => {
