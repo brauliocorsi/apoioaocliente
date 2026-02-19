@@ -50,11 +50,11 @@ Deno.serve(async (req) => {
         .filter(Boolean)
     );
 
-    // Get phone call info for context
+    // Get phone call info for context (include assigned_to)
     const callIds = [...new Set(reminders.map((r) => r.phone_call_id))];
     const { data: calls } = await supabase
       .from("phone_calls")
-      .select("id, client_name, subject")
+      .select("id, client_name, subject, assigned_to")
       .in("id", callIds);
 
     const callMap = Object.fromEntries((calls || []).map((c) => [c.id, c]));
@@ -64,12 +64,15 @@ Deno.serve(async (req) => {
       if (alreadyNotified.has(rem.id)) continue;
 
       const call = callMap[rem.phone_call_id];
+      // Only notify if the call has an assigned agent
+      if (!call?.assigned_to) continue;
+
       const callLabel = call ? `${call.client_name} — ${call.subject}` : "Ligação";
       const isOverdue = new Date(rem.remind_at) <= now;
       const prefix = isOverdue ? "⏰ Lembrete atrasado" : "🔔 Lembrete próximo";
 
       notifications.push({
-        recipient_id: rem.created_by,
+        recipient_id: call.assigned_to,
         type: "reminder",
         content: `${prefix}: "${rem.message}" (${callLabel}) [rid:${rem.id}]`,
       });
