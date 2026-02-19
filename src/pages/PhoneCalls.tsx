@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Phone, Clock, CheckCircle2, Loader2, XCircle, Search } from "lucide-react";
 import PhoneCallForm from "@/components/phone/PhoneCallForm";
+import { usePhoneCallStatuses } from "@/hooks/usePhoneCallStatuses";
 import PhoneCallKanban from "@/components/phone/PhoneCallKanban";
 import PhoneCallDetailDialog from "@/components/phone/PhoneCallDetailDialog";
 
@@ -33,6 +34,7 @@ export default function PhoneCalls() {
   const [priorityFilter, setPriorityFilter] = useState("todas");
   const [search, setSearch] = useState("");
   const [selectedCall, setSelectedCall] = useState<PhoneCall | null>(null);
+  const { statuses, statusLabels } = usePhoneCallStatuses();
 
   const fetchCalls = async () => {
     const { data } = await supabase
@@ -99,15 +101,31 @@ export default function PhoneCalls() {
 
   const today = new Date().toDateString();
   const todayCalls = calls.filter((c) => new Date(c.created_at).toDateString() === today);
-  const pendentes = calls.filter((c) => c.status === "pendente").length;
-  const emAndamento = calls.filter((c) => c.status === "em_andamento").length;
-  const concluidos = todayCalls.filter((c) => c.status === "concluido").length;
+
+  // Build summary cards dynamically from phone_call_statuses
+  const statusIcons: Record<string, typeof Phone> = {};
+  const statusIconBg: Record<string, string> = {};
+  // Default icon mappings by position
+  const iconList = [Clock, Phone, CheckCircle2];
+  const iconBgList = ["bg-warning/10 text-warning", "bg-primary/10 text-primary", "bg-success/10 text-success"];
 
   const summaryCards = [
-    { title: "Hoje", subtitle: "Ligações registadas hoje", value: todayCalls.length, icon: Phone, color: "hsl(215, 70%, 45%)", iconBg: "bg-primary/10 text-primary" },
-    { title: "Pendentes", subtitle: "Aguardam tratamento", value: pendentes, icon: Clock, color: "hsl(38, 92%, 50%)", iconBg: "bg-warning/10 text-warning" },
-    { title: "Em Andamento", subtitle: "Em curso", value: emAndamento, icon: Phone, color: "hsl(215, 70%, 45%)", iconBg: "bg-primary/10 text-primary" },
-    { title: "Concluídos", subtitle: "Finalizados hoje", value: concluidos, icon: CheckCircle2, color: "hsl(142, 71%, 45%)", iconBg: "bg-success/10 text-success" },
+    {
+      title: "Hoje",
+      subtitle: "Ligações registadas hoje",
+      value: todayCalls.length,
+      icon: Phone,
+      color: "hsl(215, 70%, 45%)",
+      iconBg: "bg-primary/10 text-primary",
+    },
+    ...statuses.map((s, i) => ({
+      title: s.name,
+      subtitle: `Estado: ${s.name}`,
+      value: calls.filter((c) => c.status === s.id).length,
+      icon: iconList[i % iconList.length],
+      color: s.color,
+      iconBg: iconBgList[i % iconBgList.length],
+    })),
   ];
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;

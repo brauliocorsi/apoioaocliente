@@ -159,8 +159,13 @@ export default function AgentsTab() {
                       onChange={async (e) => {
                         const newColor = e.target.value;
                         setAgents((prev) => prev.map((a) => a.id === agent.id ? { ...a, agent_color: newColor } : a));
-                        await supabase.from("profiles").update({ agent_color: newColor } as any).eq("id", agent.id);
-                        toast({ title: `Cor de ${agent.full_name} atualizada` });
+                        const { error } = await supabase.from("profiles").update({ agent_color: newColor } as any).eq("id", agent.id);
+                        if (error) {
+                          toast({ title: "Erro ao atualizar cor", description: error.message, variant: "destructive" });
+                          fetchAgents();
+                        } else {
+                          toast({ title: `Cor de ${agent.full_name} atualizada` });
+                        }
                       }}
                       className="h-7 w-7 rounded cursor-pointer border-0 p-0"
                       title="Cor do agente"
