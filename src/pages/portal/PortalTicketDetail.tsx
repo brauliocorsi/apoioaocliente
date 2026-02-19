@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Loader2, Send, Paperclip, FileText, Download, X, FileImage, FileVideo } from "lucide-react";
-import TicketStatusStepper from "@/components/portal/TicketStatusStepper";
 import { v4 as uuidv4 } from "uuid";
 import MessageReactions from "@/components/chat/MessageReactions";
 
@@ -23,7 +22,7 @@ export default function PortalTicketDetail() {
   const [attachments, setAttachments] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [statuses, setStatuses] = useState<Record<string, { name: string; color: string }>>({});
-  const [statusList, setStatusList] = useState<any[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -44,7 +43,7 @@ export default function PortalTicketDetail() {
     const map: Record<string, { name: string; color: string }> = {};
     (sts || []).forEach((s: any) => { map[s.id] = { name: s.name, color: s.color }; });
     setStatuses(map);
-    setStatusList(sts || []);
+    
     setAttachments((atts || []).map((a: any) => ({
       ...a,
       url: supabase.storage.from("ticket-attachments").getPublicUrl(a.file_path).data.publicUrl,
@@ -205,22 +204,19 @@ export default function PortalTicketDetail() {
             Criado em {new Date(ticket.created_at).toLocaleDateString("pt-PT")}
           </p>
         </div>
-        <Badge
-          variant="secondary"
-          style={st ? { backgroundColor: st.color + "20", color: st.color, borderColor: st.color + "40" } : {}}
-          className="border text-sm"
+        <div
+          className="flex items-center gap-2 rounded-lg px-4 py-2 border"
+          style={st ? { backgroundColor: st.color + "12", borderColor: st.color + "40" } : {}}
         >
-          {st?.name || ticket.status}
-        </Badge>
+          <span
+            className="h-2.5 w-2.5 rounded-full animate-pulse"
+            style={st ? { backgroundColor: st.color } : {}}
+          />
+          <span className="text-sm font-semibold" style={st ? { color: st.color } : {}}>
+            {st?.name || ticket.status}
+          </span>
+        </div>
       </div>
-
-      {statusList.length > 0 && (
-        <Card>
-          <CardContent className="py-4">
-            <TicketStatusStepper statuses={statusList} currentStatusId={ticket.status} />
-          </CardContent>
-        </Card>
-      )}
 
       {ticket.description && (
         <Card>
