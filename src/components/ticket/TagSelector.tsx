@@ -12,8 +12,8 @@ const groupLabels: Record<string, string> = {
   produto: "Produto",
   entrega: "Entrega",
   pagamentos: "Pagamentos",
-  reclamacao: "Reclamação",
-  gestao_interna: "Gestão Interna",
+  reclamacao: "Reclamação / Devolução",
+  gestao_interna: "Gestão Interna / Garantia",
 };
 
 interface TagSelectorProps {
