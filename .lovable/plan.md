@@ -1,104 +1,104 @@
 
-# Correcção: Eventos, SLA e Timeline para tickets criados pelo portal
+# SLA Dinâmico: Configuração Global, Por Status e Contador de Dias Restantes
 
-## Problema Raiz
+## Situação Actual
 
-Existem 3 problemas distintos mas relacionados:
+O sistema já tem SLA configurado na tabela `sla_config` com prazos em minutos por categoria+prioridade. Contudo:
 
-**1. Sem eventos na timeline**
-O `PortalNewTicket.tsx` NÃO insere eventos `ticket_events` ao criar um ticket.
-A RLS de `ticket_events_insert` só permite agentes (`is_authenticated_agent()`), por isso um cliente nunca consegue inserir directamente.
-Resultado: tickets criados pelo portal ficam sem histórico.
+- A `sla_config` **não pode ser editada** pela UI (não existe ecrã de gestão)
+- Os SLAs actuais estão em **minutos** (ex: resolução = 1440 min = 1 dia), quando o requisito é **30 dias**
+- Cada status já tem `sla_minutes` configurável, mas sem feedback visual no Kanban do tempo restante nesse estágio
+- Não existe contador destacado de "dias restantes para resolução total" no detalhe do ticket
 
-**2. Sem SLA**
-O portal não passa `category_id` nem calcula `sla_first_response_at` / `sla_resolution_at`.
-Resultado: ticket 8 tem `sla_first_response_at = NULL`.
+## O Que Vai Ser Construído
 
-**3. Notas internas da timeline do agente**
-A timeline interna do `TicketDetail.tsx` também usa `ticket_events`. Como o ticket 8 não tem eventos, aparece vazio.
+### 1. Aba "SLA" nas Configurações (Settings → SLA)
 
-## Solução: Triggers automáticos na base de dados
+Um novo tab dedicado em `SettingsPage.tsx` com duas secções:
 
-Em vez de depender do frontend para inserir eventos (frágil e inconsistente), vamos criar triggers `SECURITY DEFINER` que disparam automaticamente:
+**Secção A — SLA Global por Categoria + Prioridade**
+Tabela editável onde supervisores definem, para cada par Categoria × Prioridade (P1/P2/P3), os prazos de:
+- Primeira resposta (em dias/horas)
+- Resolução total (em dias)
 
-### Trigger 1 — Auto evento "created" ao inserir ticket
-Quando qualquer ticket é inserido (por agente OU por cliente), regista automaticamente um evento `created` em `ticket_events`. Isto resolve a timeline para sempre.
+Os valores são guardados na tabela `sla_config` existente (em minutos, com conversão transparente).
 
-### Trigger 2 — Auto evento "status_change" ao mudar status
-Quando o campo `status` de um ticket é alterado, regista automaticamente o evento `status_change`. Actualmente isto é feito manualmente no `TicketDetail.tsx` mas pode falhar em actualizações indirectas.
+**Secção B — SLA por Estado (Tempo Máximo no Estágio)**
+Lista dos estados existentes com o campo `sla_minutes` editável (já existe na tabela, mas agora apresentado em horas com label clara). Mostra visualmente quais estados têm SLA definido e quais não têm.
 
-### Trigger 3 — Auto cálculo SLA ao inserir/actualizar ticket
-Quando um ticket é inserido e tem `category_id` e `priority`, ou quando a `category_id` é actualizada depois, calcula automaticamente `sla_first_response_at` e `sla_resolution_at` a partir da tabela `sla_config`. Isto resolve o SLA do ticket 8 (quando o agente atribuir uma categoria) e de todos os futuros tickets do portal.
+### 2. Contador de Dias Restantes no Detalhe do Ticket
 
-### Correcção retroactiva para ticket 8
-A migração também insere os eventos em falta no ticket 8 que já existe (evento `created` e evento `status_change` para `em_analise`).
+No componente `SlaIndicator.tsx` (que aparece no sidebar do ticket), adicionar um bloco de destaque no topo com:
+- Contagem regressiva grande: **"X dias e Y horas restantes"** para resolução total
+- Barra de progresso colorida (verde → amarelo → vermelho)
+- Estado: se expirado, mostra "Expirado há X dias"
+- Se SLA pausado, mostra "Pausado — Aguarda Cliente"
 
-## Ficheiros a alterar
+### 3. Badge de Tempo Restante no Kanban por Estágio
 
-| Ficheiro | Alteração |
+Em cada coluna do Kanban, abaixo do contador de tickets, mostrar discretamente quantos tickets estão com o SLA do estágio (`sla_stage_deadline_at`) expirado ou em risco nessa coluna.
+
+Nos cartões do Kanban, o ícone SLA existente já mostra o SLA de resolução. Vamos garantir que quando `sla_stage_deadline_at` está activo, ele também é considerado no ícone.
+
+## Ficheiros a Criar/Alterar
+
+| Ficheiro | Acção |
 |---|---|
-| Migração SQL nova | Criar os 3 triggers + corrigir ticket 8 retroactivamente |
+| `src/components/settings/SlaConfigTab.tsx` | Criar — nova aba de configuração SLA |
+| `src/pages/SettingsPage.tsx` | Editar — adicionar tab "SLA" |
+| `src/components/ticket/SlaIndicator.tsx` | Editar — adicionar contador de dias em destaque |
+| `src/components/KanbanBoard.tsx` | Editar — badge de alertas SLA por coluna |
 
-## Porquê triggers em vez de código no frontend?
+## Detalhes Técnicos
 
-- Funcionam independentemente de quem cria o ticket (agente, cliente, API)
-- Não dependem de permissões RLS para o utilizador que cria
-- Garantem consistência em 100% dos casos
-- A RLS de `ticket_events_select_clients` já filtra o que o cliente vê (exclui `note`, `approval_*`)
+### Nova Aba SLA — `SlaConfigTab.tsx`
 
-## Detalhes técnicos
+Busca todas as categorias e cruza com `sla_config` para montar uma grelha editável:
 
 ```text
--- Trigger 1: Auto-criar evento "created"
-CREATE OR REPLACE FUNCTION auto_create_ticket_event()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-  INSERT INTO ticket_events (ticket_id, event_type, content, metadata)
-  VALUES (NEW.id, 'created', 'Ticket criado', '{}');
-  RETURN NEW;
-END;
-$$;
-
--- Trigger 2: Auto-criar evento "status_change"
-CREATE OR REPLACE FUNCTION auto_status_change_event()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN
-  IF OLD.status IS DISTINCT FROM NEW.status THEN
-    INSERT INTO ticket_events (ticket_id, event_type, content, metadata)
-    VALUES (
-      NEW.id,
-      'status_change',
-      'Estado alterado: ' || OLD.status || ' → ' || NEW.status,
-      jsonb_build_object('from', OLD.status, 'to', NEW.status)
-    );
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
--- Trigger 3: Auto-calcular SLA
-CREATE OR REPLACE FUNCTION auto_calculate_sla()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE v_sla record;
-BEGIN
-  IF NEW.category_id IS NOT NULL AND (
-    OLD IS NULL OR OLD.category_id IS DISTINCT FROM NEW.category_id OR OLD.priority IS DISTINCT FROM NEW.priority
-  ) THEN
-    SELECT first_response_minutes, resolution_minutes
-    INTO v_sla
-    FROM sla_config
-    WHERE category_id = NEW.category_id AND priority = NEW.priority::ticket_priority
-    LIMIT 1;
-    IF FOUND THEN
-      NEW.sla_first_response_at := NEW.created_at + (v_sla.first_response_minutes * interval '1 minute');
-      NEW.sla_resolution_at     := NEW.created_at + (v_sla.resolution_minutes     * interval '1 minute');
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$;
+Categoria         | P1 - 1ªResp | P1 - Resolução | P2 - 1ªResp | P2 - Resolução | P3 - 1ªResp | P3 - Resolução
+Entrega e Mont.   |   30 min    |    4 h         |   2 h       |    24 h        |   8 h       |    48 h
+Garantia (3 anos) |   8 h       |    4.17 dias   |   24 h      |    8.33 dias   |   48 h      |    20 dias
+...
 ```
 
-Depois, correcção retroactiva para o ticket 8:
-- Inserir evento `created` com a data de criação do ticket
-- Inserir evento `status_change` (novo → em_analise) com a data de `updated_at`
+Os valores são apresentados de forma legível (convertendo minutos → dias/horas). Ao guardar, convertem de volta para minutos via UPSERT na `sla_config`.
+
+A actualização usa `UPSERT` (INSERT ... ON CONFLICT DO UPDATE) pois a tabela não tem RLS de INSERT/UPDATE habilitada para agentes — será necessária uma pequena migração para permitir que supervisores editem a `sla_config`.
+
+### Migração Necessária
+
+Adicionar políticas RLS à tabela `sla_config` para supervisores poderem INSERT/UPDATE:
+
+```sql
+CREATE POLICY "sla_config_insert" ON public.sla_config
+  FOR INSERT WITH CHECK (has_role(auth.uid(), 'supervisor'));
+
+CREATE POLICY "sla_config_update" ON public.sla_config
+  FOR UPDATE USING (has_role(auth.uid(), 'supervisor'));
+
+CREATE POLICY "sla_config_delete" ON public.sla_config
+  FOR DELETE USING (has_role(auth.uid(), 'supervisor'));
+```
+
+### Contador de Dias Restantes em Destaque
+
+Em `SlaIndicator.tsx`, adicionar antes das barras existentes:
+
+```text
+┌─────────────────────────────────┐
+│  ⏱ 28 dias e 14 horas           │
+│  ████████████░░░░░░░ 62%         │
+│  para resolução total            │
+└─────────────────────────────────┘
+```
+
+Cálculo: usa a função `calcRemaining` já existente com `sla_resolution_at` + `sla_paused_total_seconds` + `sla_paused_at`.
+
+### Kanban — Alertas por Coluna
+
+No header de cada coluna, ao lado do badge de contagem de tickets, adicionar:
+- Ícone 🔴 + número se houver tickets com SLA de estágio (`sla_stage_deadline_at`) expirado
+- Ícone 🟡 + número se houver tickets em risco (< 25% do tempo restante)
+
+Isto é calculado no frontend a partir dos dados dos tickets já carregados — sem queries adicionais.
