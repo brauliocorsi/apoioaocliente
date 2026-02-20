@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,7 +12,7 @@ import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { DecisionEngine, type RuleSuggestion } from "@/lib/decisionEngine";
+import { DecisionEngine, type RuleSuggestion, type DecisionRule } from "@/lib/decisionEngine";
 import { v4 as uuidv4 } from "uuid";
 import FileUpload from "@/components/FileUpload";
 import MacroSelector from "@/components/ticket/MacroSelector";
@@ -55,7 +56,7 @@ export default function TicketDetail() {
 
   const fetchTicket = async () => {
     if (!id) return;
-    const [{ data: t }, { data: evts }, { data: tTags }, { data: tClauses }, { data: tAttachments }, { data: msgs }, { data: allClauses }, { data: allMacrosData }] = await Promise.all([
+    const [{ data: t }, { data: evts }, { data: tTags }, { data: tClauses }, { data: tAttachments }, { data: msgs }, { data: allClauses }, { data: allMacrosData }, { data: rulesData }] = await Promise.all([
       supabase.from("tickets").select("*").eq("id", id).single(),
       supabase.from("ticket_events").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
       supabase.from("ticket_tags").select("tag_id").eq("ticket_id", id),
@@ -64,6 +65,7 @@ export default function TicketDetail() {
       supabase.from("ticket_messages").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
       supabase.from("clauses").select("id, code, description"),
       supabase.from("macros").select("id, title, content"),
+      supabase.from("decision_rules" as any).select("*").eq("is_active", true).order("sort_order"),
     ]);
     setTicket(t);
     setEvents(evts || []);
@@ -86,7 +88,9 @@ export default function TicketDetail() {
     setAllMacros((allMacrosData || []) as { id: string; title: string; content: string }[]);
 
     if (t) {
-      const s = DecisionEngine.evaluate(t, (tTags || []).map((r: any) => r.tag_id));
+      const currentTagIds = (tTags || []).map((r: any) => r.tag_id);
+      const rules = ((rulesData as unknown) as DecisionRule[]) || [];
+      const s = DecisionEngine.evaluateRules(t, currentTagIds, rules);
       setSuggestions(s);
       // Open resolution section if there's an existing resolution
       if (t.resolution_type) setIsResolutionOpen(true);
@@ -529,10 +533,10 @@ export default function TicketDetail() {
             <Gavel className="h-4 w-4 text-muted-foreground shrink-0" />
             <span className="text-sm font-medium flex-1">Decisão Formal</span>
             {ticket.resolution_type === "resolved" && (
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">✅ Resolvido</span>
+              <Badge variant="default" className="text-xs">✅ Resolvido</Badge>
             )}
             {ticket.resolution_type === "cancelled" && (
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">❌ Cancelado</span>
+              <Badge variant="destructive" className="text-xs">❌ Cancelado</Badge>
             )}
             {!ticket.resolution_type && (
               <span className="text-xs text-muted-foreground">Sem decisão registada</span>

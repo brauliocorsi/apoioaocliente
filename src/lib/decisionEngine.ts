@@ -6,103 +6,83 @@ export interface RuleSuggestion {
   suggestedMacro?: string;
 }
 
-export class DecisionEngine {
-  static evaluate(ticket: any, currentTags: string[]): RuleSuggestion[] {
-    const suggestions: RuleSuggestion[] = [];
+export interface DecisionRule {
+  id: string;
+  name: string;
+  description: string | null;
+  condition_type: string;
+  condition_value: string | null;
+  condition_extra: Record<string, any>;
+  suggested_tag_ids: string[];
+  suggested_clause_ids: string[];
+  suggested_macro_id: string | null;
+  message: string;
+  is_active: boolean;
+  sort_order: number;
+}
 
-    // R1 — 48h pós-entrega
-    if (ticket.category_id === "B" && ticket.delivery_date) {
+function evaluateCondition(rule: DecisionRule, ticket: any, currentTags: string[]): boolean {
+  const extra = rule.condition_extra || {};
+
+  switch (rule.condition_type) {
+    case "category":
+      return ticket.category_id === rule.condition_value;
+
+    case "subcategory":
+      return ticket.subcategory_id === rule.condition_value;
+
+    case "payment_method": {
+      const categoryMatch = extra.category_id ? ticket.category_id === extra.category_id : true;
+      return ticket.payment_method === rule.condition_value && categoryMatch;
+    }
+
+    case "field_bool": {
+      const categoryMatch = extra.category_id ? ticket.category_id === extra.category_id : true;
+      const field = extra.field as string;
+      return categoryMatch && !!field && ticket[field] === true;
+    }
+
+    case "tag_exists": {
+      const categoryMatch = rule.condition_value ? ticket.category_id === rule.condition_value : true;
+      const tagsToCheck: string[] = extra.tags || [];
+      return categoryMatch && currentTags.some((t) => tagsToCheck.includes(t));
+    }
+
+    case "delivery_hours": {
+      if (ticket.category_id !== rule.condition_value) return false;
+      const requiresField = extra.requires_field as string;
+      if (requiresField && !ticket[requiresField]) return false;
       const deliveryDate = new Date(ticket.delivery_date);
       const hoursSince = (Date.now() - deliveryDate.getTime()) / (1000 * 60 * 60);
-      if (hoursSince > 48) {
-        suggestions.push({
-          rule: "R1",
-          message: "Reclamação fora das 48h. Pode não ser considerada válida.",
-          suggestedTags: ["48h_fora"],
-          suggestedClauses: ["V-f"],
-          suggestedMacro: "M03",
-        });
-      } else {
-        suggestions.push({
-          rule: "R1",
-          message: "Reclamação dentro das 48h. Procedimento normal.",
-          suggestedTags: ["48h_ok"],
-          suggestedClauses: ["V-f", "V-e"],
-          suggestedMacro: "M02",
-        });
-      }
+      const hours = (extra.hours as number) || 48;
+      const direction = extra.direction as string;
+      if (direction === "after") return hoursSince > hours;
+      if (direction === "before") return hoursSince <= hours;
+      return false;
     }
 
-    // R2 — Devolução com montagem
-    if (ticket.category_id === "D" && ticket.is_assembled) {
-      suggestions.push({
-        rule: "R2",
-        message: "Produto montado. Devolução não elegível.",
-        suggestedTags: [],
-        suggestedClauses: ["IX-b", "VII-a"],
-        suggestedMacro: "M13",
-      });
-    }
+    default:
+      return false;
+  }
+}
 
-    // R3 — Personalizado
-    if (ticket.is_personalized && ticket.category_id === "D") {
-      suggestions.push({
-        rule: "R3",
-        message: "Produto personalizado. Devolução por arrependimento não aplicável.",
-        suggestedTags: ["personalizado"],
-        suggestedClauses: ["VII-b", "I-d"],
-        suggestedMacro: "M14",
-      });
-    }
+export class DecisionEngine {
+  /** Legacy static method — kept for backward compat, uses hardcoded rules */
+  static evaluate(ticket: any, currentTags: string[]): RuleSuggestion[] {
+    return [];
+  }
 
-    // R4 — Multibanco na entrega
-    if (ticket.payment_method === "multibanco" && ticket.category_id === "F") {
-      suggestions.push({
-        rule: "R4",
-        message: "Pagamento multibanco na entrega requer aviso prévio.",
-        suggestedTags: ["tpa_solicitado", "pagamento_entrega"],
-        suggestedClauses: ["II-a"],
-        suggestedMacro: "M08",
-      });
-    }
-
-    // R5 — Transferência na entrega
-    if (ticket.payment_method === "transferencia" && ticket.category_id === "F") {
-      suggestions.push({
-        rule: "R5",
-        message: "Transferência na entrega não aceite.",
-        suggestedTags: ["transferencia_antecipada"],
-        suggestedClauses: ["II-c"],
-        suggestedMacro: "M09",
-      });
-    }
-
-    // R6 — Acesso difícil
-    if (ticket.subcategory_id === "A4") {
-      suggestions.push({
-        rule: "R6",
-        message: "Acesso difícil: verificar fotos do local e possível termo de responsabilidade.",
-        suggestedTags: ["acesso_dificil", "termo_responsabilidade"],
-        suggestedClauses: ["V-d", "I-a"],
-        suggestedMacro: "M04",
-      });
-    }
-
-    // R7 — Garantia com exclusões
-    if (ticket.category_id === "C") {
-      const exclusionTags = ["humidade", "impacto", "limpeza_inadequada"];
-      const hasExclusion = currentTags.some((t) => exclusionTags.includes(t));
-      if (hasExclusion) {
-        suggestions.push({
-          rule: "R7",
-          message: "Evidência de exclusão de garantia detetada.",
-          suggestedTags: ["mau_uso_suspeito"],
-          suggestedClauses: ["VI-c", "VI-d"],
-          suggestedMacro: "M17",
-        });
-      }
-    }
-
-    return suggestions;
+  /** Dynamic evaluation from database rules */
+  static evaluateRules(ticket: any, currentTags: string[], rules: DecisionRule[]): RuleSuggestion[] {
+    const sorted = [...rules].sort((a, b) => a.sort_order - b.sort_order);
+    return sorted
+      .filter((rule) => rule.is_active && evaluateCondition(rule, ticket, currentTags))
+      .map((rule) => ({
+        rule: rule.id,
+        message: rule.message,
+        suggestedTags: rule.suggested_tag_ids || [],
+        suggestedClauses: rule.suggested_clause_ids || [],
+        suggestedMacro: rule.suggested_macro_id || undefined,
+      }));
   }
 }

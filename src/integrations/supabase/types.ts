@@ -157,6 +157,51 @@ export type Database = {
         }
         Relationships: []
       }
+      decision_rules: {
+        Row: {
+          condition_extra: Json | null
+          condition_type: string
+          condition_value: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          message: string
+          name: string
+          sort_order: number
+          suggested_clause_ids: string[] | null
+          suggested_macro_id: string | null
+          suggested_tag_ids: string[] | null
+        }
+        Insert: {
+          condition_extra?: Json | null
+          condition_type: string
+          condition_value?: string | null
+          description?: string | null
+          id: string
+          is_active?: boolean
+          message: string
+          name: string
+          sort_order?: number
+          suggested_clause_ids?: string[] | null
+          suggested_macro_id?: string | null
+          suggested_tag_ids?: string[] | null
+        }
+        Update: {
+          condition_extra?: Json | null
+          condition_type?: string
+          condition_value?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          message?: string
+          name?: string
+          sort_order?: number
+          suggested_clause_ids?: string[] | null
+          suggested_macro_id?: string | null
+          suggested_tag_ids?: string[] | null
+        }
+        Relationships: []
+      }
       email_logs: {
         Row: {
           created_at: string
