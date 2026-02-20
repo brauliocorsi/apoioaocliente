@@ -37,6 +37,7 @@ type TicketRow = {
   sla_resolution_at: string | null;
   sla_paused_at: string | null;
   sla_paused_total_seconds: number | null;
+  sla_stage_deadline_at: string | null;
   resolved_at: string | null;
   assigned_to: string | null;
 };
@@ -153,6 +154,19 @@ function DraggableTicket({ ticket, categoryNames, callCount, agentProfile, unrea
   );
 }
 
+function getStageSlaAlerts(tickets: TicketRow[]): { expired: number; atRisk: number } {
+  let expired = 0;
+  let atRisk = 0;
+  for (const t of tickets) {
+    if (!t.sla_stage_deadline_at) continue;
+    const remaining = new Date(t.sla_stage_deadline_at).getTime() - Date.now();
+    const total = new Date(t.sla_stage_deadline_at).getTime() - new Date(t.created_at).getTime();
+    if (remaining <= 0) expired++;
+    else if (total > 0 && remaining / total < 0.25) atRisk++;
+  }
+  return { expired, atRisk };
+}
+
 function DroppableColumn({ statusId, color, children, isOver }: { statusId: string; color: string; children: React.ReactNode; isOver: boolean }) {
   const { setNodeRef } = useDroppable({ id: statusId });
 
@@ -173,12 +187,14 @@ function InlineStatusHeader({
   color,
   count,
   onRename,
+  slaAlerts,
 }: {
   statusId: string;
   name: string;
   color: string;
   count: number;
   onRename: (id: string, newName: string) => void;
+  slaAlerts: { expired: number; atRisk: number };
 }) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(name);
@@ -226,9 +242,31 @@ function InlineStatusHeader({
             </button>
           </div>
         )}
-        <Badge variant="secondary" className="text-xs h-5 min-w-[20px] justify-center">
-          {count}
-        </Badge>
+        <div className="flex items-center gap-1">
+          {slaAlerts.expired > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-destructive bg-destructive/10 rounded px-1 py-0.5">
+                  <AlertTriangle className="h-3 w-3" />{slaAlerts.expired}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent><p className="text-xs">{slaAlerts.expired} ticket{slaAlerts.expired > 1 ? "s" : ""} com SLA de estágio expirado</p></TooltipContent>
+            </Tooltip>
+          )}
+          {slaAlerts.atRisk > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-warning bg-warning/10 rounded px-1 py-0.5">
+                  <Timer className="h-3 w-3" />{slaAlerts.atRisk}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent><p className="text-xs">{slaAlerts.atRisk} ticket{slaAlerts.atRisk > 1 ? "s" : ""} em risco de SLA de estágio</p></TooltipContent>
+            </Tooltip>
+          )}
+          <Badge variant="secondary" className="text-xs h-5 min-w-[20px] justify-center">
+            {count}
+          </Badge>
+        </div>
       </div>
     </div>
   );
@@ -326,6 +364,7 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, cal
               color={s.color}
               count={(grouped[s.id] || []).length}
               onRename={handleRenameStatus}
+              slaAlerts={getStageSlaAlerts(grouped[s.id] || [])}
             />
             <ScrollArea className="h-[calc(100vh-320px)]">
               <div className="p-2 space-y-2">

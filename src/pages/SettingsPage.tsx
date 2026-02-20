@@ -11,6 +11,7 @@ import FaqTab from "@/components/settings/FaqTab";
 import SmtpSettingsTab from "@/components/settings/SmtpSettingsTab";
 import EmailLogsTab from "@/components/settings/EmailLogsTab";
 import ClientsTab from "@/components/settings/ClientsTab";
+import SlaConfigTab from "@/components/settings/SlaConfigTab";
 
 export default function SettingsPage() {
   const { profile, role } = useAuth();
@@ -23,12 +24,13 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="profile" className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="profile">Perfil</TabsTrigger>
           <TabsTrigger value="agents">Agentes</TabsTrigger>
           <TabsTrigger value="statuses">Estados</TabsTrigger>
           <TabsTrigger value="categories">Categorias</TabsTrigger>
           <TabsTrigger value="tags">Etiquetas</TabsTrigger>
+          <TabsTrigger value="sla">SLA</TabsTrigger>
           <TabsTrigger value="templates">Templates Email</TabsTrigger>
           <TabsTrigger value="faq">FAQs</TabsTrigger>
           <TabsTrigger value="smtp">Email SMTP</TabsTrigger>
@@ -78,6 +80,11 @@ export default function SettingsPage() {
 
         <TabsContent value="tags">
           <TagsPage />
+        </TabsContent>
+
+
+        <TabsContent value="sla">
+          <SlaConfigTab />
         </TabsContent>
 
         <TabsContent value="templates">
