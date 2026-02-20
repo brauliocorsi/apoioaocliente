@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage, FileVideo, FileText, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage, FileVideo, FileText, Trash2, Gavel, ChevronDown, ChevronRight } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DecisionEngine, type RuleSuggestion } from "@/lib/decisionEngine";
@@ -47,16 +48,22 @@ export default function TicketDetail() {
   const noteFileRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [senderProfiles, setSenderProfiles] = useState<Record<string, { full_name: string; avatar_url?: string | null }>>({});
+  const [clauseMap, setClauseMap] = useState<Record<string, { code: string; description: string }>>({});
+  const [macroMap, setMacroMap] = useState<Record<string, string>>({});
+  const [allMacros, setAllMacros] = useState<{ id: string; title: string; content: string }[]>([]);
+  const [isResolutionOpen, setIsResolutionOpen] = useState(false);
 
   const fetchTicket = async () => {
     if (!id) return;
-    const [{ data: t }, { data: evts }, { data: tTags }, { data: tClauses }, { data: tAttachments }, { data: msgs }] = await Promise.all([
+    const [{ data: t }, { data: evts }, { data: tTags }, { data: tClauses }, { data: tAttachments }, { data: msgs }, { data: allClauses }, { data: allMacrosData }] = await Promise.all([
       supabase.from("tickets").select("*").eq("id", id).single(),
       supabase.from("ticket_events").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
       supabase.from("ticket_tags").select("tag_id").eq("ticket_id", id),
       supabase.from("ticket_clauses").select("clause_id").eq("ticket_id", id),
       supabase.from("ticket_attachments").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
       supabase.from("ticket_messages").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
+      supabase.from("clauses").select("id, code, description"),
+      supabase.from("macros").select("id, title, content"),
     ]);
     setTicket(t);
     setEvents(evts || []);
@@ -67,10 +74,22 @@ export default function TicketDetail() {
       ...a,
       url: supabase.storage.from("ticket-attachments").getPublicUrl(a.file_path).data.publicUrl,
     })));
-    
+
+    // Build clause and macro maps
+    const cMap: Record<string, { code: string; description: string }> = {};
+    (allClauses || []).forEach((c: any) => { cMap[c.id] = { code: c.code, description: c.description }; cMap[c.code] = { code: c.code, description: c.description }; });
+    setClauseMap(cMap);
+
+    const mMap: Record<string, string> = {};
+    (allMacrosData || []).forEach((m: any) => { mMap[m.id] = m.title; });
+    setMacroMap(mMap);
+    setAllMacros((allMacrosData || []) as { id: string; title: string; content: string }[]);
+
     if (t) {
       const s = DecisionEngine.evaluate(t, (tTags || []).map((r: any) => r.tag_id));
       setSuggestions(s);
+      // Open resolution section if there's an existing resolution
+      if (t.resolution_type) setIsResolutionOpen(true);
     }
     setLoading(false);
   };
@@ -455,11 +474,46 @@ export default function TicketDetail() {
                   <p className="text-xs text-muted-foreground mt-1">Tags: {s.suggestedTags.join(", ")}</p>
                 )}
                 {s.suggestedClauses.length > 0 && (
-                  <p className="text-xs text-muted-foreground">Cláusulas: {s.suggestedClauses.join(", ")}</p>
+                  <div className="mt-1">
+                    <p className="text-xs text-muted-foreground font-medium mb-0.5">Cláusulas sugeridas:</p>
+                    <ul className="space-y-0.5">
+                      {s.suggestedClauses.map((clauseId, ci) => {
+                        const clause = clauseMap[clauseId];
+                        return (
+                          <li key={ci} className="text-xs text-muted-foreground flex items-start gap-1">
+                            <span className="mt-0.5 shrink-0">•</span>
+                            {clause
+                              ? <span><span className="font-mono font-medium text-foreground">{clause.code}</span> — {clause.description}</span>
+                              : <span className="font-mono">{clauseId}</span>
+                            }
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
                 )}
-                {s.suggestedMacro && (
-                  <p className="text-xs text-muted-foreground">Macro sugerida: {s.suggestedMacro}</p>
-                )}
+                {s.suggestedMacro && (() => {
+                  const macroTitle = macroMap[s.suggestedMacro];
+                  const macro = allMacros.find((m) => m.id === s.suggestedMacro);
+                  return (
+                    <div className="mt-1 flex items-center gap-2 flex-wrap">
+                      <p className="text-xs text-muted-foreground">
+                        Macro sugerida: <span className="font-mono font-medium text-foreground">{s.suggestedMacro}</span>
+                        {macroTitle && <span> — {macroTitle}</span>}
+                      </p>
+                      {macro && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-5 text-xs px-2 py-0"
+                          onClick={() => setNote(macro.content)}
+                        >
+                          Usar Macro
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             ))}
           </CardContent>
@@ -468,7 +522,28 @@ export default function TicketDetail() {
 
       <SlaIndicator ticket={ticket} />
 
-      <ResolutionCard ticket={ticket} userId={user?.id || ""} onUpdate={fetchTicket} />
+      {/* Decisão Formal — Collapsible discreto */}
+      <Collapsible open={isResolutionOpen} onOpenChange={setIsResolutionOpen}>
+        <CollapsibleTrigger asChild>
+          <button className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border bg-card hover:bg-accent/50 transition-colors text-left">
+            <Gavel className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="text-sm font-medium flex-1">Decisão Formal</span>
+            {ticket.resolution_type === "resolved" && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">✅ Resolvido</span>
+            )}
+            {ticket.resolution_type === "cancelled" && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">❌ Cancelado</span>
+            )}
+            {!ticket.resolution_type && (
+              <span className="text-xs text-muted-foreground">Sem decisão registada</span>
+            )}
+            {isResolutionOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-2">
+          <ResolutionCard ticket={ticket} userId={user?.id || ""} onUpdate={fetchTicket} />
+        </CollapsibleContent>
+      </Collapsible>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
