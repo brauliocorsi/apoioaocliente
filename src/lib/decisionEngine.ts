@@ -39,7 +39,12 @@ function evaluateCondition(rule: DecisionRule, ticket: any, currentTags: string[
     case "field_bool": {
       const categoryMatch = extra.category_id ? ticket.category_id === extra.category_id : true;
       const field = extra.field as string;
-      return categoryMatch && !!field && ticket[field] === true;
+      if (!field || !categoryMatch) return false;
+      const negate = extra.negate === true;
+      const fieldValue = ticket[field];
+      // negate=true: fires when field is explicitly false (not null/undefined)
+      if (negate) return fieldValue === false;
+      return fieldValue === true;
     }
 
     case "tag_exists": {
