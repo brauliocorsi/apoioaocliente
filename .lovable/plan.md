@@ -1,104 +1,87 @@
 
-# SLA Dinâmico: Configuração Global, Por Status e Contador de Dias Restantes
+# Melhorias ao Motor de Regras e Decisão Formal
 
-## Situação Actual
+## O Que Vai Mudar
 
-O sistema já tem SLA configurado na tabela `sla_config` com prazos em minutos por categoria+prioridade. Contudo:
+### 1. Motor de Regras — Cláusulas com Texto Completo + Nome da Macro
 
-- A `sla_config` **não pode ser editada** pela UI (não existe ecrã de gestão)
-- Os SLAs actuais estão em **minutos** (ex: resolução = 1440 min = 1 dia), quando o requisito é **30 dias**
-- Cada status já tem `sla_minutes` configurável, mas sem feedback visual no Kanban do tempo restante nesse estágio
-- Não existe contador destacado de "dias restantes para resolução total" no detalhe do ticket
+**Situação actual:** O motor mostra apenas os códigos das cláusulas (ex: `V-f`, `IX-b`) e o ID da macro (ex: `M03`).
 
-## O Que Vai Ser Construído
+**Novo comportamento:**
+- Cada cláusula sugerida passa a mostrar **código + descrição completa** (ex: `IX-b — Devolução: não montado`)
+- A macro sugerida passa a mostrar **ID + título** (ex: `M03 — Reclamação fora das 48h`)
+- Para isso, o componente que renderiza as sugestões em `TicketDetail.tsx` irá buscar todas as cláusulas e macros ao carregar o ticket, e fazer o cruzamento no frontend
+- Não é necessário alterar o `DecisionEngine.ts` — apenas o componente de exibição
 
-### 1. Aba "SLA" nas Configurações (Settings → SLA)
+### 2. Decisão Formal — Passar para Dropdown Colapsável
 
-Um novo tab dedicado em `SettingsPage.tsx` com duas secções:
+**Situação actual:** O `ResolutionCard` é sempre visível como um card em destaque na página, logo abaixo do SLA, ocupando espaço mesmo quando não há nenhuma resolução registada.
 
-**Secção A — SLA Global por Categoria + Prioridade**
-Tabela editável onde supervisores definem, para cada par Categoria × Prioridade (P1/P2/P3), os prazos de:
-- Primeira resposta (em dias/horas)
-- Resolução total (em dias)
+**Novo comportamento:**
+- A secção "Registar Decisão Formal" passa a ser um **item colapsável** (accordion/collapsible) integrado na zona de ações do ticket
+- Quando não há resolução: aparece como uma linha discreta `▶ Registar Decisão Formal` que expande ao clicar
+- Quando há resolução registada ou aprovação pendente: o item fica **expandido por defeito** e com indicação visual colorida no cabeçalho (verde = resolvido, amarelo = pendente, vermelho = recusado)
+- O card interno permanece exactamente igual — só muda como é acessado
 
-Os valores são guardados na tabela `sla_config` existente (em minutos, com conversão transparente).
+## Ficheiros a Alterar
 
-**Secção B — SLA por Estado (Tempo Máximo no Estágio)**
-Lista dos estados existentes com o campo `sla_minutes` editável (já existe na tabela, mas agora apresentado em horas com label clara). Mostra visualmente quais estados têm SLA definido e quais não têm.
-
-### 2. Contador de Dias Restantes no Detalhe do Ticket
-
-No componente `SlaIndicator.tsx` (que aparece no sidebar do ticket), adicionar um bloco de destaque no topo com:
-- Contagem regressiva grande: **"X dias e Y horas restantes"** para resolução total
-- Barra de progresso colorida (verde → amarelo → vermelho)
-- Estado: se expirado, mostra "Expirado há X dias"
-- Se SLA pausado, mostra "Pausado — Aguarda Cliente"
-
-### 3. Badge de Tempo Restante no Kanban por Estágio
-
-Em cada coluna do Kanban, abaixo do contador de tickets, mostrar discretamente quantos tickets estão com o SLA do estágio (`sla_stage_deadline_at`) expirado ou em risco nessa coluna.
-
-Nos cartões do Kanban, o ícone SLA existente já mostra o SLA de resolução. Vamos garantir que quando `sla_stage_deadline_at` está activo, ele também é considerado no ícone.
-
-## Ficheiros a Criar/Alterar
-
-| Ficheiro | Acção |
+| Ficheiro | Alteração |
 |---|---|
-| `src/components/settings/SlaConfigTab.tsx` | Criar — nova aba de configuração SLA |
-| `src/pages/SettingsPage.tsx` | Editar — adicionar tab "SLA" |
-| `src/components/ticket/SlaIndicator.tsx` | Editar — adicionar contador de dias em destaque |
-| `src/components/KanbanBoard.tsx` | Editar — badge de alertas SLA por coluna |
+| `src/pages/TicketDetail.tsx` | Carregar cláusulas e macros; enriquecer exibição das sugestões; envolver `ResolutionCard` num Collapsible |
 
 ## Detalhes Técnicos
 
-### Nova Aba SLA — `SlaConfigTab.tsx`
+### Carregamento de dados para o Motor de Regras
 
-Busca todas as categorias e cruza com `sla_config` para montar uma grelha editável:
-
-```text
-Categoria         | P1 - 1ªResp | P1 - Resolução | P2 - 1ªResp | P2 - Resolução | P3 - 1ªResp | P3 - Resolução
-Entrega e Mont.   |   30 min    |    4 h         |   2 h       |    24 h        |   8 h       |    48 h
-Garantia (3 anos) |   8 h       |    4.17 dias   |   24 h      |    8.33 dias   |   48 h      |    20 dias
-...
+No `fetchTicket()`, adicionar duas queries em paralelo:
+```
+supabase.from("clauses").select("id, code, description")
+supabase.from("macros").select("id, title")
 ```
 
-Os valores são apresentados de forma legível (convertendo minutos → dias/horas). Ao guardar, convertem de volta para minutos via UPSERT na `sla_config`.
+Guardar em estados `clauseMap: Record<string, string>` e `macroMap: Record<string, string>`.
 
-A actualização usa `UPSERT` (INSERT ... ON CONFLICT DO UPDATE) pois a tabela não tem RLS de INSERT/UPDATE habilitada para agentes — será necessária uma pequena migração para permitir que supervisores editem a `sla_config`.
+### Renderização das sugestões enriquecida
 
-### Migração Necessária
-
-Adicionar políticas RLS à tabela `sla_config` para supervisores poderem INSERT/UPDATE:
-
-```sql
-CREATE POLICY "sla_config_insert" ON public.sla_config
-  FOR INSERT WITH CHECK (has_role(auth.uid(), 'supervisor'));
-
-CREATE POLICY "sla_config_update" ON public.sla_config
-  FOR UPDATE USING (has_role(auth.uid(), 'supervisor'));
-
-CREATE POLICY "sla_config_delete" ON public.sla_config
-  FOR DELETE USING (has_role(auth.uid(), 'supervisor'));
+Em vez de:
+```
+Cláusulas: V-f, IX-b
+Macro sugerida: M03
 ```
 
-### Contador de Dias Restantes em Destaque
+Passa a mostrar:
+```
+Cláusulas:
+  • V-f — Devolução: condição f
+  • IX-b — Devolução: não montado
 
-Em `SlaIndicator.tsx`, adicionar antes das barras existentes:
-
-```text
-┌─────────────────────────────────┐
-│  ⏱ 28 dias e 14 horas           │
-│  ████████████░░░░░░░ 62%         │
-│  para resolução total            │
-└─────────────────────────────────┘
+Macro sugerida: M03 — Reclamação fora das 48h [botão: Usar Macro]
 ```
 
-Cálculo: usa a função `calcRemaining` já existente com `sla_resolution_at` + `sla_paused_total_seconds` + `sla_paused_at`.
+O botão "Usar Macro" pode pré-preencher a nota interna (já existe este mecanismo via `MacroSelector`). Para isso, ao clicar, invoca a função que já existe para seleccionar macros, procurando pelo ID da macro sugerida.
 
-### Kanban — Alertas por Coluna
+### Collapsible para Decisão Formal
 
-No header de cada coluna, ao lado do badge de contagem de tickets, adicionar:
-- Ícone 🔴 + número se houver tickets com SLA de estágio (`sla_stage_deadline_at`) expirado
-- Ícone 🟡 + número se houver tickets em risco (< 25% do tempo restante)
+Usar o componente `Collapsible` já disponível em `@/components/ui/collapsible` (Radix UI já instalado):
 
-Isto é calculado no frontend a partir dos dados dos tickets já carregados — sem queries adicionais.
+```
+<Collapsible open={isResolutionOpen} onOpenChange={setIsResolutionOpen}>
+  <CollapsibleTrigger>
+    <div className="flex items-center gap-2">
+      <Gavel className="h-4 w-4" />
+      Decisão Formal
+      {/* Badge colorido se houver resolução/pendente */}
+    </div>
+  </CollapsibleTrigger>
+  <CollapsibleContent>
+    <ResolutionCard ... />
+  </CollapsibleContent>
+</Collapsible>
+```
+
+O estado `isResolutionOpen` começa como `true` se `ticket.resolution_type` existir ou houver aprovação pendente; caso contrário começa `false`.
+
+O trigger mostra badges discretos:
+- Sem resolução: sem badge
+- Pendente: `🟡 Aguarda Aprovação`
+- Aprovada: `🟢 Resolvido` ou `🔴 Cancelado`
