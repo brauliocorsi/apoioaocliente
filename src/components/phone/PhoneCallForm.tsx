@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Plus, ChevronDown, Link, X, Phone, FileText, Ticket, Eraser } from "lucide-react";
+import { Plus, ChevronDown, Link, X, Phone, FileText, Ticket, Eraser, TicketPlus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import QuickTicketDialog from "./QuickTicketDialog";
 
 interface PhoneCallFormProps {
   onCreated: () => void;
@@ -26,6 +27,7 @@ export default function PhoneCallForm({ onCreated }: PhoneCallFormProps) {
   });
   const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
   const [suggestedTickets, setSuggestedTickets] = useState<any[]>([]);
+  const [quickTicketOpen, setQuickTicketOpen] = useState(false);
 
   // Auto-search tickets by client_name
   useEffect(() => {
@@ -235,36 +237,56 @@ export default function PhoneCallForm({ onCreated }: PhoneCallFormProps) {
               </div>
 
               {/* Suggested tickets */}
-              {suggestedTickets.length > 0 && !selectedTicket && (
+              {/* Suggested tickets + Create ticket button */}
+              {!selectedTicket && (
                 <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                    <Ticket className="h-3.5 w-3.5" /> Tickets Sugeridos
-                  </h4>
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {suggestedTickets.map((t) => (
-                      <button
-                        key={t.id}
-                        type="button"
-                        className="text-left p-3 rounded-lg border bg-card hover:bg-accent hover:border-primary/40 transition-colors group"
-                        onClick={() => selectTicket(t)}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-mono font-semibold text-primary">#{t.ticket_number}</span>
-                          <Badge variant="outline" className="text-[10px]">{t.status}</Badge>
-                        </div>
-                        <p className="text-sm font-medium line-clamp-1">{t.subject}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{t.client_name}</p>
-                        {t.client_phone && (
-                          <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                            <Phone className="h-3 w-3" /> {t.client_phone}
-                          </p>
-                        )}
-                        {t.order_number && (
-                          <p className="text-xs text-muted-foreground mt-0.5">Encomenda: {t.order_number}</p>
-                        )}
-                      </button>
-                    ))}
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <Ticket className="h-3.5 w-3.5" /> Ticket Vinculado
+                    </h4>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-xs"
+                      onClick={() => setQuickTicketOpen(true)}
+                    >
+                      <TicketPlus className="h-3.5 w-3.5" />
+                      Criar Ticket
+                    </Button>
                   </div>
+                  {suggestedTickets.length > 0 && (
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {suggestedTickets.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          className="text-left p-3 rounded-lg border bg-card hover:bg-accent hover:border-primary/40 transition-colors group"
+                          onClick={() => selectTicket(t)}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-mono font-semibold text-primary">#{t.ticket_number}</span>
+                            <Badge variant="outline" className="text-[10px]">{t.status}</Badge>
+                          </div>
+                          <p className="text-sm font-medium line-clamp-1">{t.subject}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{t.client_name}</p>
+                          {t.client_phone && (
+                            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                              <Phone className="h-3 w-3" /> {t.client_phone}
+                            </p>
+                          )}
+                          {t.order_number && (
+                            <p className="text-xs text-muted-foreground mt-0.5">Encomenda: {t.order_number}</p>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {suggestedTickets.length === 0 && (
+                    <p className="text-xs text-muted-foreground italic">
+                      Nenhum ticket encontrado. Preencha os dados do cliente para sugestões ou crie um novo ticket.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -286,6 +308,23 @@ export default function PhoneCallForm({ onCreated }: PhoneCallFormProps) {
                   </div>
                 </div>
               )}
+
+              {/* Quick ticket dialog */}
+              <QuickTicketDialog
+                open={quickTicketOpen}
+                onClose={() => setQuickTicketOpen(false)}
+                prefill={{
+                  client_name: form.client_name,
+                  client_phone: form.client_phone,
+                  invoice_number: form.invoice_number,
+                  subject: form.subject,
+                  priority: form.priority,
+                }}
+                onCreated={(ticket) => {
+                  setSelectedTicket(ticket);
+                  setQuickTicketOpen(false);
+                }}
+              />
 
               {/* Actions */}
               <div className="flex justify-end gap-2 pt-2 border-t">
