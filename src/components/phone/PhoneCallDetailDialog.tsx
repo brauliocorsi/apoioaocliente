@@ -13,7 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import ReminderForm from "./ReminderForm";
 import ReminderList from "./ReminderList";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
-import { Link, X, ExternalLink, Save, Phone, Bell, Ticket, UserPlus, Trash2 } from "lucide-react";
+import { Link, X, ExternalLink, Save, Phone, Bell, Ticket, UserPlus, Trash2, CheckCircle2, RotateCcw } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useNavigate } from "react-router-dom";
 
@@ -29,6 +29,8 @@ interface PhoneCall {
   created_at: string;
   ticket_id?: string | null;
   assigned_to?: string | null;
+  closed_at?: string | null;
+  closed_by?: string | null;
 }
 
 interface AgentProfile {
@@ -292,6 +294,68 @@ export default function PhoneCallDetailDialog({ call, open, onClose, onUpdated }
               <Save className="h-3.5 w-3.5" />
               {saving ? "A guardar..." : "Guardar Alterações"}
             </Button>
+
+            {/* Close / Reopen button */}
+            {!call.closed_at ? (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" className="gap-1.5 text-success border-success/30 hover:bg-success/10">
+                    <CheckCircle2 className="h-4 w-4" /> Encerrar
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Encerrar ligação?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      A ligação de "{call.client_name}" será marcada como encerrada e movida para o histórico.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-success text-success-foreground hover:bg-success/90"
+                      onClick={async () => {
+                        const { data: userData } = await supabase.auth.getUser();
+                        const { error } = await supabase
+                          .from("phone_calls" as any)
+                          .update({ closed_at: new Date().toISOString(), closed_by: userData?.user?.id } as any)
+                          .eq("id", call.id);
+                        if (error) {
+                          toast({ title: "Erro ao encerrar", description: error.message, variant: "destructive" });
+                        } else {
+                          toast({ title: "Ligação encerrada com sucesso" });
+                          onClose();
+                          onUpdated();
+                        }
+                      }}
+                    >
+                      Encerrar
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : (
+              <Button
+                variant="outline"
+                className="gap-1.5"
+                onClick={async () => {
+                  const { error } = await supabase
+                    .from("phone_calls" as any)
+                    .update({ closed_at: null, closed_by: null } as any)
+                    .eq("id", call.id);
+                  if (error) {
+                    toast({ title: "Erro ao reabrir", description: error.message, variant: "destructive" });
+                  } else {
+                    toast({ title: "Ligação reaberta" });
+                    onClose();
+                    onUpdated();
+                  }
+                }}
+              >
+                <RotateCcw className="h-4 w-4" /> Reabrir
+              </Button>
+            )}
+
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="outline" size="icon" className="text-destructive hover:bg-destructive/10 flex-shrink-0">
