@@ -423,6 +423,8 @@ export type Database = {
           assigned_to: string | null
           client_name: string
           client_phone: string
+          closed_at: string | null
+          closed_by: string | null
           created_at: string
           created_by: string
           id: string
@@ -438,6 +440,8 @@ export type Database = {
           assigned_to?: string | null
           client_name: string
           client_phone: string
+          closed_at?: string | null
+          closed_by?: string | null
           created_at?: string
           created_by?: string
           id?: string
@@ -453,6 +457,8 @@ export type Database = {
           assigned_to?: string | null
           client_name?: string
           client_phone?: string
+          closed_at?: string | null
+          closed_by?: string | null
           created_at?: string
           created_by?: string
           id?: string
