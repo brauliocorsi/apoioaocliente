@@ -127,7 +127,7 @@ export default function PhoneCalls() {
       if (agentFilter === "sem_atribuicao") {
         result = result.filter((c) => !c.assigned_to);
       } else {
-        result = result.filter((c) => c.assigned_to === agentFilter || c.created_by === agentFilter);
+        result = result.filter((c) => c.assigned_to === agentFilter);
       }
     }
     if (dateFrom) {
@@ -284,9 +284,9 @@ export default function PhoneCalls() {
               </SelectContent>
             </Select>
             <Select value={agentFilter} onValueChange={setAgentFilter}>
-              <SelectTrigger className="w-44"><SelectValue placeholder="Agente" /></SelectTrigger>
+              <SelectTrigger className="w-44"><SelectValue placeholder="Atribuído a" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todos os agentes</SelectItem>
+                <SelectItem value="todos">Todos os atribuídos</SelectItem>
                 <SelectItem value="sem_atribuicao">Sem atribuição</SelectItem>
                 {agents.map((a) => (
                   <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>
