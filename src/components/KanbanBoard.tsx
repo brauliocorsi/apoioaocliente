@@ -111,6 +111,9 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile
         </div>
       </div>
       <p className="text-sm font-medium leading-tight line-clamp-2">{ticket.subject}</p>
+      {ticket.order_number && (
+        <p className="text-[10px] text-muted-foreground mt-0.5">Enc. {ticket.order_number}</p>
+      )}
       <div className="flex items-center justify-between mt-1.5">
         <p className="text-xs text-muted-foreground truncate">{ticket.client_name}</p>
         {agentProfile && (
