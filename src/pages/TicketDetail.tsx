@@ -523,8 +523,8 @@ export default function TicketDetail() {
                 const tagInserts = missingTags.map((tagId) => ({ ticket_id: id, tag_id: tagId }));
                 const clauseInserts = missingClauses.map((clauseId) => ({ ticket_id: id, clause_id: clauseId }));
                 const promises: Promise<any>[] = [];
-                if (tagInserts.length > 0) promises.push(supabase.from("ticket_tags").insert(tagInserts));
-                if (clauseInserts.length > 0) promises.push(supabase.from("ticket_clauses").insert(clauseInserts));
+                if (tagInserts.length > 0) promises.push(supabase.from("ticket_tags").insert(tagInserts).select());
+                if (clauseInserts.length > 0) promises.push(supabase.from("ticket_clauses").insert(clauseInserts).select());
                 await Promise.all(promises);
                 toast({ title: "Tags e cláusulas aplicadas" });
                 fetchTicket();
