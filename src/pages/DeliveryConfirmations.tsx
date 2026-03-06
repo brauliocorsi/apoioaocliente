@@ -93,7 +93,7 @@ export default function DeliveryConfirmations() {
       toast({ title: "Erro ao registar", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Confirmação registada com sucesso" });
-      setOrderNumber(""); setClientPhone(""); setConfirmed("true"); setContactAttempts("1"); setNotes("");
+      setOrderNumber(""); setClientPhone(""); setConfirmed("true"); setNotes("");
       fetchData();
     }
   };
