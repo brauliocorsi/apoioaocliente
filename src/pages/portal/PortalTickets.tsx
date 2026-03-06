@@ -63,6 +63,8 @@ export default function PortalTickets() {
         <div className="space-y-3">
           {tickets.map((t) => {
             const st = statuses[t.status];
+            const agent = t.profiles as { full_name: string; avatar_url: string | null } | null;
+            const agentInitials = agent?.full_name?.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase();
             return (
               <Card
                 key={t.id}
@@ -75,9 +77,21 @@ export default function PortalTickets() {
                       <span className="text-xs font-mono text-muted-foreground">#{t.ticket_number}</span>
                       <p className="text-sm font-medium">{t.subject}</p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(t.created_at).toLocaleDateString("pt-PT")}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(t.created_at).toLocaleDateString("pt-PT")}
+                      </p>
+                      {agent && (
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span>·</span>
+                          <Avatar className="h-4 w-4">
+                            {agent.avatar_url && <AvatarImage src={agent.avatar_url} />}
+                            <AvatarFallback className="text-[8px] bg-primary/10 text-primary">{agentInitials}</AvatarFallback>
+                          </Avatar>
+                          <span>{agent.full_name}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div
                     className="flex items-center gap-2 rounded-full px-3 py-1 border"
