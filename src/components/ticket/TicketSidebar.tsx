@@ -23,7 +23,7 @@ interface TicketSidebarProps {
 type Category = { id: string; name: string };
 type Subcategory = { id: string; category_id: string; name: string };
 
-export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: TicketSidebarProps) {
+export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate }: TicketSidebarProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
