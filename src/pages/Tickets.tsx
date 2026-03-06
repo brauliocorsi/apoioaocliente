@@ -326,6 +326,15 @@ export default function Tickets() {
                         </Tooltip>
                       )}
                       <SlaIcon status={getTicketSlaStatus(t)} ticket={t as SlaTicket} />
+                      {(ticketTagsMap[t.id] || []).map((tagId) => {
+                        const tag = allTags.find((at) => at.id === tagId);
+                        if (!tag) return null;
+                        return (
+                          <Badge key={tagId} className="text-[10px] text-white border-0" style={{ backgroundColor: tag.color || "#6b7280" }}>
+                            {tag.name}
+                          </Badge>
+                        );
+                      })}
                       {t.category_id && <Badge variant="outline" className="text-xs">{categories[t.category_id] || t.category_id}</Badge>}
                       {unreadCounts[t.id] > 0 && (
                         <Badge variant="destructive" className="text-[10px] h-5 min-w-[20px] justify-center">
