@@ -103,6 +103,7 @@ export default function DeliveryConfirmations() {
     setEditOrder(r.order_number);
     setEditPhone(r.client_phone);
     setEditConfirmed(r.confirmed ? "true" : "false");
+    setEditAttempts(String(r.contact_attempts || 1));
     setEditNotes(r.notes || "");
   };
 
