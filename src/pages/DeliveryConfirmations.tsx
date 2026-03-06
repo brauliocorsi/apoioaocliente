@@ -162,7 +162,7 @@ export default function DeliveryConfirmations() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Truck className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold text-foreground">Confirmação de Entregas</h1>
+        <h1 className="text-2xl font-bold text-foreground">Registro de Ligações</h1>
       </div>
 
       {/* Summary cards */}
