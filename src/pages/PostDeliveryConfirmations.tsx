@@ -335,6 +335,7 @@ export default function PostDeliveryConfirmations() {
                     <TableHead>Cliente</TableHead>
                     <TableHead>Telefone</TableHead>
                     <TableHead>Checklist</TableHead>
+                    <TableHead>NPS Montagem</TableHead>
                     <TableHead>Problemas</TableHead>
                     <TableHead>Agente</TableHead>
                     <TableHead className="w-10"></TableHead>
