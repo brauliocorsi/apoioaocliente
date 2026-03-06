@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage, FileVideo, FileText, Trash2, Gavel, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage, FileVideo, FileText, Trash2, Gavel, ChevronDown, ChevronRight, Check } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -53,6 +54,8 @@ export default function TicketDetail() {
   const [macroMap, setMacroMap] = useState<Record<string, string>>({});
   const [allMacros, setAllMacros] = useState<{ id: string; title: string; content: string }[]>([]);
   const [isResolutionOpen, setIsResolutionOpen] = useState(false);
+  const [editingSubject, setEditingSubject] = useState(false);
+  const [subjectDraft, setSubjectDraft] = useState("");
 
   const fetchTicket = async () => {
     if (!id) return;
@@ -395,7 +398,47 @@ export default function TicketDetail() {
         </Button>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold">#{ticket.ticket_number} – {ticket.subject}</h1>
+            {editingSubject ? (
+              <div className="flex items-center gap-2 flex-1">
+                <Input
+                  value={subjectDraft}
+                  onChange={(e) => setSubjectDraft(e.target.value)}
+                  className="text-xl font-bold h-9"
+                  autoFocus
+                  onKeyDown={async (e) => {
+                    if (e.key === "Enter" && subjectDraft.trim()) {
+                      await supabase.from("tickets").update({ subject: subjectDraft.trim() }).eq("id", id!);
+                      toast({ title: "Assunto atualizado" });
+                      setEditingSubject(false);
+                      fetchTicket();
+                    } else if (e.key === "Escape") {
+                      setEditingSubject(false);
+                    }
+                  }}
+                />
+                <Button size="icon" variant="ghost" className="h-7 w-7 text-primary" onClick={async () => {
+                  if (subjectDraft.trim()) {
+                    await supabase.from("tickets").update({ subject: subjectDraft.trim() }).eq("id", id!);
+                    toast({ title: "Assunto atualizado" });
+                    setEditingSubject(false);
+                    fetchTicket();
+                  }
+                }}>
+                  <Check className="h-3.5 w-3.5" />
+                </Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingSubject(false)}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <h1
+                className="text-xl font-bold cursor-pointer hover:text-primary/80 transition-colors"
+                onClick={() => { setSubjectDraft(ticket.subject); setEditingSubject(true); }}
+                title="Clique para editar o assunto"
+              >
+                #{ticket.ticket_number} – {ticket.subject}
+              </h1>
+            )}
             <PriorityFlag priority={ticket.priority} showLabel />
           </div>
           <p className="text-sm text-muted-foreground">{ticket.client_name}{ticket.order_number ? ` · Enc. ${ticket.order_number}` : ""}{ticket.service_number ? ` · OS ${ticket.service_number}` : ""}</p>
