@@ -21,7 +21,9 @@ export default function PortalTickets() {
       const [{ data: tix }, { data: sts }] = await Promise.all([
         supabase
           .from("tickets")
-          .select("id, ticket_number, subject, status, created_at, description")
+          .select("id, ticket_number, subject, status, created_at, description, assigned_to, profiles:assigned_to(full_name, avatar_url)")
+          .eq("client_user_id", user!.id)
+          .order("created_at", { ascending: false }),
           .eq("client_user_id", user!.id)
           .order("created_at", { ascending: false }),
         supabase.from("ticket_statuses").select("id, name, color").order("sort_order"),
