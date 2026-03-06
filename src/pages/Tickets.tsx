@@ -128,9 +128,10 @@ export default function Tickets() {
       if (priorityFilter !== "all") query = query.eq("priority", priorityFilter as any);
       if (agentFilter !== "all") query = query.eq("assigned_to", agentFilter);
 
-      const [{ data }, { data: callData }] = await Promise.all([
+      const [{ data }, { data: callData }, { data: ttData }] = await Promise.all([
         query.limit(200),
         supabase.from("phone_calls").select("ticket_id").not("ticket_id", "is", null),
+        supabase.from("ticket_tags").select("ticket_id, tag_id"),
       ]);
       setTickets((data as TicketRow[]) || []);
       // Group call counts by ticket_id
@@ -139,6 +140,13 @@ export default function Tickets() {
         counts[c.ticket_id] = (counts[c.ticket_id] || 0) + 1;
       });
       setCallCounts(counts);
+      // Group tags by ticket_id
+      const tagsMap: Record<string, string[]> = {};
+      (ttData || []).forEach((tt: any) => {
+        if (!tagsMap[tt.ticket_id]) tagsMap[tt.ticket_id] = [];
+        tagsMap[tt.ticket_id].push(tt.tag_id);
+      });
+      setTicketTagsMap(tagsMap);
       setLoading(false);
 
       // Fetch unread message counts for agent
