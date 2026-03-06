@@ -99,6 +99,7 @@ export default function PostDeliveryConfirmations() {
       no_damage: noDamage,
       client_satisfied: clientSatisfied,
       issues_reported: issuesReported.trim() || null,
+      assembly_nps: assemblyNps,
       notes: notes.trim() || null,
       created_by: user!.id,
     } as any);
