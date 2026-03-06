@@ -14,7 +14,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
-import { ClipboardCheck, Search, Plus, Trash2, Pencil, Check, X, CalendarDays, CheckCircle2, XCircle } from "lucide-react";
+import { ClipboardCheck, Search, Plus, Trash2, Pencil, Check, X, CalendarDays, CheckCircle2, XCircle, Star } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -33,6 +33,7 @@ interface PostDeliveryRecord {
   no_damage: boolean;
   client_satisfied: boolean;
   issues_reported: string | null;
+  assembly_nps: number | null;
   notes: string | null;
   created_by: string;
   created_at: string;
@@ -61,6 +62,7 @@ export default function PostDeliveryConfirmations() {
   const [noDamage, setNoDamage] = useState(false);
   const [clientSatisfied, setClientSatisfied] = useState(false);
   const [issuesReported, setIssuesReported] = useState("");
+  const [assemblyNps, setAssemblyNps] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -97,6 +99,7 @@ export default function PostDeliveryConfirmations() {
       no_damage: noDamage,
       client_satisfied: clientSatisfied,
       issues_reported: issuesReported.trim() || null,
+      assembly_nps: assemblyNps,
       notes: notes.trim() || null,
       created_by: user!.id,
     } as any);
@@ -107,7 +110,7 @@ export default function PostDeliveryConfirmations() {
       toast({ title: "Confirmação pós-entrega registada" });
       setOrderNumber(""); setClientName(""); setClientPhone(""); setDeliveryDate("");
       setProductOk(false); setAssemblyOk(false); setNoDamage(false); setClientSatisfied(false);
-      setIssuesReported(""); setNotes("");
+      setIssuesReported(""); setAssemblyNps(null); setNotes("");
       fetchData();
     }
   };
@@ -138,6 +141,7 @@ export default function PostDeliveryConfirmations() {
       no_damage: editData.no_damage ?? false,
       client_satisfied: editData.client_satisfied ?? false,
       issues_reported: editData.issues_reported?.trim() || null,
+      assembly_nps: editData.assembly_nps ?? null,
       notes: editData.notes?.trim() || null,
     } as any).eq("id", editingId!);
     if (error) {
@@ -178,6 +182,24 @@ export default function PostDeliveryConfirmations() {
     <div className="flex items-center gap-2">
       <Checkbox checked={checked} onCheckedChange={(v) => onChange(v === true)} />
       <Label className="font-normal cursor-pointer text-sm">{label}</Label>
+    </div>
+  );
+
+  const StarRating = ({ value, onChange, readOnly = false }: { value: number | null; onChange?: (v: number) => void; readOnly?: boolean }) => (
+    <div className="flex gap-0.5">
+      {[1, 2, 3, 4, 5].map(star => (
+        <button
+          key={star}
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange?.(value === star ? 0 : star)}
+          className={`transition-colors ${readOnly ? "cursor-default" : "cursor-pointer hover:text-yellow-400"}`}
+        >
+          <Star
+            className={`h-5 w-5 ${(value ?? 0) >= star ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
+          />
+        </button>
+      ))}
     </div>
   );
 
@@ -252,6 +274,10 @@ export default function PostDeliveryConfirmations() {
                 <CheckItem label="Sem danos" checked={noDamage} onChange={setNoDamage} />
                 <CheckItem label="Cliente satisfeito" checked={clientSatisfied} onChange={setClientSatisfied} />
               </div>
+              <div className="pt-2">
+                <Label className="text-sm">NPS Equipa de Montagem</Label>
+                <StarRating value={assemblyNps} onChange={setAssemblyNps} />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -309,6 +335,7 @@ export default function PostDeliveryConfirmations() {
                     <TableHead>Cliente</TableHead>
                     <TableHead>Telefone</TableHead>
                     <TableHead>Checklist</TableHead>
+                    <TableHead>NPS Montagem</TableHead>
                     <TableHead>Problemas</TableHead>
                     <TableHead>Agente</TableHead>
                     <TableHead className="w-10"></TableHead>
@@ -332,6 +359,9 @@ export default function PostDeliveryConfirmations() {
                               <CheckItem label="Sem danos" checked={editData.no_damage ?? false} onChange={v => setEditData(d => ({ ...d, no_damage: v }))} />
                               <CheckItem label="Satisfeito" checked={editData.client_satisfied ?? false} onChange={v => setEditData(d => ({ ...d, client_satisfied: v }))} />
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            <StarRating value={editData.assembly_nps ?? null} onChange={v => setEditData(d => ({ ...d, assembly_nps: v }))} />
                           </TableCell>
                           <TableCell><Input value={editData.issues_reported || ""} onChange={e => setEditData(d => ({ ...d, issues_reported: e.target.value }))} className="h-8 text-sm" /></TableCell>
                           <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>
@@ -360,6 +390,9 @@ export default function PostDeliveryConfirmations() {
                                 </Badge>
                               ))}
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            <StarRating value={r.assembly_nps} readOnly />
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{r.issues_reported || "—"}</TableCell>
                           <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>
