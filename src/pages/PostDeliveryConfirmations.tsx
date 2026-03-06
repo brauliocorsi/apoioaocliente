@@ -213,7 +213,7 @@ export default function PostDeliveryConfirmations() {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Hoje</p>
@@ -235,6 +235,18 @@ export default function PostDeliveryConfirmations() {
             <div>
               <p className="text-sm text-muted-foreground">Com problemas</p>
               <p className="text-3xl font-bold text-foreground">{todayRecords.length - allOkToday}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-3">
+            <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
+            <div>
+              <p className="text-sm text-muted-foreground">NPS Montagem</p>
+              <div className="flex items-baseline gap-1.5">
+                <p className="text-3xl font-bold text-foreground">{avgNps !== null ? avgNps.toFixed(1) : "—"}</p>
+                {avgNps !== null && <span className="text-xs text-muted-foreground">/ 5 ({npsRecords.length})</span>}
+              </div>
             </div>
           </CardContent>
         </Card>
