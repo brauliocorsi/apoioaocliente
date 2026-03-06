@@ -185,6 +185,24 @@ export default function PostDeliveryConfirmations() {
     </div>
   );
 
+  const StarRating = ({ value, onChange, readOnly = false }: { value: number | null; onChange?: (v: number) => void; readOnly?: boolean }) => (
+    <div className="flex gap-0.5">
+      {[1, 2, 3, 4, 5].map(star => (
+        <button
+          key={star}
+          type="button"
+          disabled={readOnly}
+          onClick={() => onChange?.(value === star ? 0 : star)}
+          className={`transition-colors ${readOnly ? "cursor-default" : "cursor-pointer hover:text-yellow-400"}`}
+        >
+          <Star
+            className={`h-5 w-5 ${(value ?? 0) >= star ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30"}`}
+          />
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
