@@ -14,7 +14,13 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
-import { Truck, Search, CheckCircle2, XCircle, Plus, Trash2, Pencil, Check, X, PhoneCall } from "lucide-react";
+import { Truck, Search, CheckCircle2, XCircle, Plus, Trash2, Pencil, Check, X, PhoneCall, CalendarDays } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { startOfDay, startOfWeek, startOfMonth, isAfter } from "date-fns";
+
+type DateFilter = "all" | "today" | "week" | "month";
 
 interface DeliveryConfirmation {
   id: string;
@@ -38,6 +44,7 @@ export default function DeliveryConfirmations() {
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
 
   // Form state
   const [orderNumber, setOrderNumber] = useState("");
@@ -132,10 +139,20 @@ export default function DeliveryConfirmations() {
 
   const agentName = (id: string) => agents.find(a => a.id === id)?.full_name || "—";
 
-  const filtered = records.filter(r =>
-    r.order_number.toLowerCase().includes(search.toLowerCase()) ||
-    r.client_phone.includes(search)
-  );
+  const getDateCutoff = (filter: DateFilter): Date | null => {
+    const now = new Date();
+    if (filter === "today") return startOfDay(now);
+    if (filter === "week") return startOfWeek(now, { weekStartsOn: 1 });
+    if (filter === "month") return startOfMonth(now);
+    return null;
+  };
+
+  const filtered = records.filter(r => {
+    const matchesSearch = r.order_number.toLowerCase().includes(search.toLowerCase()) || r.client_phone.includes(search);
+    const cutoff = getDateCutoff(dateFilter);
+    const matchesDate = !cutoff || isAfter(new Date(r.created_at), cutoff);
+    return matchesSearch && matchesDate;
+  });
 
   const today = new Date().toDateString();
   const todayRecords = records.filter(r => new Date(r.created_at).toDateString() === today);
@@ -227,14 +244,30 @@ export default function DeliveryConfirmations() {
       {/* Search + Table */}
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-3">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Pesquisar por nº encomenda ou telefone..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="max-w-sm"
-            />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="flex items-center gap-3 flex-1">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Pesquisar por nº encomenda ou telefone..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="max-w-sm"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              <Select value={dateFilter} onValueChange={(v) => setDateFilter(v as DateFilter)}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="today">Hoje</SelectItem>
+                  <SelectItem value="week">Esta semana</SelectItem>
+                  <SelectItem value="month">Este mês</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
