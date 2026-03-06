@@ -250,6 +250,7 @@ export default function DeliveryConfirmations() {
                   <TableHead>Nº Encomenda</TableHead>
                   <TableHead>Telefone</TableHead>
                   <TableHead>Estado</TableHead>
+                  <TableHead>Tentativas</TableHead>
                   <TableHead>Observações</TableHead>
                   <TableHead>Agente</TableHead>
                   <TableHead className="w-10"></TableHead>
