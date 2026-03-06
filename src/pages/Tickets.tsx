@@ -117,7 +117,7 @@ export default function Tickets() {
     const fetch = async () => {
       let query = supabase
         .from("tickets")
-        .select("id, ticket_number, client_name, subject, category_id, priority, status, order_number, created_at, assigned_to, sla_first_response_at, sla_resolution_at, sla_paused_at, sla_paused_total_seconds, first_responded_at, resolved_at, sla_stage_deadline_at")
+        .select("id, ticket_number, client_name, client_phone, subject, category_id, priority, status, order_number, created_at, assigned_to, sla_first_response_at, sla_resolution_at, sla_paused_at, sla_paused_total_seconds, first_responded_at, resolved_at, sla_stage_deadline_at")
         .order("created_at", { ascending: false });
       
       if (statusFilter !== "all") query = query.eq("status", statusFilter as any);
