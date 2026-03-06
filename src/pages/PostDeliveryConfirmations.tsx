@@ -33,6 +33,7 @@ interface PostDeliveryRecord {
   no_damage: boolean;
   client_satisfied: boolean;
   issues_reported: string | null;
+  assembly_nps: number | null;
   notes: string | null;
   created_by: string;
   created_at: string;
