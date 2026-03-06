@@ -84,7 +84,7 @@ export default function DeliveryConfirmations() {
       order_number: orderNumber.trim(),
       client_phone: clientPhone.trim(),
       confirmed: confirmed === "true",
-      contact_attempts: parseInt(contactAttempts) || 1,
+      contact_attempts: 1,
       notes: notes.trim() || null,
       created_by: user!.id,
     } as any);
