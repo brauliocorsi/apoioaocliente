@@ -21,6 +21,7 @@ interface DeliveryConfirmation {
   order_number: string;
   client_phone: string;
   confirmed: boolean;
+  contact_attempts: number;
   notes: string | null;
   created_by: string;
   created_at: string;
