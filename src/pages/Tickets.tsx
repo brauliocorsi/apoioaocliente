@@ -74,6 +74,8 @@ export default function Tickets() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [callCounts, setCallCounts] = useState<Record<string, number>>({});
   const [categories, setCategories] = useState<Record<string, string>>({});
+  const [allTags, setAllTags] = useState<{ id: string; name: string; color: string | null }[]>([]);
+  const [ticketTagsMap, setTicketTagsMap] = useState<Record<string, string[]>>({});
   const [agents, setAgents] = useState<{ id: string; full_name: string; avatar_url?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
