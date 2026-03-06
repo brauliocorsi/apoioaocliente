@@ -177,6 +177,8 @@ export default function PostDeliveryConfirmations() {
   const today = new Date().toDateString();
   const todayRecords = records.filter(r => new Date(r.created_at).toDateString() === today);
   const allOkToday = todayRecords.filter(r => checkCount(r) === 4).length;
+  const npsRecords = records.filter(r => r.assembly_nps != null && r.assembly_nps > 0);
+  const avgNps = npsRecords.length > 0 ? (npsRecords.reduce((sum, r) => sum + (r.assembly_nps || 0), 0) / npsRecords.length) : null;
 
   const CheckItem = ({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) => (
     <div className="flex items-center gap-2">
