@@ -53,6 +53,7 @@ type TicketRow = {
   id: string;
   ticket_number: number;
   client_name: string;
+  client_phone: string | null;
   subject: string;
   category_id: string | null;
   priority: string;
