@@ -94,6 +94,36 @@ export default function DeliveryConfirmations() {
     else fetchData();
   };
 
+  const startEdit = (r: DeliveryConfirmation) => {
+    setEditingId(r.id);
+    setEditOrder(r.order_number);
+    setEditPhone(r.client_phone);
+    setEditConfirmed(r.confirmed ? "true" : "false");
+    setEditNotes(r.notes || "");
+  };
+
+  const cancelEdit = () => setEditingId(null);
+
+  const saveEdit = async () => {
+    if (!editOrder.trim() || !editPhone.trim()) {
+      toast({ title: "Preencha os campos obrigatórios", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from("delivery_confirmations").update({
+      order_number: editOrder.trim(),
+      client_phone: editPhone.trim(),
+      confirmed: editConfirmed === "true",
+      notes: editNotes.trim() || null,
+    }).eq("id", editingId!);
+    if (error) {
+      toast({ title: "Erro ao atualizar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Registo atualizado" });
+      setEditingId(null);
+      fetchData();
+    }
+  };
+
   const agentName = (id: string) => agents.find(a => a.id === id)?.full_name || "—";
 
   const filtered = records.filter(r =>
