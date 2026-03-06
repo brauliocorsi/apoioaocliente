@@ -185,7 +185,7 @@ export default function DeliveryConfirmations() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
             <div className="space-y-2">
               <Label htmlFor="order">Nº Encomenda *</Label>
               <Input id="order" placeholder="Ex: 12345" value={orderNumber} onChange={e => setOrderNumber(e.target.value)} />
@@ -208,10 +208,14 @@ export default function DeliveryConfirmations() {
               </RadioGroup>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="attempts">Tentativas</Label>
+              <Input id="attempts" type="number" min="1" max="99" value={contactAttempts} onChange={e => setContactAttempts(e.target.value)} className="w-20" />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="notes">Observações</Label>
               <Input id="notes" placeholder="Opcional" value={notes} onChange={e => setNotes(e.target.value)} />
             </div>
-            <div className="md:col-span-2 lg:col-span-4">
+            <div className="md:col-span-2 lg:col-span-5">
               <Button type="submit" disabled={submitting} className="w-full md:w-auto">
                 {submitting ? "A registar..." : "Registar"}
               </Button>
