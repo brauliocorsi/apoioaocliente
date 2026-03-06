@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Pencil, Check, X, UserPlus, Loader2, Phone } from "lucide-react";
 import TagSelector from "./TagSelector";
+import TicketDocuments from "./TicketDocuments";
 import { useNavigate } from "react-router-dom";
 
 interface TicketSidebarProps {
