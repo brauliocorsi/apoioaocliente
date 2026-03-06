@@ -74,6 +74,8 @@ export default function Tickets() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [callCounts, setCallCounts] = useState<Record<string, number>>({});
   const [categories, setCategories] = useState<Record<string, string>>({});
+  const [allTags, setAllTags] = useState<{ id: string; name: string; color: string | null }[]>([]);
+  const [ticketTagsMap, setTicketTagsMap] = useState<Record<string, string[]>>({});
   const [agents, setAgents] = useState<{ id: string; full_name: string; avatar_url?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -93,7 +95,9 @@ export default function Tickets() {
     Promise.all([
       supabase.from("categories").select("id, name"),
       supabase.rpc("get_agent_profiles"),
-    ]).then(async ([{ data: cats }, { data: profs }]) => {
+      supabase.from("tags").select("id, name, color"),
+    ]).then(async ([{ data: cats }, { data: profs }, { data: tagsData }]) => {
+      setAllTags((tagsData as any[]) || []);
       const map: Record<string, string> = {};
       (cats || []).forEach((c: any) => { map[c.id] = c.name; });
       setCategories(map);
@@ -124,9 +128,10 @@ export default function Tickets() {
       if (priorityFilter !== "all") query = query.eq("priority", priorityFilter as any);
       if (agentFilter !== "all") query = query.eq("assigned_to", agentFilter);
 
-      const [{ data }, { data: callData }] = await Promise.all([
+      const [{ data }, { data: callData }, { data: ttData }] = await Promise.all([
         query.limit(200),
         supabase.from("phone_calls").select("ticket_id").not("ticket_id", "is", null),
+        supabase.from("ticket_tags").select("ticket_id, tag_id"),
       ]);
       setTickets((data as TicketRow[]) || []);
       // Group call counts by ticket_id
@@ -135,6 +140,13 @@ export default function Tickets() {
         counts[c.ticket_id] = (counts[c.ticket_id] || 0) + 1;
       });
       setCallCounts(counts);
+      // Group tags by ticket_id
+      const tagsMap: Record<string, string[]> = {};
+      (ttData || []).forEach((tt: any) => {
+        if (!tagsMap[tt.ticket_id]) tagsMap[tt.ticket_id] = [];
+        tagsMap[tt.ticket_id].push(tt.tag_id);
+      });
+      setTicketTagsMap(tagsMap);
       setLoading(false);
 
       // Fetch unread message counts for agent
@@ -276,7 +288,7 @@ export default function Tickets() {
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : view === "kanban" ? (
-        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} callCounts={callCounts} agentProfiles={agentProfiles} unreadCounts={unreadCounts} />
+        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} callCounts={callCounts} agentProfiles={agentProfiles} unreadCounts={unreadCounts} ticketTagsMap={ticketTagsMap} allTags={allTags} />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -314,6 +326,15 @@ export default function Tickets() {
                         </Tooltip>
                       )}
                       <SlaIcon status={getTicketSlaStatus(t)} ticket={t as SlaTicket} />
+                      {(ticketTagsMap[t.id] || []).map((tagId) => {
+                        const tag = allTags.find((at) => at.id === tagId);
+                        if (!tag) return null;
+                        return (
+                          <Badge key={tagId} className="text-[10px] text-white border-0" style={{ backgroundColor: tag.color || "#6b7280" }}>
+                            {tag.name}
+                          </Badge>
+                        );
+                      })}
                       {t.category_id && <Badge variant="outline" className="text-xs">{categories[t.category_id] || t.category_id}</Badge>}
                       {unreadCounts[t.id] > 0 && (
                         <Badge variant="destructive" className="text-[10px] h-5 min-w-[20px] justify-center">
