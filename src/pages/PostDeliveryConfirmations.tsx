@@ -62,6 +62,7 @@ export default function PostDeliveryConfirmations() {
   const [noDamage, setNoDamage] = useState(false);
   const [clientSatisfied, setClientSatisfied] = useState(false);
   const [issuesReported, setIssuesReported] = useState("");
+  const [assemblyNps, setAssemblyNps] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
