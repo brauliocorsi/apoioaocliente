@@ -513,6 +513,54 @@ export type Database = {
           },
         ]
       }
+      post_delivery_confirmations: {
+        Row: {
+          assembly_ok: boolean
+          client_name: string
+          client_phone: string
+          client_satisfied: boolean
+          created_at: string
+          created_by: string
+          delivery_date: string | null
+          id: string
+          issues_reported: string | null
+          no_damage: boolean
+          notes: string | null
+          order_number: string
+          product_ok: boolean
+        }
+        Insert: {
+          assembly_ok?: boolean
+          client_name: string
+          client_phone: string
+          client_satisfied?: boolean
+          created_at?: string
+          created_by?: string
+          delivery_date?: string | null
+          id?: string
+          issues_reported?: string | null
+          no_damage?: boolean
+          notes?: string | null
+          order_number: string
+          product_ok?: boolean
+        }
+        Update: {
+          assembly_ok?: boolean
+          client_name?: string
+          client_phone?: string
+          client_satisfied?: boolean
+          created_at?: string
+          created_by?: string
+          delivery_date?: string | null
+          id?: string
+          issues_reported?: string | null
+          no_damage?: boolean
+          notes?: string | null
+          order_number?: string
+          product_ok?: boolean
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           agent_color: string | null
