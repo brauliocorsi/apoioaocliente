@@ -50,7 +50,6 @@ export default function DeliveryConfirmations() {
   const [orderNumber, setOrderNumber] = useState("");
   const [clientPhone, setClientPhone] = useState("");
   const [confirmed, setConfirmed] = useState<string>("true");
-  const [contactAttempts, setContactAttempts] = useState("1");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
