@@ -284,6 +284,22 @@ export default function PortalTicketDetail() {
         </div>
       )}
 
+      {/* Assigned Agent */}
+      {assignedAgent && (
+        <div className="flex items-center gap-2.5 bg-muted/50 border border-border rounded-lg px-3 py-2">
+          <Avatar className="h-7 w-7">
+            {assignedAgent.avatar_url && <AvatarImage src={assignedAgent.avatar_url} />}
+            <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">
+              {assignedAgent.full_name?.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <p className="text-[10px] text-muted-foreground leading-none mb-0.5">Responsável</p>
+            <p className="text-xs font-semibold leading-none">{assignedAgent.full_name}</p>
+          </div>
+        </div>
+      )}
+
       {/* Description */}
       {ticket.description && (
         <Card>
