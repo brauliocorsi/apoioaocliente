@@ -45,6 +45,13 @@ export default function DeliveryConfirmations() {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editOrder, setEditOrder] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editConfirmed, setEditConfirmed] = useState("true");
+  const [editNotes, setEditNotes] = useState("");
+
   const fetchData = async () => {
     const [{ data: recs }, { data: profs }] = await Promise.all([
       supabase.from("delivery_confirmations").select("*").order("created_at", { ascending: false }),
