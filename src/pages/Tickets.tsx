@@ -171,6 +171,7 @@ export default function Tickets() {
         (t.order_number && t.order_number.toLowerCase().includes(q)) ||
         (t.client_phone && t.client_phone.includes(search)) ||
         String(t.ticket_number).includes(search);
+      if (!matchesSearch) return;
       const s = getTicketSlaStatus(t);
       if (s in counts) counts[s as keyof typeof counts]++;
     });
