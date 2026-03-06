@@ -20,6 +20,7 @@ export default function PortalTicketDetail() {
   const { toast } = useToast();
   const [ticket, setTicket] = useState<any>(null);
   const [attachments, setAttachments] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [statuses, setStatuses] = useState<Record<string, { name: string; color: string }>>({});
@@ -33,7 +34,7 @@ export default function PortalTicketDetail() {
 
   const fetchData = async () => {
     if (!id || !user) return;
-    const [{ data: t }, { data: msgs }, { data: sts }, { data: atts }, { data: evts }] = await Promise.all([
+    const [{ data: t }, { data: msgs }, { data: sts }, { data: atts }, { data: evts }, { data: docs }] = await Promise.all([
       supabase
         .from("tickets")
         .select(`
@@ -54,6 +55,11 @@ export default function PortalTicketDetail() {
         .eq("ticket_id", id)
         .in("event_type", ["status_change", "created"])
         .order("created_at", { ascending: true }),
+      supabase
+        .from("ticket_documents" as any)
+        .select("id, document_type, file_name, file_path, file_type, file_size, created_at")
+        .eq("ticket_id", id)
+        .order("created_at", { ascending: true }),
     ]);
     setTicket(t);
     setMessages(msgs || []);
@@ -65,6 +71,10 @@ export default function PortalTicketDetail() {
     setAttachments((atts || []).map((a: any) => ({
       ...a,
       url: supabase.storage.from("ticket-attachments").getPublicUrl(a.file_path).data.publicUrl,
+    })));
+    setDocuments(((docs as any[]) || []).map((d: any) => ({
+      ...d,
+      url: supabase.storage.from("ticket-attachments").getPublicUrl(d.file_path).data.publicUrl,
     })));
     setLoading(false);
   };
@@ -336,6 +346,53 @@ export default function PortalTicketDetail() {
                       <Download className="h-3 w-3 text-muted-foreground shrink-0" />
                       <p className="text-xs truncate">{att.file_name}</p>
                     </div>
+                  </a>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Documents */}
+      {documents.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Documentos ({documents.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {documents.map((doc: any) => {
+                const typeLabels: Record<string, string> = {
+                  fatura: "Fatura",
+                  laudo_tecnico: "Laudo Técnico",
+                  orcamento: "Orçamento",
+                  comprovativo: "Comprovativo",
+                  outro: "Outro",
+                };
+                return (
+                  <a
+                    key={doc.id}
+                    href={doc.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-2.5 border rounded-lg hover:border-primary/50 transition-colors"
+                  >
+                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{doc.file_name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {typeLabels[doc.document_type] || doc.document_type}
+                        {" · "}
+                        {doc.file_size < 1024 * 1024
+                          ? `${(doc.file_size / 1024).toFixed(0)} KB`
+                          : `${(doc.file_size / (1024 * 1024)).toFixed(1)} MB`}
+                      </p>
+                    </div>
+                    <Download className="h-4 w-4 text-muted-foreground shrink-0" />
                   </a>
                 );
               })}
