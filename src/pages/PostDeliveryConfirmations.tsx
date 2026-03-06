@@ -110,7 +110,7 @@ export default function PostDeliveryConfirmations() {
       toast({ title: "Confirmação pós-entrega registada" });
       setOrderNumber(""); setClientName(""); setClientPhone(""); setDeliveryDate("");
       setProductOk(false); setAssemblyOk(false); setNoDamage(false); setClientSatisfied(false);
-      setIssuesReported(""); setNotes("");
+      setIssuesReported(""); setAssemblyNps(null); setNotes("");
       fetchData();
     }
   };
