@@ -515,6 +515,7 @@ export type Database = {
       }
       post_delivery_confirmations: {
         Row: {
+          assembly_nps: number | null
           assembly_ok: boolean
           client_name: string
           client_phone: string
@@ -530,6 +531,7 @@ export type Database = {
           product_ok: boolean
         }
         Insert: {
+          assembly_nps?: number | null
           assembly_ok?: boolean
           client_name: string
           client_phone: string
@@ -545,6 +547,7 @@ export type Database = {
           product_ok?: boolean
         }
         Update: {
+          assembly_nps?: number | null
           assembly_ok?: boolean
           client_name?: string
           client_phone?: string

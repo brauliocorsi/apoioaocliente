@@ -1,0 +1,1 @@
+ALTER TABLE public.post_delivery_confirmations ADD COLUMN assembly_nps INTEGER DEFAULT NULL;
