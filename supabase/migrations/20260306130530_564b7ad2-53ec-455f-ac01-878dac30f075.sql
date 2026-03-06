@@ -1,0 +1,1 @@
+ALTER TABLE public.delivery_confirmations ADD COLUMN contact_attempts integer NOT NULL DEFAULT 1;
