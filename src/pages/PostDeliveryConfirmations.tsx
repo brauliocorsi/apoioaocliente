@@ -274,6 +274,10 @@ export default function PostDeliveryConfirmations() {
                 <CheckItem label="Sem danos" checked={noDamage} onChange={setNoDamage} />
                 <CheckItem label="Cliente satisfeito" checked={clientSatisfied} onChange={setClientSatisfied} />
               </div>
+              <div className="pt-2">
+                <Label className="text-sm">NPS Equipa de Montagem</Label>
+                <StarRating value={assemblyNps} onChange={setAssemblyNps} />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
