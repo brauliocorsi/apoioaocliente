@@ -293,6 +293,12 @@ export default function DeliveryConfirmations() {
                             <Badge variant="destructive">Não confirmada</Badge>
                           )}
                         </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            <PhoneCall className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-sm font-medium">{r.contact_attempts}</span>
+                          </div>
+                        </TableCell>
                         <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{r.notes || "—"}</TableCell>
                         <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>
                         <TableCell>
