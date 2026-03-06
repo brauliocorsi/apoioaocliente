@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, Loader2, Send, Paperclip, FileText, Download, X, FileImage, FileVideo, MessageSquare, Clock, Tag, Layers } from "lucide-react";
+import { ArrowLeft, Loader2, Send, Paperclip, FileText, Download, X, FileImage, FileVideo, MessageSquare, Clock, Tag, Layers, UserCircle } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { v4 as uuidv4 } from "uuid";
 import MessageReactions from "@/components/chat/MessageReactions";
 
