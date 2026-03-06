@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function PortalTickets() {
   const { user } = useClientAuth();
@@ -20,7 +21,7 @@ export default function PortalTickets() {
       const [{ data: tix }, { data: sts }] = await Promise.all([
         supabase
           .from("tickets")
-          .select("id, ticket_number, subject, status, created_at, description")
+          .select("id, ticket_number, subject, status, created_at, description, assigned_to, profiles:assigned_to(full_name, avatar_url)")
           .eq("client_user_id", user!.id)
           .order("created_at", { ascending: false }),
         supabase.from("ticket_statuses").select("id, name, color").order("sort_order"),
@@ -62,6 +63,8 @@ export default function PortalTickets() {
         <div className="space-y-3">
           {tickets.map((t) => {
             const st = statuses[t.status];
+            const agent = t.profiles as { full_name: string; avatar_url: string | null } | null;
+            const agentInitials = agent?.full_name?.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase();
             return (
               <Card
                 key={t.id}
@@ -74,9 +77,21 @@ export default function PortalTickets() {
                       <span className="text-xs font-mono text-muted-foreground">#{t.ticket_number}</span>
                       <p className="text-sm font-medium">{t.subject}</p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(t.created_at).toLocaleDateString("pt-PT")}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(t.created_at).toLocaleDateString("pt-PT")}
+                      </p>
+                      {agent && (
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span>·</span>
+                          <Avatar className="h-4 w-4">
+                            {agent.avatar_url && <AvatarImage src={agent.avatar_url} />}
+                            <AvatarFallback className="text-[8px] bg-primary/10 text-primary">{agentInitials}</AvatarFallback>
+                          </Avatar>
+                          <span>{agent.full_name}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div
                     className="flex items-center gap-2 rounded-full px-3 py-1 border"
