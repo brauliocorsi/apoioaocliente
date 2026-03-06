@@ -14,7 +14,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
-import { Truck, Search, CheckCircle2, XCircle, Plus, Trash2, Pencil, Check, X } from "lucide-react";
+import { Truck, Search, CheckCircle2, XCircle, Plus, Trash2, Pencil, Check, X, PhoneCall } from "lucide-react";
 
 interface DeliveryConfirmation {
   id: string;
