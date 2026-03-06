@@ -322,10 +322,20 @@ export default function DeliveryConfirmations() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={async () => {
+                              const newCount = (r.contact_attempts || 1) + 1;
+                              const { error } = await supabase.from("delivery_confirmations").update({ contact_attempts: newCount } as any).eq("id", r.id);
+                              if (error) toast({ title: "Erro ao atualizar", variant: "destructive" });
+                              else fetchData();
+                            }}
+                            className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-accent transition-colors"
+                            title="Adicionar tentativa"
+                          >
                             <PhoneCall className="h-3.5 w-3.5 text-muted-foreground" />
                             <span className="text-sm font-medium">{r.contact_attempts}</span>
-                          </div>
+                            <Plus className="h-3 w-3 text-muted-foreground" />
+                          </button>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{r.notes || "—"}</TableCell>
                         <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>
