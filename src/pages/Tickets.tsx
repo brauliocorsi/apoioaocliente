@@ -178,12 +178,13 @@ export default function Tickets() {
   })();
 
   const filtered = tickets.filter((t) => {
+    const q = search.toLowerCase();
     const matchesSearch =
-      t.client_name.toLowerCase().includes(search.toLowerCase()) ||
-      t.subject.toLowerCase().includes(search.toLowerCase()) ||
-      (t.order_number && t.order_number.includes(search)) ||
+      t.client_name.toLowerCase().includes(q) ||
+      t.subject.toLowerCase().includes(q) ||
+      (t.order_number && t.order_number.toLowerCase().includes(q)) ||
+      (t.client_phone && t.client_phone.includes(search)) ||
       String(t.ticket_number).includes(search);
-    if (!matchesSearch) return false;
     if (slaFilter === "all") return true;
     const sla = getTicketSlaStatus(t);
     return sla === slaFilter;
