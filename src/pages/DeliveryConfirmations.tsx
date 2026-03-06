@@ -139,10 +139,20 @@ export default function DeliveryConfirmations() {
 
   const agentName = (id: string) => agents.find(a => a.id === id)?.full_name || "—";
 
-  const filtered = records.filter(r =>
-    r.order_number.toLowerCase().includes(search.toLowerCase()) ||
-    r.client_phone.includes(search)
-  );
+  const getDateCutoff = (filter: DateFilter): Date | null => {
+    const now = new Date();
+    if (filter === "today") return startOfDay(now);
+    if (filter === "week") return startOfWeek(now, { weekStartsOn: 1 });
+    if (filter === "month") return startOfMonth(now);
+    return null;
+  };
+
+  const filtered = records.filter(r => {
+    const matchesSearch = r.order_number.toLowerCase().includes(search.toLowerCase()) || r.client_phone.includes(search);
+    const cutoff = getDateCutoff(dateFilter);
+    const matchesDate = !cutoff || isAfter(new Date(r.created_at), cutoff);
+    return matchesSearch && matchesDate;
+  });
 
   const today = new Date().toDateString();
   const todayRecords = records.filter(r => new Date(r.created_at).toDateString() === today);
