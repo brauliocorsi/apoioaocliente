@@ -218,6 +218,7 @@ export default function PortalTicketDetail() {
   const st = statuses[ticket.status];
   const categoryName = (ticket.categories as any)?.name;
   const subcategoryName = (ticket.subcategories as any)?.name;
+  const assignedAgent = ticket.profiles as { full_name: string; avatar_url: string | null } | null;
 
   // Build timeline: ticket creation + status change events
   const timelineItems: { date: string; label: string; statusId?: string; isFirst?: boolean }[] = [
