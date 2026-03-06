@@ -272,6 +272,7 @@ export default function DeliveryConfirmations() {
                             <div className="flex items-center gap-1"><RadioGroupItem value="false" id={`en-${r.id}`} /><Label htmlFor={`en-${r.id}`} className="text-xs font-normal cursor-pointer">Não</Label></div>
                           </RadioGroup>
                         </TableCell>
+                        <TableCell><Input type="number" min="1" max="99" value={editAttempts} onChange={e => setEditAttempts(e.target.value)} className="h-8 text-sm w-16" /></TableCell>
                         <TableCell><Input value={editNotes} onChange={e => setEditNotes(e.target.value)} className="h-8 text-sm" /></TableCell>
                         <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>
                         <TableCell>
