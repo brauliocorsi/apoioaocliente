@@ -14,13 +14,14 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
-import { Truck, Search, CheckCircle2, XCircle, Plus, Trash2, Pencil, Check, X } from "lucide-react";
+import { Truck, Search, CheckCircle2, XCircle, Plus, Trash2, Pencil, Check, X, PhoneCall } from "lucide-react";
 
 interface DeliveryConfirmation {
   id: string;
   order_number: string;
   client_phone: string;
   confirmed: boolean;
+  contact_attempts: number;
   notes: string | null;
   created_by: string;
   created_at: string;
@@ -42,6 +43,7 @@ export default function DeliveryConfirmations() {
   const [orderNumber, setOrderNumber] = useState("");
   const [clientPhone, setClientPhone] = useState("");
   const [confirmed, setConfirmed] = useState<string>("true");
+  const [contactAttempts, setContactAttempts] = useState("1");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -50,6 +52,7 @@ export default function DeliveryConfirmations() {
   const [editOrder, setEditOrder] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editConfirmed, setEditConfirmed] = useState("true");
+  const [editAttempts, setEditAttempts] = useState("1");
   const [editNotes, setEditNotes] = useState("");
 
   const fetchData = async () => {
@@ -75,15 +78,16 @@ export default function DeliveryConfirmations() {
       order_number: orderNumber.trim(),
       client_phone: clientPhone.trim(),
       confirmed: confirmed === "true",
+      contact_attempts: parseInt(contactAttempts) || 1,
       notes: notes.trim() || null,
       created_by: user!.id,
-    });
+    } as any);
     setSubmitting(false);
     if (error) {
       toast({ title: "Erro ao registar", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Confirmação registada com sucesso" });
-      setOrderNumber(""); setClientPhone(""); setConfirmed("true"); setNotes("");
+      setOrderNumber(""); setClientPhone(""); setConfirmed("true"); setContactAttempts("1"); setNotes("");
       fetchData();
     }
   };
@@ -99,6 +103,7 @@ export default function DeliveryConfirmations() {
     setEditOrder(r.order_number);
     setEditPhone(r.client_phone);
     setEditConfirmed(r.confirmed ? "true" : "false");
+    setEditAttempts(String(r.contact_attempts || 1));
     setEditNotes(r.notes || "");
   };
 
@@ -113,8 +118,9 @@ export default function DeliveryConfirmations() {
       order_number: editOrder.trim(),
       client_phone: editPhone.trim(),
       confirmed: editConfirmed === "true",
+      contact_attempts: parseInt(editAttempts) || 1,
       notes: editNotes.trim() || null,
-    }).eq("id", editingId!);
+    } as any).eq("id", editingId!);
     if (error) {
       toast({ title: "Erro ao atualizar", description: error.message, variant: "destructive" });
     } else {
@@ -179,7 +185,7 @@ export default function DeliveryConfirmations() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
             <div className="space-y-2">
               <Label htmlFor="order">Nº Encomenda *</Label>
               <Input id="order" placeholder="Ex: 12345" value={orderNumber} onChange={e => setOrderNumber(e.target.value)} />
@@ -202,10 +208,14 @@ export default function DeliveryConfirmations() {
               </RadioGroup>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="attempts">Tentativas</Label>
+              <Input id="attempts" type="number" min="1" max="99" value={contactAttempts} onChange={e => setContactAttempts(e.target.value)} className="w-20" />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="notes">Observações</Label>
               <Input id="notes" placeholder="Opcional" value={notes} onChange={e => setNotes(e.target.value)} />
             </div>
-            <div className="md:col-span-2 lg:col-span-4">
+            <div className="md:col-span-2 lg:col-span-5">
               <Button type="submit" disabled={submitting} className="w-full md:w-auto">
                 {submitting ? "A registar..." : "Registar"}
               </Button>
@@ -240,6 +250,7 @@ export default function DeliveryConfirmations() {
                   <TableHead>Nº Encomenda</TableHead>
                   <TableHead>Telefone</TableHead>
                   <TableHead>Estado</TableHead>
+                  <TableHead>Tentativas</TableHead>
                   <TableHead>Observações</TableHead>
                   <TableHead>Agente</TableHead>
                   <TableHead className="w-10"></TableHead>
@@ -261,6 +272,7 @@ export default function DeliveryConfirmations() {
                             <div className="flex items-center gap-1"><RadioGroupItem value="false" id={`en-${r.id}`} /><Label htmlFor={`en-${r.id}`} className="text-xs font-normal cursor-pointer">Não</Label></div>
                           </RadioGroup>
                         </TableCell>
+                        <TableCell><Input type="number" min="1" max="99" value={editAttempts} onChange={e => setEditAttempts(e.target.value)} className="h-8 text-sm w-16" /></TableCell>
                         <TableCell><Input value={editNotes} onChange={e => setEditNotes(e.target.value)} className="h-8 text-sm" /></TableCell>
                         <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>
                         <TableCell>
@@ -280,6 +292,12 @@ export default function DeliveryConfirmations() {
                           ) : (
                             <Badge variant="destructive">Não confirmada</Badge>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            <PhoneCall className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-sm font-medium">{r.contact_attempts}</span>
+                          </div>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{r.notes || "—"}</TableCell>
                         <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>

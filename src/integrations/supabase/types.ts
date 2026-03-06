@@ -206,6 +206,7 @@ export type Database = {
         Row: {
           client_phone: string
           confirmed: boolean
+          contact_attempts: number
           created_at: string
           created_by: string
           id: string
@@ -215,6 +216,7 @@ export type Database = {
         Insert: {
           client_phone: string
           confirmed: boolean
+          contact_attempts?: number
           created_at?: string
           created_by?: string
           id?: string
@@ -224,6 +226,7 @@ export type Database = {
         Update: {
           client_phone?: string
           confirmed?: boolean
+          contact_attempts?: number
           created_at?: string
           created_by?: string
           id?: string
