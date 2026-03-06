@@ -20,6 +20,7 @@ export default function PortalTicketDetail() {
   const { toast } = useToast();
   const [ticket, setTicket] = useState<any>(null);
   const [attachments, setAttachments] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [statuses, setStatuses] = useState<Record<string, { name: string; color: string }>>({});
