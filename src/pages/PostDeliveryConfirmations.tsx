@@ -391,6 +391,9 @@ export default function PostDeliveryConfirmations() {
                               ))}
                             </div>
                           </TableCell>
+                          <TableCell>
+                            <StarRating value={r.assembly_nps} readOnly />
+                          </TableCell>
                           <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{r.issues_reported || "—"}</TableCell>
                           <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>
                           <TableCell>
