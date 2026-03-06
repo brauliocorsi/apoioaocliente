@@ -118,8 +118,9 @@ export default function DeliveryConfirmations() {
       order_number: editOrder.trim(),
       client_phone: editPhone.trim(),
       confirmed: editConfirmed === "true",
+      contact_attempts: parseInt(editAttempts) || 1,
       notes: editNotes.trim() || null,
-    }).eq("id", editingId!);
+    } as any).eq("id", editingId!);
     if (error) {
       toast({ title: "Erro ao atualizar", description: error.message, variant: "destructive" });
     } else {
