@@ -24,8 +24,6 @@ export default function PortalTickets() {
           .select("id, ticket_number, subject, status, created_at, description, assigned_to, profiles:assigned_to(full_name, avatar_url)")
           .eq("client_user_id", user!.id)
           .order("created_at", { ascending: false }),
-          .eq("client_user_id", user!.id)
-          .order("created_at", { ascending: false }),
         supabase.from("ticket_statuses").select("id, name, color").order("sort_order"),
       ]);
       setTickets(tix || []);
