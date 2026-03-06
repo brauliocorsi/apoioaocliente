@@ -135,7 +135,19 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile
       {ticket.category_id && (
         <Badge variant="outline" className="text-[10px] mt-1.5">{categoryNames?.[ticket.category_id] || ticket.category_id}</Badge>
       )}
-    </div>
+      {ticketTags && ticketTags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {ticketTags.map((tagId) => {
+            const tag = allTags?.find((t) => t.id === tagId);
+            if (!tag) return null;
+            return (
+              <Badge key={tagId} className="text-[10px] text-white border-0 px-1.5 py-0" style={{ backgroundColor: tag.color || "#6b7280" }}>
+                {tag.name}
+              </Badge>
+            );
+          })}
+        </div>
+      )}
   );
 }
 
