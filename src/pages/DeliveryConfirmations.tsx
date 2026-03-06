@@ -14,7 +14,13 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
-import { Truck, Search, CheckCircle2, XCircle, Plus, Trash2, Pencil, Check, X, PhoneCall } from "lucide-react";
+import { Truck, Search, CheckCircle2, XCircle, Plus, Trash2, Pencil, Check, X, PhoneCall, CalendarDays } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { startOfDay, startOfWeek, startOfMonth, isAfter } from "date-fns";
+
+type DateFilter = "all" | "today" | "week" | "month";
 
 interface DeliveryConfirmation {
   id: string;
@@ -38,6 +44,7 @@ export default function DeliveryConfirmations() {
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
 
   // Form state
   const [orderNumber, setOrderNumber] = useState("");
