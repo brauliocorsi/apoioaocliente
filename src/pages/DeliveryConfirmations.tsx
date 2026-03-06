@@ -46,6 +46,7 @@ export default function DeliveryConfirmations() {
   const [records, setRecords] = useState<DeliveryConfirmation[]>([]);
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showPolicies, setShowPolicies] = useState(false);
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
 
