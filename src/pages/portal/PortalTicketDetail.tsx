@@ -354,6 +354,53 @@ export default function PortalTicketDetail() {
         </Card>
       )}
 
+      {/* Documents */}
+      {documents.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Documentos ({documents.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {documents.map((doc: any) => {
+                const typeLabels: Record<string, string> = {
+                  fatura: "Fatura",
+                  laudo_tecnico: "Laudo Técnico",
+                  orcamento: "Orçamento",
+                  comprovativo: "Comprovativo",
+                  outro: "Outro",
+                };
+                return (
+                  <a
+                    key={doc.id}
+                    href={doc.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-2.5 border rounded-lg hover:border-primary/50 transition-colors"
+                  >
+                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{doc.file_name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {typeLabels[doc.document_type] || doc.document_type}
+                        {" · "}
+                        {doc.file_size < 1024 * 1024
+                          ? `${(doc.file_size / 1024).toFixed(0)} KB`
+                          : `${(doc.file_size / (1024 * 1024)).toFixed(1)} MB`}
+                      </p>
+                    </div>
+                    <Download className="h-4 w-4 text-muted-foreground shrink-0" />
+                  </a>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Main tabs: Messages + Timeline */}
       <Tabs defaultValue="messages" className="w-full">
         <TabsList className="w-full grid grid-cols-2">
