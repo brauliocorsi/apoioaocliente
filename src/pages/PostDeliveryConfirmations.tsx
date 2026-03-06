@@ -141,6 +141,7 @@ export default function PostDeliveryConfirmations() {
       no_damage: editData.no_damage ?? false,
       client_satisfied: editData.client_satisfied ?? false,
       issues_reported: editData.issues_reported?.trim() || null,
+      assembly_nps: editData.assembly_nps ?? null,
       notes: editData.notes?.trim() || null,
     } as any).eq("id", editingId!);
     if (error) {
