@@ -1,4 +1,4 @@
-import { LayoutDashboard, Ticket, MessageSquareText, Settings, LogOut, Phone } from "lucide-react";
+import { LayoutDashboard, Ticket, MessageSquareText, Settings, LogOut, Phone, Truck } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import ProfileDialog from "@/components/ProfileDialog";

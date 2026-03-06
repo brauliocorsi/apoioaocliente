@@ -10,6 +10,7 @@ import { AppLayout } from "@/components/AppLayout";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import PhoneCalls from "./pages/PhoneCalls";
+import DeliveryConfirmations from "./pages/DeliveryConfirmations";
 import Tickets from "./pages/Tickets";
 import TicketNew from "./pages/TicketNew";
 import TicketDetail from "./pages/TicketDetail";
