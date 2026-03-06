@@ -196,6 +196,75 @@ export default function DeliveryConfirmations() {
         </Card>
       </div>
 
+      {/* Quick Reference - Termos e Condições */}
+      <Card>
+        <CardHeader className="pb-2 cursor-pointer" onClick={() => setShowPolicies(p => !p)}>
+          <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
+            <HelpCircle className="h-4 w-4" />
+            Consulta Rápida — Termos e Condições
+            <ChevronDown className={`h-4 w-4 ml-auto transition-transform ${showPolicies ? "rotate-180" : ""}`} />
+          </CardTitle>
+        </CardHeader>
+        {showPolicies && (
+          <CardContent className="pt-0">
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="entrega">
+                <AccordionTrigger className="text-sm">📦 Entrega e Montagem</AccordionTrigger>
+                <AccordionContent className="text-sm text-muted-foreground space-y-1">
+                  <p>• Horário: 8h–20h, segunda a sábado (exceto feriados). Não é possível marcar hora exata.</p>
+                  <p>• Pagamento deve ser efetuado antes da descarga e montagem.</p>
+                  <p>• O local deve estar limpo e desimpedido. Não inclui desmontagem de móveis antigos.</p>
+                  <p>• Anomalias devem ser reportadas com fotos/vídeo em <strong>48 horas</strong> para apoioaocliente@upmoveis.pt</p>
+                  <p>• Alterações de data: comunicar com <strong>48h de antecedência</strong>, senão nova taxa de deslocação.</p>
+                  <p>• Crianças e animais afastados durante a montagem.</p>
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="prazos">
+                <AccordionTrigger className="text-sm">📅 Prazos de Entrega</AccordionTrigger>
+                <AccordionContent className="text-sm text-muted-foreground space-y-1">
+                  <p>• Datas indicadas são <strong>estimativas</strong>, sujeitas a variações logísticas.</p>
+                  <p>• Quando disponível, contactamos para agendar. Artigos ficam reservados <strong>15 dias</strong>.</p>
+                  <p>• Após 15 dias sem resposta, podem ser recolocados à venda.</p>
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="pagamentos">
+                <AccordionTrigger className="text-sm">💳 Pagamentos</AccordionTrigger>
+                <AccordionContent className="text-sm text-muted-foreground space-y-1">
+                  <p>• Na entrega: Numerário ou Multibanco (comunicar antecipadamente).</p>
+                  <p>• Transferência bancária: <strong>não aceite no momento da entrega</strong>. Comunicar antecipadamente para receber IBAN.</p>
+                  <p>• seQura: até 12 parcelas, aprovação instantânea.</p>
+                  <p>• Produtos sob medida: pagamento antecipado por transferência.</p>
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="garantia">
+                <AccordionTrigger className="text-sm">🛡️ Garantia</AccordionTrigger>
+                <AccordionContent className="text-sm text-muted-foreground space-y-1">
+                  <p>• <strong>3 anos</strong> para defeitos de fabrico.</p>
+                  <p>• Não cobre: danos por uso/montagem inadequada, desgaste normal, produtos de limpeza incorretos.</p>
+                  <p>• Contacto: apoioaocliente@upmoveis.pt</p>
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="devolucoes">
+                <AccordionTrigger className="text-sm">🔄 Devoluções e Trocas</AccordionTrigger>
+                <AccordionContent className="text-sm text-muted-foreground space-y-1">
+                  <p>• Até <strong>15 dias</strong> após compra, se não montado e na embalagem original.</p>
+                  <p>• Custos de transporte e recolha a cargo do cliente.</p>
+                  <p>• <strong>Exceções:</strong> produtos personalizados, exposição, colchões/almofadas abertos.</p>
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="exposicao">
+                <AccordionTrigger className="text-sm">🏷️ Artigos de Exposição</AccordionTrigger>
+                <AccordionContent className="text-sm text-muted-foreground space-y-1">
+                  <p>• Vendidos no estado em que se encontram, com possíveis sinais de uso.</p>
+                  <p>• Inspecionar antes da compra. Sem devoluções por defeitos visíveis.</p>
+                  <p>• Garantia limitada: não cobre sinais de uso pré-existentes.</p>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </CardContent>
+        )}
+      </Card>
+
       {/* Form */}
       <Card>
         <CardHeader>
