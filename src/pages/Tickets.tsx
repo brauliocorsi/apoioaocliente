@@ -185,7 +185,8 @@ export default function Tickets() {
       t.subject.toLowerCase().includes(q) ||
       (t.order_number && t.order_number.toLowerCase().includes(q)) ||
       (t.client_phone && t.client_phone.includes(search)) ||
-      String(t.ticket_number).includes(search);
+        String(t.ticket_number).includes(search);
+    if (!matchesSearch) return false;
     if (slaFilter === "all") return true;
     const sla = getTicketSlaStatus(t);
     return sla === slaFilter;
