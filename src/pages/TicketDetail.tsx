@@ -514,55 +514,109 @@ export default function TicketDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {suggestions.map((s, i) => (
-              <div key={i} className="text-sm p-2 rounded bg-background border">
-                <p className="font-medium">{s.rule}: {s.message}</p>
-                {s.suggestedTags.length > 0 && (
-                  <p className="text-xs text-muted-foreground mt-1">Tags: {s.suggestedTags.join(", ")}</p>
-                )}
-                {s.suggestedClauses.length > 0 && (
-                  <div className="mt-1">
-                    <p className="text-xs text-muted-foreground font-medium mb-0.5">Cláusulas sugeridas:</p>
-                    <ul className="space-y-0.5">
-                      {s.suggestedClauses.map((clauseId, ci) => {
-                        const clause = clauseMap[clauseId];
+            {suggestions.map((s, i) => {
+              const missingTags = s.suggestedTags.filter((t) => !tags.includes(t));
+              const missingClauses = s.suggestedClauses.filter((c) => !clauses.includes(c));
+
+              const applyAll = async () => {
+                if (!id) return;
+                const tagInserts = missingTags.map((tagId) => ({ ticket_id: id, tag_id: tagId }));
+                const clauseInserts = missingClauses.map((clauseId) => ({ ticket_id: id, clause_id: clauseId }));
+                if (tagInserts.length > 0) await supabase.from("ticket_tags").insert(tagInserts);
+                if (clauseInserts.length > 0) await supabase.from("ticket_clauses").insert(clauseInserts);
+                toast({ title: "Tags e cláusulas aplicadas" });
+                fetchTicket();
+              };
+
+              return (
+                <div key={i} className="text-sm p-3 rounded-lg bg-background border space-y-2">
+                  <p className="font-medium">{s.message}</p>
+
+                  {s.suggestedTags.length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-muted-foreground font-medium">Tags:</span>
+                      {s.suggestedTags.map((tagId) => {
+                        const alreadyApplied = tags.includes(tagId);
                         return (
-                          <li key={ci} className="text-xs text-muted-foreground flex items-start gap-1">
-                            <span className="mt-0.5 shrink-0">•</span>
-                            {clause
-                              ? <span><span className="font-mono font-medium text-foreground">{clause.code}</span> — {clause.description}</span>
-                              : <span className="font-mono">{clauseId}</span>
-                            }
-                          </li>
+                          <Badge
+                            key={tagId}
+                            variant={alreadyApplied ? "default" : "outline"}
+                            className={`text-xs cursor-pointer ${alreadyApplied ? "opacity-60" : "hover:bg-primary/10"}`}
+                            onClick={async () => {
+                              if (alreadyApplied || !id) return;
+                              await supabase.from("ticket_tags").insert({ ticket_id: id, tag_id: tagId });
+                              toast({ title: "Tag aplicada" });
+                              fetchTicket();
+                            }}
+                          >
+                            {alreadyApplied ? "✓ " : "+ "}{tagId}
+                          </Badge>
                         );
                       })}
-                    </ul>
-                  </div>
-                )}
-                {s.suggestedMacro && (() => {
-                  const macroTitle = macroMap[s.suggestedMacro];
-                  const macro = allMacros.find((m) => m.id === s.suggestedMacro);
-                  return (
-                    <div className="mt-1 flex items-center gap-2 flex-wrap">
-                      <p className="text-xs text-muted-foreground">
-                        Macro sugerida: <span className="font-mono font-medium text-foreground">{s.suggestedMacro}</span>
-                        {macroTitle && <span> — {macroTitle}</span>}
-                      </p>
-                      {macro && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-5 text-xs px-2 py-0"
-                          onClick={() => setNote(macro.content)}
-                        >
-                          Usar Macro
-                        </Button>
-                      )}
                     </div>
-                  );
-                })()}
-              </div>
-            ))}
+                  )}
+
+                  {s.suggestedClauses.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground font-medium mb-1">Cláusulas sugeridas:</p>
+                      <div className="space-y-1">
+                        {s.suggestedClauses.map((clauseId) => {
+                          const clause = clauseMap[clauseId];
+                          const alreadyApplied = clauses.includes(clauseId);
+                          return (
+                            <div key={clauseId} className="flex items-start gap-2 text-xs">
+                              <Button
+                                size="sm"
+                                variant={alreadyApplied ? "secondary" : "outline"}
+                                className="h-5 text-xs px-2 py-0 shrink-0"
+                                disabled={alreadyApplied}
+                                onClick={async () => {
+                                  if (!id) return;
+                                  await supabase.from("ticket_clauses").insert({ ticket_id: id, clause_id: clauseId });
+                                  toast({ title: "Cláusula aplicada" });
+                                  fetchTicket();
+                                }}
+                              >
+                                {alreadyApplied ? "✓ Aplicada" : "+ Aplicar"}
+                              </Button>
+                              <span className="text-muted-foreground">
+                                {clause
+                                  ? <><span className="font-mono font-medium text-foreground">{clause.code}</span> — {clause.description}</>
+                                  : <span className="font-mono">{clauseId}</span>
+                                }
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {s.suggestedMacro && (() => {
+                    const macroTitle = macroMap[s.suggestedMacro];
+                    const macro = allMacros.find((m) => m.id === s.suggestedMacro);
+                    return (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-muted-foreground">
+                          Macro: <span className="font-mono font-medium text-foreground">{macroTitle || s.suggestedMacro}</span>
+                        </span>
+                        {macro && (
+                          <Button size="sm" variant="outline" className="h-5 text-xs px-2 py-0" onClick={() => setReply(macro.content)}>
+                            Usar Macro
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {(missingTags.length > 0 || missingClauses.length > 0) && (
+                    <Button size="sm" variant="default" className="h-6 text-xs" onClick={applyAll}>
+                      <Check className="h-3 w-3 mr-1" /> Aplicar tudo
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}
