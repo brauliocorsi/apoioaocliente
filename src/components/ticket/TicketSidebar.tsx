@@ -426,6 +426,8 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
           </CardContent>
         </Card>
       )}
+      {/* Documentos */}
+      <TicketDocuments ticketId={ticket.id} userId={userId} />
 
       {clauses.length > 0 && (
         <Card>
