@@ -21,6 +21,7 @@ const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Tickets", url: "/tickets", icon: Ticket },
   { title: "Ligações", url: "/phone-calls", icon: Phone },
+  { title: "Conf. Entregas", url: "/delivery-confirmations", icon: Truck },
   { title: "Macros", url: "/macros", icon: MessageSquareText },
   { title: "Configurações", url: "/settings", icon: Settings },
 ];
