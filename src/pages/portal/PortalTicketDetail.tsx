@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, Loader2, Send, Paperclip, FileText, Download, X, FileImage, FileVideo, MessageSquare, Clock, Tag, Layers } from "lucide-react";
+import { ArrowLeft, Loader2, Send, Paperclip, FileText, Download, X, FileImage, FileVideo, MessageSquare, Clock, Tag, Layers, UserCircle } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { v4 as uuidv4 } from "uuid";
 import MessageReactions from "@/components/chat/MessageReactions";
 
@@ -40,9 +41,10 @@ export default function PortalTicketDetail() {
         .select(`
           id, ticket_number, subject, status, created_at, description,
           resolution_type, resolution_reason, resolution_client_reason, resolution_at,
-          category_id, subcategory_id,
+          category_id, subcategory_id, assigned_to,
           categories:category_id(name),
-          subcategories:subcategory_id(name)
+          subcategories:subcategory_id(name),
+          profiles:assigned_to(full_name, avatar_url)
         `)
         .eq("id", id)
         .single(),
@@ -216,6 +218,7 @@ export default function PortalTicketDetail() {
   const st = statuses[ticket.status];
   const categoryName = (ticket.categories as any)?.name;
   const subcategoryName = (ticket.subcategories as any)?.name;
+  const assignedAgent = ticket.profiles as { full_name: string; avatar_url: string | null } | null;
 
   // Build timeline: ticket creation + status change events
   const timelineItems: { date: string; label: string; statusId?: string; isFirst?: boolean }[] = [
@@ -278,6 +281,22 @@ export default function PortalTicketDetail() {
               <span className="text-xs font-medium text-muted-foreground">{subcategoryName}</span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Assigned Agent */}
+      {assignedAgent && (
+        <div className="flex items-center gap-2.5 bg-muted/50 border border-border rounded-lg px-3 py-2">
+          <Avatar className="h-7 w-7">
+            {assignedAgent.avatar_url && <AvatarImage src={assignedAgent.avatar_url} />}
+            <AvatarFallback className="text-[10px] font-semibold bg-primary/10 text-primary">
+              {assignedAgent.full_name?.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <p className="text-[10px] text-muted-foreground leading-none mb-0.5">Responsável</p>
+            <p className="text-xs font-semibold leading-none">{assignedAgent.full_name}</p>
+          </div>
         </div>
       )}
 
