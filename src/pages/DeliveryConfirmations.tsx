@@ -52,6 +52,7 @@ export default function DeliveryConfirmations() {
   const [editOrder, setEditOrder] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editConfirmed, setEditConfirmed] = useState("true");
+  const [editAttempts, setEditAttempts] = useState("1");
   const [editNotes, setEditNotes] = useState("");
 
   const fetchData = async () => {
