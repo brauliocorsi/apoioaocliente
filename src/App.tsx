@@ -11,6 +11,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import PhoneCalls from "./pages/PhoneCalls";
 import DeliveryConfirmations from "./pages/DeliveryConfirmations";
+import PostDeliveryConfirmations from "./pages/PostDeliveryConfirmations";
 import Tickets from "./pages/Tickets";
 import TicketNew from "./pages/TicketNew";
 import TicketDetail from "./pages/TicketDetail";
@@ -41,6 +42,7 @@ const App = () => (
               <Route path="/tickets" element={<Tickets />} />
               <Route path="/phone-calls" element={<PhoneCalls />} />
               <Route path="/delivery-confirmations" element={<DeliveryConfirmations />} />
+              <Route path="/post-delivery" element={<PostDeliveryConfirmations />} />
               <Route path="/tickets/new" element={<TicketNew />} />
               <Route path="/tickets/:id" element={<TicketDetail />} />
               <Route path="/macros" element={<Macros />} />
