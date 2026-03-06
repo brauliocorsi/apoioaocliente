@@ -1,0 +1,1 @@
+CREATE POLICY "delivery_confirmations_update" ON public.delivery_confirmations FOR UPDATE USING (is_authenticated_agent());

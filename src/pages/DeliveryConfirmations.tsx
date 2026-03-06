@@ -14,7 +14,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
-import { Truck, Search, CheckCircle2, XCircle, Plus, Trash2 } from "lucide-react";
+import { Truck, Search, CheckCircle2, XCircle, Plus, Trash2, Pencil, Check, X } from "lucide-react";
 
 interface DeliveryConfirmation {
   id: string;
@@ -44,6 +44,13 @@ export default function DeliveryConfirmations() {
   const [confirmed, setConfirmed] = useState<string>("true");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editOrder, setEditOrder] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editConfirmed, setEditConfirmed] = useState("true");
+  const [editNotes, setEditNotes] = useState("");
 
   const fetchData = async () => {
     const [{ data: recs }, { data: profs }] = await Promise.all([
@@ -85,6 +92,36 @@ export default function DeliveryConfirmations() {
     const { error } = await supabase.from("delivery_confirmations").delete().eq("id", id);
     if (error) toast({ title: "Erro ao apagar", variant: "destructive" });
     else fetchData();
+  };
+
+  const startEdit = (r: DeliveryConfirmation) => {
+    setEditingId(r.id);
+    setEditOrder(r.order_number);
+    setEditPhone(r.client_phone);
+    setEditConfirmed(r.confirmed ? "true" : "false");
+    setEditNotes(r.notes || "");
+  };
+
+  const cancelEdit = () => setEditingId(null);
+
+  const saveEdit = async () => {
+    if (!editOrder.trim() || !editPhone.trim()) {
+      toast({ title: "Preencha os campos obrigatórios", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from("delivery_confirmations").update({
+      order_number: editOrder.trim(),
+      client_phone: editPhone.trim(),
+      confirmed: editConfirmed === "true",
+      notes: editNotes.trim() || null,
+    }).eq("id", editingId!);
+    if (error) {
+      toast({ title: "Erro ao atualizar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Registo atualizado" });
+      setEditingId(null);
+      fetchData();
+    }
   };
 
   const agentName = (id: string) => agents.find(a => a.id === id)?.full_name || "—";
@@ -214,22 +251,46 @@ export default function DeliveryConfirmations() {
                     <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                       {format(new Date(r.created_at), "dd/MM/yyyy HH:mm", { locale: pt })}
                     </TableCell>
-                    <TableCell className="font-medium">{r.order_number}</TableCell>
-                    <TableCell>{r.client_phone}</TableCell>
-                    <TableCell>
-                      {r.confirmed ? (
-                        <Badge className="bg-green-500/15 text-green-700 border-green-300 dark:text-green-400">Confirmada</Badge>
-                      ) : (
-                        <Badge variant="destructive">Não confirmada</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{r.notes || "—"}</TableCell>
-                    <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>
-                    <TableCell>
-                      <button onClick={() => handleDelete(r.id)} className="text-muted-foreground hover:text-destructive transition-colors">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </TableCell>
+                    {editingId === r.id ? (
+                      <>
+                        <TableCell><Input value={editOrder} onChange={e => setEditOrder(e.target.value)} className="h-8 text-sm" /></TableCell>
+                        <TableCell><Input value={editPhone} onChange={e => setEditPhone(e.target.value)} className="h-8 text-sm" /></TableCell>
+                        <TableCell>
+                          <RadioGroup value={editConfirmed} onValueChange={setEditConfirmed} className="flex gap-3">
+                            <div className="flex items-center gap-1"><RadioGroupItem value="true" id={`ey-${r.id}`} /><Label htmlFor={`ey-${r.id}`} className="text-xs font-normal cursor-pointer">Sim</Label></div>
+                            <div className="flex items-center gap-1"><RadioGroupItem value="false" id={`en-${r.id}`} /><Label htmlFor={`en-${r.id}`} className="text-xs font-normal cursor-pointer">Não</Label></div>
+                          </RadioGroup>
+                        </TableCell>
+                        <TableCell><Input value={editNotes} onChange={e => setEditNotes(e.target.value)} className="h-8 text-sm" /></TableCell>
+                        <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <button onClick={saveEdit} className="text-primary hover:text-primary/80 transition-colors"><Check className="h-4 w-4" /></button>
+                            <button onClick={cancelEdit} className="text-muted-foreground hover:text-foreground transition-colors"><X className="h-4 w-4" /></button>
+                          </div>
+                        </TableCell>
+                      </>
+                    ) : (
+                      <>
+                        <TableCell className="font-medium">{r.order_number}</TableCell>
+                        <TableCell>{r.client_phone}</TableCell>
+                        <TableCell>
+                          {r.confirmed ? (
+                            <Badge className="bg-green-500/15 text-green-700 border-green-300 dark:text-green-400">Confirmada</Badge>
+                          ) : (
+                            <Badge variant="destructive">Não confirmada</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{r.notes || "—"}</TableCell>
+                        <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <button onClick={() => startEdit(r)} className="text-muted-foreground hover:text-primary transition-colors"><Pencil className="h-4 w-4" /></button>
+                            <button onClick={() => handleDelete(r.id)} className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="h-4 w-4" /></button>
+                          </div>
+                        </TableCell>
+                      </>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
