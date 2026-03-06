@@ -148,6 +148,7 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile
           })}
         </div>
       )}
+    </div>
   );
 }
 
