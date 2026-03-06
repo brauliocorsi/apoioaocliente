@@ -202,6 +202,36 @@ export type Database = {
         }
         Relationships: []
       }
+      delivery_confirmations: {
+        Row: {
+          client_phone: string
+          confirmed: boolean
+          created_at: string
+          created_by: string
+          id: string
+          notes: string | null
+          order_number: string
+        }
+        Insert: {
+          client_phone: string
+          confirmed: boolean
+          created_at?: string
+          created_by?: string
+          id?: string
+          notes?: string | null
+          order_number: string
+        }
+        Update: {
+          client_phone?: string
+          confirmed?: boolean
+          created_at?: string
+          created_by?: string
+          id?: string
+          notes?: string | null
+          order_number?: string
+        }
+        Relationships: []
+      }
       email_logs: {
         Row: {
           created_at: string

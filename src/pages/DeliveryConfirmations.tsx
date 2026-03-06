@@ -1,0 +1,242 @@
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import { toast } from "@/hooks/use-toast";
+import { format } from "date-fns";
+import { pt } from "date-fns/locale";
+import { Truck, Search, CheckCircle2, XCircle, Plus, Trash2 } from "lucide-react";
+
+interface DeliveryConfirmation {
+  id: string;
+  order_number: string;
+  client_phone: string;
+  confirmed: boolean;
+  notes: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+interface AgentProfile {
+  id: string;
+  full_name: string;
+}
+
+export default function DeliveryConfirmations() {
+  const { user } = useAuth();
+  const [records, setRecords] = useState<DeliveryConfirmation[]>([]);
+  const [agents, setAgents] = useState<AgentProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  // Form state
+  const [orderNumber, setOrderNumber] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
+  const [confirmed, setConfirmed] = useState<string>("true");
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchData = async () => {
+    const [{ data: recs }, { data: profs }] = await Promise.all([
+      supabase.from("delivery_confirmations").select("*").order("created_at", { ascending: false }),
+      supabase.rpc("get_agent_profiles"),
+    ]);
+    setRecords((recs as DeliveryConfirmation[]) || []);
+    setAgents((profs as AgentProfile[]) || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!orderNumber.trim() || !clientPhone.trim()) {
+      toast({ title: "Preencha os campos obrigatórios", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    const { error } = await supabase.from("delivery_confirmations").insert({
+      order_number: orderNumber.trim(),
+      client_phone: clientPhone.trim(),
+      confirmed: confirmed === "true",
+      notes: notes.trim() || null,
+      created_by: user!.id,
+    });
+    setSubmitting(false);
+    if (error) {
+      toast({ title: "Erro ao registar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Confirmação registada com sucesso" });
+      setOrderNumber(""); setClientPhone(""); setConfirmed("true"); setNotes("");
+      fetchData();
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase.from("delivery_confirmations").delete().eq("id", id);
+    if (error) toast({ title: "Erro ao apagar", variant: "destructive" });
+    else fetchData();
+  };
+
+  const agentName = (id: string) => agents.find(a => a.id === id)?.full_name || "—";
+
+  const filtered = records.filter(r =>
+    r.order_number.toLowerCase().includes(search.toLowerCase()) ||
+    r.client_phone.includes(search)
+  );
+
+  const today = new Date().toDateString();
+  const todayRecords = records.filter(r => new Date(r.created_at).toDateString() === today);
+  const confirmedToday = todayRecords.filter(r => r.confirmed).length;
+  const notConfirmedToday = todayRecords.filter(r => !r.confirmed).length;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Truck className="h-6 w-6 text-primary" />
+        <h1 className="text-2xl font-bold text-foreground">Confirmação de Entregas</h1>
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">Hoje</p>
+            <p className="text-3xl font-bold text-foreground">{todayRecords.length}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-green-500" />
+            <div>
+              <p className="text-sm text-muted-foreground">Confirmadas</p>
+              <p className="text-3xl font-bold text-foreground">{confirmedToday}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-3">
+            <XCircle className="h-5 w-5 text-destructive" />
+            <div>
+              <p className="text-sm text-muted-foreground">Não confirmadas</p>
+              <p className="text-3xl font-bold text-foreground">{notConfirmedToday}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Form */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Plus className="h-4 w-4" /> Novo Registo
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            <div className="space-y-2">
+              <Label htmlFor="order">Nº Encomenda *</Label>
+              <Input id="order" placeholder="Ex: 12345" value={orderNumber} onChange={e => setOrderNumber(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Telefone do Cliente *</Label>
+              <Input id="phone" placeholder="Ex: 912345678" value={clientPhone} onChange={e => setClientPhone(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Confirmou entrega?</Label>
+              <RadioGroup value={confirmed} onValueChange={setConfirmed} className="flex gap-4 pt-1">
+                <div className="flex items-center gap-1.5">
+                  <RadioGroupItem value="true" id="yes" />
+                  <Label htmlFor="yes" className="font-normal cursor-pointer">Sim</Label>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <RadioGroupItem value="false" id="no" />
+                  <Label htmlFor="no" className="font-normal cursor-pointer">Não</Label>
+                </div>
+              </RadioGroup>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="notes">Observações</Label>
+              <Input id="notes" placeholder="Opcional" value={notes} onChange={e => setNotes(e.target.value)} />
+            </div>
+            <div className="md:col-span-2 lg:col-span-4">
+              <Button type="submit" disabled={submitting} className="w-full md:w-auto">
+                {submitting ? "A registar..." : "Registar"}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Search + Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <Search className="h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Pesquisar por nº encomenda ou telefone..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="max-w-sm"
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <p className="text-muted-foreground text-sm py-4">A carregar...</p>
+          ) : filtered.length === 0 ? (
+            <p className="text-muted-foreground text-sm py-4">Sem registos.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Nº Encomenda</TableHead>
+                  <TableHead>Telefone</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Observações</TableHead>
+                  <TableHead>Agente</TableHead>
+                  <TableHead className="w-10"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map(r => (
+                  <TableRow key={r.id}>
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                      {format(new Date(r.created_at), "dd/MM/yyyy HH:mm", { locale: pt })}
+                    </TableCell>
+                    <TableCell className="font-medium">{r.order_number}</TableCell>
+                    <TableCell>{r.client_phone}</TableCell>
+                    <TableCell>
+                      {r.confirmed ? (
+                        <Badge className="bg-green-500/15 text-green-700 border-green-300 dark:text-green-400">Confirmada</Badge>
+                      ) : (
+                        <Badge variant="destructive">Não confirmada</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{r.notes || "—"}</TableCell>
+                    <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>
+                    <TableCell>
+                      <button onClick={() => handleDelete(r.id)} className="text-muted-foreground hover:text-destructive transition-colors">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
