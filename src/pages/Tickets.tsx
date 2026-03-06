@@ -164,12 +164,13 @@ export default function Tickets() {
   const preSlaCounts = (() => {
     const counts = { breached: 0, at_risk: 0, on_track: 0, completed: 0, no_sla: 0 };
     tickets.forEach((t) => {
+      const q = search.toLowerCase();
       const matchesSearch =
-        t.client_name.toLowerCase().includes(search.toLowerCase()) ||
-        t.subject.toLowerCase().includes(search.toLowerCase()) ||
-        (t.order_number && t.order_number.includes(search)) ||
+        t.client_name.toLowerCase().includes(q) ||
+        t.subject.toLowerCase().includes(q) ||
+        (t.order_number && t.order_number.toLowerCase().includes(q)) ||
+        (t.client_phone && t.client_phone.includes(search)) ||
         String(t.ticket_number).includes(search);
-      if (!matchesSearch) return;
       const s = getTicketSlaStatus(t);
       if (s in counts) counts[s as keyof typeof counts]++;
     });
