@@ -360,6 +360,9 @@ export default function PostDeliveryConfirmations() {
                               <CheckItem label="Satisfeito" checked={editData.client_satisfied ?? false} onChange={v => setEditData(d => ({ ...d, client_satisfied: v }))} />
                             </div>
                           </TableCell>
+                          <TableCell>
+                            <StarRating value={editData.assembly_nps ?? null} onChange={v => setEditData(d => ({ ...d, assembly_nps: v }))} />
+                          </TableCell>
                           <TableCell><Input value={editData.issues_reported || ""} onChange={e => setEditData(d => ({ ...d, issues_reported: e.target.value }))} className="h-8 text-sm" /></TableCell>
                           <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>
                           <TableCell>
