@@ -78,15 +78,16 @@ export default function DeliveryConfirmations() {
       order_number: orderNumber.trim(),
       client_phone: clientPhone.trim(),
       confirmed: confirmed === "true",
+      contact_attempts: parseInt(contactAttempts) || 1,
       notes: notes.trim() || null,
       created_by: user!.id,
-    });
+    } as any);
     setSubmitting(false);
     if (error) {
       toast({ title: "Erro ao registar", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Confirmação registada com sucesso" });
-      setOrderNumber(""); setClientPhone(""); setConfirmed("true"); setNotes("");
+      setOrderNumber(""); setClientPhone(""); setConfirmed("true"); setContactAttempts("1"); setNotes("");
       fetchData();
     }
   };
