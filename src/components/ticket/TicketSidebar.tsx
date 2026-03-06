@@ -16,6 +16,7 @@ interface TicketSidebarProps {
   ticket: any;
   tags: string[];
   clauses: string[];
+  userId: string;
   onUpdate: () => void;
 }
 
