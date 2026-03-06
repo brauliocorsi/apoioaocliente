@@ -50,7 +50,6 @@ export default function DeliveryConfirmations() {
   const [orderNumber, setOrderNumber] = useState("");
   const [clientPhone, setClientPhone] = useState("");
   const [confirmed, setConfirmed] = useState<string>("true");
-  const [contactAttempts, setContactAttempts] = useState("1");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -85,7 +84,7 @@ export default function DeliveryConfirmations() {
       order_number: orderNumber.trim(),
       client_phone: clientPhone.trim(),
       confirmed: confirmed === "true",
-      contact_attempts: parseInt(contactAttempts) || 1,
+      contact_attempts: 1,
       notes: notes.trim() || null,
       created_by: user!.id,
     } as any);
@@ -94,7 +93,7 @@ export default function DeliveryConfirmations() {
       toast({ title: "Erro ao registar", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Confirmação registada com sucesso" });
-      setOrderNumber(""); setClientPhone(""); setConfirmed("true"); setContactAttempts("1"); setNotes("");
+      setOrderNumber(""); setClientPhone(""); setConfirmed("true"); setNotes("");
       fetchData();
     }
   };
@@ -202,7 +201,7 @@ export default function DeliveryConfirmations() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             <div className="space-y-2">
               <Label htmlFor="order">Nº Encomenda *</Label>
               <Input id="order" placeholder="Ex: 12345" value={orderNumber} onChange={e => setOrderNumber(e.target.value)} />
@@ -225,14 +224,10 @@ export default function DeliveryConfirmations() {
               </RadioGroup>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="attempts">Tentativas</Label>
-              <Input id="attempts" type="number" min="1" max="99" value={contactAttempts} onChange={e => setContactAttempts(e.target.value)} className="w-20" />
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="notes">Observações</Label>
               <Input id="notes" placeholder="Opcional" value={notes} onChange={e => setNotes(e.target.value)} />
             </div>
-            <div className="md:col-span-2 lg:col-span-5">
+            <div className="md:col-span-2 lg:col-span-4">
               <Button type="submit" disabled={submitting} className="w-full md:w-auto">
                 {submitting ? "A registar..." : "Registar"}
               </Button>
@@ -327,10 +322,20 @@ export default function DeliveryConfirmations() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={async () => {
+                              const newCount = (r.contact_attempts || 1) + 1;
+                              const { error } = await supabase.from("delivery_confirmations").update({ contact_attempts: newCount } as any).eq("id", r.id);
+                              if (error) toast({ title: "Erro ao atualizar", variant: "destructive" });
+                              else fetchData();
+                            }}
+                            className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-accent transition-colors"
+                            title="Adicionar tentativa"
+                          >
                             <PhoneCall className="h-3.5 w-3.5 text-muted-foreground" />
                             <span className="text-sm font-medium">{r.contact_attempts}</span>
-                          </div>
+                            <Plus className="h-3 w-3 text-muted-foreground" />
+                          </button>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{r.notes || "—"}</TableCell>
                         <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>
