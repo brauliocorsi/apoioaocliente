@@ -95,7 +95,9 @@ export default function Tickets() {
     Promise.all([
       supabase.from("categories").select("id, name"),
       supabase.rpc("get_agent_profiles"),
-    ]).then(async ([{ data: cats }, { data: profs }]) => {
+      supabase.from("tags").select("id, name, color"),
+    ]).then(async ([{ data: cats }, { data: profs }, { data: tagsData }]) => {
+      setAllTags((tagsData as any[]) || []);
       const map: Record<string, string> = {};
       (cats || []).forEach((c: any) => { map[c.id] = c.name; });
       setCategories(map);
