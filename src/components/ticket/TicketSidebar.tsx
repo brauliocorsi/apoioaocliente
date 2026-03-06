@@ -9,19 +9,21 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Pencil, Check, X, UserPlus, Loader2, Phone } from "lucide-react";
 import TagSelector from "./TagSelector";
+import TicketDocuments from "./TicketDocuments";
 import { useNavigate } from "react-router-dom";
 
 interface TicketSidebarProps {
   ticket: any;
   tags: string[];
   clauses: string[];
+  userId: string;
   onUpdate: () => void;
 }
 
 type Category = { id: string; name: string };
 type Subcategory = { id: string; category_id: string; name: string };
 
-export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: TicketSidebarProps) {
+export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate }: TicketSidebarProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
@@ -424,6 +426,8 @@ export default function TicketSidebar({ ticket, tags, clauses, onUpdate }: Ticke
           </CardContent>
         </Card>
       )}
+      {/* Documentos */}
+      <TicketDocuments ticketId={ticket.id} userId={userId} />
 
       {clauses.length > 0 && (
         <Card>

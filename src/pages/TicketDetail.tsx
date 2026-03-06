@@ -891,7 +891,7 @@ export default function TicketDetail() {
           </Card>
         </div>
 
-        <TicketSidebar ticket={ticket} tags={tags} clauses={clauses} onUpdate={fetchTicket} />
+        <TicketSidebar ticket={ticket} tags={tags} clauses={clauses} userId={user?.id || ""} onUpdate={fetchTicket} />
       </div>
     </div>
   );
