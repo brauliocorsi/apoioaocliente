@@ -40,9 +40,10 @@ export default function PortalTicketDetail() {
         .select(`
           id, ticket_number, subject, status, created_at, description,
           resolution_type, resolution_reason, resolution_client_reason, resolution_at,
-          category_id, subcategory_id,
+          category_id, subcategory_id, assigned_to,
           categories:category_id(name),
-          subcategories:subcategory_id(name)
+          subcategories:subcategory_id(name),
+          profiles:assigned_to(full_name, avatar_url)
         `)
         .eq("id", id)
         .single(),
