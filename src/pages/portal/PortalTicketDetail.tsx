@@ -34,7 +34,7 @@ export default function PortalTicketDetail() {
 
   const fetchData = async () => {
     if (!id || !user) return;
-    const [{ data: t }, { data: msgs }, { data: sts }, { data: atts }, { data: evts }] = await Promise.all([
+    const [{ data: t }, { data: msgs }, { data: sts }, { data: atts }, { data: evts }, { data: docs }] = await Promise.all([
       supabase
         .from("tickets")
         .select(`
@@ -55,6 +55,11 @@ export default function PortalTicketDetail() {
         .eq("ticket_id", id)
         .in("event_type", ["status_change", "created"])
         .order("created_at", { ascending: true }),
+      supabase
+        .from("ticket_documents" as any)
+        .select("id, document_type, file_name, file_path, file_type, file_size, created_at")
+        .eq("ticket_id", id)
+        .order("created_at", { ascending: true }),
     ]);
     setTicket(t);
     setMessages(msgs || []);
@@ -66,6 +71,10 @@ export default function PortalTicketDetail() {
     setAttachments((atts || []).map((a: any) => ({
       ...a,
       url: supabase.storage.from("ticket-attachments").getPublicUrl(a.file_path).data.publicUrl,
+    })));
+    setDocuments(((docs as any[]) || []).map((d: any) => ({
+      ...d,
+      url: supabase.storage.from("ticket-attachments").getPublicUrl(d.file_path).data.publicUrl,
     })));
     setLoading(false);
   };
