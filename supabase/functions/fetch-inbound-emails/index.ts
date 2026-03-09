@@ -665,7 +665,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         }
 
         // New email from unknown/closed thread → goes to pending review queue
-        const { data: pendingEmail } = await adminClient.from("pending_emails").insert({
+        const pendingInsert: any = {
           from_address: clientEmail.toLowerCase(),
           from_name: clientName,
           subject: msg.subject.substring(0, 500),
@@ -673,7 +673,10 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           body_html: (msg.bodyHtml ? sanitizeHtml(msg.bodyHtml) : "").substring(0, 10000),
           message_id: emailFingerprint,
           status: "pending",
-        }).select("id").single();
+        };
+        if (msg.date) pendingInsert.created_at = msg.date;
+
+        const { data: pendingEmail } = await adminClient.from("pending_emails").insert(pendingInsert).select("id").single();
 
         // Store attachments meta for pending email
         if (pendingEmail && msg.attachments.length > 0) {
