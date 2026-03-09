@@ -388,7 +388,7 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
                             <p className="font-medium text-foreground">
                               {msg.sender_type === 'client' ? 'Cliente' : 'Agente'}
                             </p>
-                            <p className="text-muted-foreground truncate">{(msg.content || '').substring(0, 60)}{(msg.content || '').length > 60 ? '...' : ''}</p>
+                            <p className="text-muted-foreground truncate">{(() => { const plain = (msg.content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(); return plain.substring(0, 60) + (plain.length > 60 ? '...' : ''); })()}</p>
                             <p className="text-muted-foreground/70 text-[10px]">
                               {new Date(msg.created_at).toLocaleString("pt-PT", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </p>
