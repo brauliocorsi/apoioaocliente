@@ -85,6 +85,7 @@ export default function Tickets() {
   const [slaFilter, setSlaFilter] = useState<string>("all");
   const [view, setView] = useState<"list" | "kanban">("kanban");
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [emailUnreadCounts, setEmailUnreadCounts] = useState<Record<string, number>>({});
   const [fetchKey, setFetchKey] = useState(0);
   const navigate = useNavigate();
   const { statuses, statusLabels } = useTicketStatuses();
