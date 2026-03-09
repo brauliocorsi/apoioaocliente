@@ -49,6 +49,7 @@ const defaultImap: ImapConfig = {
 export default function SmtpSettingsTab() {
   const [smtp, setSmtp] = useState<SmtpConfig>(defaultSmtp);
   const [imap, setImap] = useState<ImapConfig>(defaultImap);
+  const [notifyStatusChange, setNotifyStatusChange] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingSmtp, setSavingSmtp] = useState(false);
   const [savingImap, setSavingImap] = useState(false);
