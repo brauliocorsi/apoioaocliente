@@ -492,7 +492,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
     }
 
     let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
-    const batch = emailIds.slice(0, Math.min(params.maxEmails, 5));
+    const batch = emailIds.slice(0, params.maxEmails);
 
     for (const seqNum of batch) {
       try {
