@@ -101,23 +101,23 @@ Deno.serve(async (req) => {
 
     // Build email
     const subject = `Re: [Ticket #${ticket.ticket_number}] ${ticket.subject || ""}`;
-    const htmlContent = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: #2563eb; color: white; padding: 16px 24px; border-radius: 8px 8px 0 0;">
-          <h2 style="margin: 0; font-size: 16px;">Resposta ao Ticket #${ticket.ticket_number}</h2>
-        </div>
-        <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: 0; border-radius: 0 0 8px 8px;">
-          <p style="margin: 0 0 8px 0;">Caro(a) ${ticket.client_name || "Cliente"},</p>
-          <div style="white-space: pre-wrap; margin: 16px 0; padding: 16px; background: #f9fafb; border-radius: 6px; border-left: 3px solid #2563eb;">
-            ${content.replace(/\n/g, "<br>")}
-          </div>
-          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;">
-          <p style="font-size: 12px; color: #6b7280; margin: 0;">
-            Para responder, basta responder a este email. A sua mensagem será adicionada ao ticket automaticamente.
-          </p>
-        </div>
-      </div>
-    `;
+    const plainText = `Olá ${ticket.client_name || "Cliente"},\n\n${content}\n\n---\nPara responder, basta responder a este email.\nUP Móveis — Apoio ao Cliente`;
+    const htmlContent = `<!DOCTYPE html>
+<html lang="pt">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#ffffff;font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr><td style="padding:32px;max-width:600px;">
+<p style="color:#d32f2f;font-size:18px;font-weight:bold;margin:0 0 24px;">UP Móveis — Apoio ao Cliente</p>
+<p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 12px;">Olá <strong>${ticket.client_name || "Cliente"}</strong>,</p>
+<p style="color:#333;font-size:15px;line-height:1.6;white-space:pre-wrap;margin:0 0 20px;">${content.replace(/\n/g, "<br>")}</p>
+<hr style="border:none;border-top:1px solid #ddd;margin:24px 0 16px;">
+<p style="color:#666;font-size:12px;margin:0 0 4px;">Para responder, basta responder a este email.</p>
+<p style="color:#999;font-size:12px;margin:0;">UP Móveis — Tudo para casa.</p>
+</td></tr>
+</table>
+</body>
+</html>`;
 
     // Send email via SMTP with detailed error tracking
     const port = Number(smtpCfg.smtp_port) || 465;
@@ -145,7 +145,7 @@ Deno.serve(async (req) => {
         from: fromAddr,
         to: clientEmail,
         subject,
-        content: content,
+        content: plainText,
         html: htmlContent,
       });
 

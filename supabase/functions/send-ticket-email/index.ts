@@ -17,6 +17,20 @@ async function getSmtpConfig(adminClient: ReturnType<typeof createClient>) {
   return cfg;
 }
 
+function stripHtmlToText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/tr>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 async function sendEmail(cfg: Record<string, string>, to: string, subject: string, html: string) {
   const port = Number(cfg.smtp_port) || 465;
   const client = new SMTPClient({
@@ -37,7 +51,7 @@ async function sendEmail(cfg: Record<string, string>, to: string, subject: strin
     from: fromAddr,
     to,
     subject,
-    content: subject,
+    content: stripHtmlToText(html),
     html,
   });
 
