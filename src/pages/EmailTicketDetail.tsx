@@ -327,14 +327,20 @@ export default function EmailTicketDetail() {
             {messages.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-8">Sem mensagens ainda</p>
             )}
-            {messages.map((msg) => {
+            {(() => {
+              const lastClientIdx = messages.reduce((acc: number, m: any, i: number) => m.sender_type !== "agent" ? i : acc, -1);
+              return messages.map((msg, idx) => {
               const isAgent = msg.sender_type === "agent";
               const senderName = isAgent
                 ? (agents[msg.sender_id]?.full_name || "Agente")
                 : (ticket.client_name || "Cliente");
+              const isLastClientMsg = idx === lastClientIdx;
 
               return (
-                <div key={msg.id} className={`flex gap-3 ${isAgent ? "flex-row-reverse" : ""}`}>
+                <div key={msg.id} className={`flex gap-3 ${isAgent ? "flex-row-reverse" : ""} ${isLastClientMsg ? "relative" : ""}`}>
+                  {isLastClientMsg && (
+                    <div className="absolute -left-2 top-0 bottom-0 w-1 rounded-full bg-blue-500 animate-pulse" />
+                  )}
                   <Avatar className="h-8 w-8 shrink-0">
                     <AvatarFallback className={`text-xs ${isAgent ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
                       {isAgent ? <User className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
@@ -352,14 +358,23 @@ export default function EmailTicketDetail() {
                           via email
                         </Badge>
                       )}
+                      {isLastClientMsg && (
+                        <Badge className="text-[9px] h-4 px-1.5 bg-blue-500 text-white border-0">
+                          Última
+                        </Badge>
+                      )}
                     </div>
-                    <div className={`rounded-xl px-4 py-2.5 text-sm ${isAgent ? "bg-primary/10 text-foreground" : "bg-muted"}`}>
+                    <div className={`rounded-xl px-4 py-2.5 text-sm ${
+                      isAgent ? "bg-primary/10 text-foreground" : 
+                      isLastClientMsg ? "bg-blue-200 dark:bg-blue-800/50 ring-2 ring-blue-400/50" : "bg-muted"
+                    }`}>
                       <EmailBody content={msg.content} />
                     </div>
                   </div>
                 </div>
               );
-            })}
+            });
+            })()}
             <div ref={messagesEndRef} />
           </div>
 
