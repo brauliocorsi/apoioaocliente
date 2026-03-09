@@ -57,9 +57,7 @@ class ImapClient {
 
   async startTls(host: string): Promise<void> {
     const response = await this.command("STARTTLS");
-    if (!response.includes("OK")) {
-      throw new Error("STARTTLS failed");
-    }
+    if (!response.includes("OK")) throw new Error("STARTTLS failed");
     this.reader.releaseLock();
     this.conn = await Deno.startTls(this.conn as Deno.Conn, { hostname: host });
     this.reader = this.conn.readable.getReader();
@@ -143,13 +141,13 @@ class ImapClient {
     const fromMatch = response.match(/^From:\s*(.+?)$/im);
     if (fromMatch) from = fromMatch[1].trim();
 
-    const subjectMatch = response.match(/^Subject:\s*(.+?)$/im);
-    if (subjectMatch) subject = decodeHeaderValue(subjectMatch[1].trim());
+    // Handle multi-line folded Subject headers
+    subject = extractHeader(response, "Subject");
+    subject = decodeHeaderValue(subject);
 
     const msgIdMatch = response.match(/^Message-ID:\s*(.+?)$/im);
     if (msgIdMatch) messageId = msgIdMatch[1].trim();
 
-    // Extract body parts and attachments from MIME
     const parsed = parseMimeMessage(response);
 
     return {
@@ -170,6 +168,31 @@ class ImapClient {
     try { await this.command("LOGOUT"); } catch { /* ignore */ }
     try { this.conn.close(); } catch { /* ignore */ }
   }
+}
+
+// Extract a header value, handling multi-line folded headers
+function extractHeader(raw: string, headerName: string): string {
+  const regex = new RegExp(`^${headerName}:\\s*(.+)`, "im");
+  const match = raw.match(regex);
+  if (!match) return "";
+
+  let value = match[1].trim();
+  
+  // Find position after the match to check for continuation lines
+  const matchIndex = raw.indexOf(match[0]);
+  const afterMatch = raw.substring(matchIndex + match[0].length);
+  const lines = afterMatch.split(/\r?\n/);
+  
+  for (const line of lines) {
+    // Continuation lines start with whitespace (folded header)
+    if (/^\s+/.test(line) && !line.match(/^\s*$/)) {
+      value += " " + line.trim();
+    } else {
+      break;
+    }
+  }
+  
+  return value;
 }
 
 function extractEmail(from: string): string {
@@ -210,13 +233,21 @@ function decodeBase64ToBytes(str: string): Uint8Array {
 }
 
 function decodeHeaderValue(value: string): string {
-  return value.replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (_match, _charset, encoding, encoded) => {
+  // Handle consecutive encoded words (join without space between same-charset parts)
+  let decoded = value.replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=(\s*=\?)/g, (match, charset, enc, encoded, next) => {
+    const part = enc.toUpperCase() === "B"
+      ? decodeBase64(encoded)
+      : decodeQuotedPrintable(encoded.replace(/_/g, " "));
+    return part + next;
+  });
+  decoded = decoded.replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (_match, _charset, encoding, encoded) => {
     if (encoding.toUpperCase() === "B") {
       return decodeBase64(encoded);
     } else {
       return decodeQuotedPrintable(encoded.replace(/_/g, " "));
     }
   });
+  return decoded.trim();
 }
 
 interface MimeParsed {
@@ -227,7 +258,6 @@ interface MimeParsed {
 
 function parseMimeMessage(raw: string): MimeParsed {
   const result: MimeParsed = { bodyText: "", bodyHtml: "", attachments: [] };
-
   const boundaryMatch = raw.match(/boundary="?([^"\r\n;]+)"?/i);
 
   if (boundaryMatch) {
@@ -243,13 +273,11 @@ function parseMimeMessage(raw: string): MimeParsed {
       const transferEncodingMatch = part.match(/Content-Transfer-Encoding:\s*(\S+)/i);
       const transferEncoding = transferEncodingMatch ? transferEncodingMatch[1].trim().toLowerCase() : "";
 
-      // Check for attachment disposition or non-text content types
       const dispositionMatch = part.match(/Content-Disposition:\s*([^;\r\n]+)/i);
       const disposition = dispositionMatch ? dispositionMatch[1].trim().toLowerCase() : "";
       const filenameMatch = part.match(/(?:file)?name="?([^"\r\n;]+)"?/i);
       const filename = filenameMatch ? decodeHeaderValue(filenameMatch[1].trim()) : "";
 
-      // Check for nested multipart
       const nestedBoundaryMatch = part.match(/boundary="?([^"\r\n;]+)"?/i);
       if (contentType.includes("multipart/") && nestedBoundaryMatch) {
         const nested = parseMimeMessage(part);
@@ -259,7 +287,6 @@ function parseMimeMessage(raw: string): MimeParsed {
         continue;
       }
 
-      // Get body after headers (double newline)
       const bodyStart = part.search(/\r?\n\r?\n/);
       if (bodyStart === -1) continue;
       let partBody = part.substring(bodyStart).trim();
@@ -273,25 +300,18 @@ function parseMimeMessage(raw: string): MimeParsed {
         contentType.includes("video/");
 
       if (isAttachment && filename) {
-        // Decode attachment data
         let attachData: Uint8Array;
         if (transferEncoding === "base64") {
           attachData = decodeBase64ToBytes(partBody);
         } else {
           attachData = new TextEncoder().encode(partBody);
         }
-        // Limit attachment size to 5MB
         if (attachData.length <= 5 * 1024 * 1024) {
-          result.attachments.push({
-            filename,
-            contentType: contentTypeMatch[1].trim(),
-            data: attachData,
-          });
+          result.attachments.push({ filename, contentType: contentTypeMatch[1].trim(), data: attachData });
         }
         continue;
       }
 
-      // Decode text body
       if (transferEncoding === "quoted-printable") {
         partBody = decodeQuotedPrintable(partBody);
       } else if (transferEncoding === "base64") {
@@ -305,7 +325,6 @@ function parseMimeMessage(raw: string): MimeParsed {
       }
     }
   } else {
-    // Not multipart
     const headerEnd = raw.search(/\r?\n\r?\n/);
     if (headerEnd === -1) return result;
 
@@ -339,19 +358,41 @@ function extractName(from: string): string {
   return name || extractEmail(from);
 }
 
-// Sanitize HTML: remove script/style tags, on* attributes
 function sanitizeHtml(html: string): string {
   let safe = html;
-  // Remove script and style blocks
   safe = safe.replace(/<script[\s\S]*?<\/script>/gi, "");
   safe = safe.replace(/<style[\s\S]*?<\/style>/gi, "");
-  // Remove on* event attributes
   safe = safe.replace(/\s+on\w+\s*=\s*"[^"]*"/gi, "");
   safe = safe.replace(/\s+on\w+\s*=\s*'[^']*'/gi, "");
-  // Remove javascript: hrefs
   safe = safe.replace(/href\s*=\s*"javascript:[^"]*"/gi, 'href="#"');
-  safe = safe.replace(/href\s*=\s*'javascript:[^']*'/gi, "href='#'");
   return safe;
+}
+
+// Check if email matches blocklist
+async function isBlocked(
+  adminClient: ReturnType<typeof createClient>,
+  email: string,
+  subject: string,
+): Promise<{ blocked: boolean; reason: string }> {
+  const { data: rules } = await adminClient.from("email_blocked_senders").select("*");
+  if (!rules || rules.length === 0) return { blocked: false, reason: "" };
+
+  const emailLower = email.toLowerCase();
+  const domain = emailLower.split("@")[1] || "";
+
+  for (const rule of rules) {
+    const pattern = rule.pattern.toLowerCase();
+    if (rule.pattern_type === "email" && emailLower === pattern) {
+      return { blocked: true, reason: rule.reason || `Remetente bloqueado: ${pattern}` };
+    }
+    if (rule.pattern_type === "domain" && domain === pattern) {
+      return { blocked: true, reason: rule.reason || `Domínio bloqueado: ${pattern}` };
+    }
+    if (rule.pattern_type === "keyword_subject" && subject.toLowerCase().includes(pattern)) {
+      return { blocked: true, reason: rule.reason || `Palavra-chave bloqueada: ${pattern}` };
+    }
+  }
+  return { blocked: false, reason: "" };
 }
 
 async function uploadAttachment(
@@ -365,10 +406,7 @@ async function uploadAttachment(
 
   const { error: uploadError } = await adminClient.storage
     .from("ticket-attachments")
-    .upload(filePath, attachment.data, {
-      contentType: attachment.contentType,
-      upsert: false,
-    });
+    .upload(filePath, attachment.data, { contentType: attachment.contentType, upsert: false });
 
   if (uploadError) {
     console.error(`Attachment upload failed: ${uploadError.message}`);
@@ -383,6 +421,27 @@ async function uploadAttachment(
     file_size: attachment.data.length,
     uploaded_by: agentId,
   });
+}
+
+// Store attachment to temp storage for pending emails
+async function storePendingAttachment(
+  adminClient: ReturnType<typeof createClient>,
+  pendingId: string,
+  attachment: { filename: string; contentType: string; data: Uint8Array },
+): Promise<{ filename: string; contentType: string; size: number; path: string }> {
+  const safeName = attachment.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const filePath = `pending/${pendingId}/${Date.now()}_${safeName}`;
+
+  await adminClient.storage
+    .from("email-assets")
+    .upload(filePath, attachment.data, { contentType: attachment.contentType, upsert: false });
+
+  return {
+    filename: attachment.filename,
+    contentType: attachment.contentType,
+    size: attachment.data.length,
+    path: filePath,
+  };
 }
 
 async function processEmails(params: { fetchRecent: boolean; maxEmails: number; agentId?: string }) {
@@ -400,18 +459,14 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
   }
 
   const imapCfg = await getImapConfig(adminClient);
-  if (!imapCfg) {
-    return { success: false, message: "IMAP não configurado" };
-  }
+  if (!imapCfg) return { success: false, message: "IMAP não configurado" };
 
   const imap = new ImapClient();
   const port = Number(imapCfg.imap_port) || 993;
 
   try {
     const greeting = await imap.connect(imapCfg.imap_host, port);
-    if (!greeting.includes("OK")) {
-      return { success: false, message: "Servidor IMAP não respondeu" };
-    }
+    if (!greeting.includes("OK")) return { success: false, message: "Servidor IMAP não respondeu" };
 
     if (port === 143) {
       try { await imap.startTls(imapCfg.imap_host); } catch (e) {
@@ -435,7 +490,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
       emailIds = await imap.searchUnseen();
     }
 
-    let created = 0, updated = 0, skipped = 0;
+    let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
     const batch = emailIds.slice(0, Math.min(params.maxEmails, 5));
 
     for (const seqNum of batch) {
@@ -449,27 +504,45 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           continue;
         }
 
-        // Duplicate check
+        // Duplicate check by message_id
         if (msg.messageId?.trim()) {
-          const { data: dup } = await adminClient
+          const { data: dupThread } = await adminClient
             .from("email_threads")
             .select("id")
             .eq("last_message_id", msg.messageId.trim())
             .limit(1);
-          if (dup && dup.length > 0) {
+          const { data: dupPending } = await adminClient
+            .from("pending_emails")
+            .select("id")
+            .eq("message_id", msg.messageId.trim())
+            .limit(1);
+          if ((dupThread && dupThread.length > 0) || (dupPending && dupPending.length > 0)) {
             skipped++;
             await imap.markAsSeen(seqNum);
             continue;
           }
         }
 
-        // Build description: prefer HTML (sanitized), fall back to plain text
-        const description = msg.bodyHtml
-          ? sanitizeHtml(msg.bodyHtml).substring(0, 10000)
-          : (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
-        const isHtml = !!msg.bodyHtml;
+        // Check blocklist
+        const blockCheck = await isBlocked(adminClient, clientEmail, msg.subject);
+        if (blockCheck.blocked) {
+          // Store as blocked in pending for audit
+          await adminClient.from("pending_emails").insert({
+            from_address: clientEmail.toLowerCase(),
+            from_name: clientName,
+            subject: msg.subject.substring(0, 500),
+            body_text: (msg.bodyText || "").substring(0, 5000),
+            body_html: (msg.bodyHtml ? sanitizeHtml(msg.bodyHtml) : "").substring(0, 10000),
+            message_id: msg.messageId,
+            status: "blocked",
+            rejection_reason: blockCheck.reason,
+          });
+          blocked++;
+          await imap.markAsSeen(seqNum);
+          continue;
+        }
 
-        // Check existing thread
+        // Check if we have an existing open thread
         const { data: existingThread } = await adminClient
           .from("email_threads")
           .select("ticket_id")
@@ -495,69 +568,67 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
           if (ticket && !statusData?.is_closed) {
             ticketId = ticket.id;
+            const body = msg.bodyHtml
+              ? sanitizeHtml(msg.bodyHtml).substring(0, 10000)
+              : (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
+
             await adminClient.from("ticket_messages").insert({
               ticket_id: ticketId,
               sender_id: "00000000-0000-0000-0000-000000000000",
               sender_type: "client",
-              content: description,
+              content: body,
             });
             await adminClient.from("email_threads")
               .update({ last_message_id: msg.messageId })
               .eq("ticket_id", existingThread.ticket_id);
+
+            // Upload attachments to existing ticket
+            if (msg.attachments.length > 0) {
+              for (const att of msg.attachments) {
+                try {
+                  await uploadAttachment(adminClient, ticketId, att, createdBy!);
+                } catch (err) {
+                  console.error(`Attachment error: ${(err as Error).message}`);
+                }
+              }
+            }
+
             updated++;
-          }
-        }
-
-        if (!ticketId) {
-          const { data: newTicket, error } = await adminClient
-            .from("tickets")
-            .insert({
-              client_name: clientName,
-              client_email: clientEmail.toLowerCase(),
-              subject: msg.subject.substring(0, 200),
-              description: description,
-              priority: "P2",
-              status: "novo",
-              created_by: createdBy,
-            })
-            .select("id")
-            .single();
-
-          if (error || !newTicket) {
-            console.error(`Ticket create error: ${error?.message}`);
             await imap.markAsSeen(seqNum);
             continue;
           }
-
-          ticketId = newTicket.id;
-          await adminClient.from("email_threads").insert({
-            ticket_id: ticketId,
-            email_address: clientEmail.toLowerCase(),
-            last_message_id: msg.messageId,
-          });
-          created++;
         }
 
-        // Upload attachments
-        if (msg.attachments.length > 0 && ticketId) {
+        // New email from unknown/closed thread → goes to pending review queue
+        const { data: pendingEmail } = await adminClient.from("pending_emails").insert({
+          from_address: clientEmail.toLowerCase(),
+          from_name: clientName,
+          subject: msg.subject.substring(0, 500),
+          body_text: (msg.bodyText || "").substring(0, 5000),
+          body_html: (msg.bodyHtml ? sanitizeHtml(msg.bodyHtml) : "").substring(0, 10000),
+          message_id: msg.messageId,
+          status: "pending",
+        }).select("id").single();
+
+        // Store attachments meta for pending email
+        if (pendingEmail && msg.attachments.length > 0) {
+          const attMeta = [];
           for (const att of msg.attachments) {
             try {
-              await uploadAttachment(adminClient, ticketId, att, createdBy!);
-              console.log(`Attachment uploaded: ${att.filename} (${att.data.length} bytes)`);
+              const meta = await storePendingAttachment(adminClient, pendingEmail.id, att);
+              attMeta.push(meta);
             } catch (err) {
-              console.error(`Attachment error: ${(err as Error).message}`);
+              console.error(`Pending attachment error: ${(err as Error).message}`);
             }
+          }
+          if (attMeta.length > 0) {
+            await adminClient.from("pending_emails")
+              .update({ attachments_meta: attMeta })
+              .eq("id", pendingEmail.id);
           }
         }
 
-        await adminClient.from("email_logs").insert({
-          recipient: clientEmail,
-          subject: msg.subject.substring(0, 200),
-          status: "received",
-          source: "inbound",
-          ticket_id: ticketId,
-        });
-
+        pending++;
         await imap.markAsSeen(seqNum);
       } catch (err) {
         console.error(`Email ${seqNum} error: ${(err as Error).message}`);
@@ -567,10 +638,15 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
     await imap.logout();
 
     const remaining = emailIds.length - batch.length;
-    const message = `Processados: ${created} novos, ${updated} atualizados, ${skipped} duplicados${remaining > 0 ? `. Restam ${remaining} emails — clique novamente.` : ""}`;
-    console.log(message);
+    const parts = [];
+    if (pending > 0) parts.push(`${pending} para revisão`);
+    if (updated > 0) parts.push(`${updated} atualizados`);
+    if (blocked > 0) parts.push(`${blocked} bloqueados`);
+    if (skipped > 0) parts.push(`${skipped} duplicados`);
+    if (parts.length === 0) parts.push("0 novos emails");
+    const message = parts.join(", ") + (remaining > 0 ? `. Restam ${remaining} — clique novamente.` : "");
 
-    return { success: true, message, created, updated, skipped, total: batch.length, remaining };
+    return { success: true, message, created, pending, updated, blocked, skipped, total: batch.length, remaining };
   } catch (err) {
     try { await imap.logout(); } catch { /* */ }
     throw err;
@@ -587,14 +663,19 @@ Deno.serve(async (req) => {
     let fetchRecent = false;
     let maxEmails = 5;
     let agentId: string | undefined;
+    let action: string | undefined;
+    let pendingId: string | undefined;
     try {
       const body = await req.json();
       testOnly = body?.test_only === true;
       fetchRecent = body?.fetch_recent === true;
       if (body?.max_emails) maxEmails = Math.min(Number(body.max_emails), 10);
       if (body?.agent_id) agentId = body.agent_id;
+      action = body?.action;
+      pendingId = body?.pending_id;
     } catch { /* no body */ }
 
+    // Test-only: quick connection check
     if (testOnly) {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -608,9 +689,7 @@ Deno.serve(async (req) => {
       const imap = new ImapClient();
       const port = Number(imapCfg.imap_port) || 993;
       const greeting = await imap.connect(imapCfg.imap_host, port);
-      if (port === 143) {
-        try { await imap.startTls(imapCfg.imap_host); } catch { /* */ }
-      }
+      if (port === 143) { try { await imap.startTls(imapCfg.imap_host); } catch { /* */ } }
       const loginRes = await imap.login(imapCfg.imap_user, imapCfg.imap_pass);
       await imap.logout();
       const ok = greeting.includes("OK") && loginRes.includes("OK");
@@ -619,6 +698,84 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Approve pending email → create ticket
+    if (action === "approve" && pendingId && agentId) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+      const { data: pe } = await adminClient.from("pending_emails").select("*").eq("id", pendingId).single();
+      if (!pe) {
+        return new Response(JSON.stringify({ success: false, message: "Email pendente não encontrado" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const description = pe.body_html || pe.body_text || "(email sem conteúdo)";
+
+      const { data: newTicket, error } = await adminClient.from("tickets").insert({
+        client_name: pe.from_name || pe.from_address,
+        client_email: pe.from_address,
+        subject: pe.subject,
+        description: description,
+        priority: "P2",
+        status: "novo",
+        created_by: agentId,
+      }).select("id").single();
+
+      if (error || !newTicket) {
+        return new Response(JSON.stringify({ success: false, message: error?.message || "Erro ao criar ticket" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      await adminClient.from("email_threads").insert({
+        ticket_id: newTicket.id,
+        email_address: pe.from_address,
+        last_message_id: pe.message_id,
+      });
+
+      // Move attachments from pending to ticket
+      const attMeta = (pe.attachments_meta as any[]) || [];
+      for (const att of attMeta) {
+        try {
+          const { data: fileData } = await adminClient.storage.from("email-assets").download(att.path);
+          if (fileData) {
+            const bytes = new Uint8Array(await fileData.arrayBuffer());
+            await uploadAttachment(adminClient, newTicket.id, {
+              filename: att.filename,
+              contentType: att.contentType,
+              data: bytes,
+            }, agentId);
+          }
+          // Clean up temp file
+          await adminClient.storage.from("email-assets").remove([att.path]);
+        } catch (err) {
+          console.error(`Move attachment error: ${(err as Error).message}`);
+        }
+      }
+
+      await adminClient.from("pending_emails").update({
+        status: "approved",
+        reviewed_by: agentId,
+        reviewed_at: new Date().toISOString(),
+        ticket_id: newTicket.id,
+      }).eq("id", pendingId);
+
+      await adminClient.from("email_logs").insert({
+        recipient: pe.from_address,
+        subject: pe.subject,
+        status: "received",
+        source: "inbound",
+        ticket_id: newTicket.id,
+      });
+
+      return new Response(JSON.stringify({ success: true, message: "Ticket criado com sucesso", ticket_id: newTicket.id }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Process emails in background
     const resultPromise = processEmails({ fetchRecent, maxEmails, agentId });
 
     if (typeof (globalThis as any).EdgeRuntime !== "undefined" && (globalThis as any).EdgeRuntime.waitUntil) {
