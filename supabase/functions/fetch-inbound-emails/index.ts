@@ -127,30 +127,27 @@ class ImapClient {
   }
 
   async fetchMessage(seqNum: number): Promise<{ from: string; subject: string; body: string; messageId: string }> {
-    const response = await this.command(`FETCH ${seqNum} (BODY[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID)] BODY[TEXT])`);
+    const response = await this.command(`FETCH ${seqNum} BODY[]`);
 
     let from = "";
     let subject = "";
     let messageId = "";
     let body = "";
 
-    const fromMatch = response.match(/From:\s*(.+?)(?:\r?\n(?!\s))/i);
+    const fromMatch = response.match(/^From:\s*(.+?)$/im);
     if (fromMatch) from = fromMatch[1].trim();
 
-    const subjectMatch = response.match(/Subject:\s*(.+?)(?:\r?\n(?!\s))/i);
-    if (subjectMatch) subject = subjectMatch[1].trim();
+    // Handle encoded subjects (=?UTF-8?Q?...?= or =?UTF-8?B?...?=)
+    const subjectMatch = response.match(/^Subject:\s*(.+?)$/im);
+    if (subjectMatch) subject = decodeHeaderValue(subjectMatch[1].trim());
 
-    const msgIdMatch = response.match(/Message-ID:\s*(.+?)(?:\r?\n(?!\s))/i);
+    const msgIdMatch = response.match(/^Message-ID:\s*(.+?)$/im);
     if (msgIdMatch) messageId = msgIdMatch[1].trim();
 
-    const bodyParts = response.split(/\r?\n\r?\n/);
-    if (bodyParts.length > 1) {
-      body = bodyParts.slice(1).join("\n\n");
-      body = body.replace(/\)\r?\n.*$/s, "").trim();
-      body = body.replace(/\s*A\d{4}\s+OK\s+.*$/s, "").trim();
-    }
+    // Extract body from MIME message
+    body = extractBodyFromMime(response);
 
-    body = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    // Limit body length
     if (body.length > 3000) body = body.substring(0, 3000);
 
     return { from, subject: subject || "Sem assunto", body, messageId };
