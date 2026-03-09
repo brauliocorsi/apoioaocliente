@@ -285,6 +285,30 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        // Duplicate detection: check if this message-id was already processed
+        if (msg.messageId && msg.messageId.trim()) {
+          const { data: existingLog } = await adminClient
+            .from("email_logs")
+            .select("id")
+            .eq("source", "inbound")
+            .eq("subject", msg.subject.substring(0, 200))
+            .eq("recipient", clientEmail.toLowerCase())
+            .limit(1);
+
+          // Also check email_threads for this exact message-id
+          const { data: existingThread2 } = await adminClient
+            .from("email_threads")
+            .select("id")
+            .eq("last_message_id", msg.messageId.trim())
+            .limit(1);
+
+          if ((existingThread2 && existingThread2.length > 0)) {
+            skipped++;
+            await imap.markAsSeen(seqNum);
+            continue;
+          }
+        }
+
         // Check for existing open thread with this email
         const { data: existingThread } = await adminClient
           .from("email_threads")
