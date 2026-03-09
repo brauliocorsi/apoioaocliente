@@ -422,6 +422,26 @@ export default function TicketDetail() {
         sender_type: "agent",
         content,
       });
+
+      // If ticket has an email thread, also send the reply via email
+      const { data: emailThread } = await supabase
+        .from("email_threads")
+        .select("id")
+        .eq("ticket_id", id)
+        .limit(1)
+        .maybeSingle();
+
+      if (emailThread || ticket?.client_email) {
+        try {
+          await supabase.functions.invoke("reply-email-ticket", {
+            body: { ticket_id: id, content: reply.trim() || content },
+          });
+        } catch (emailErr) {
+          console.error("Erro ao enviar email de resposta:", emailErr);
+          toast({ title: "Mensagem guardada mas email não enviado", description: "A resposta foi registada mas houve um erro ao enviar o email.", variant: "destructive" });
+        }
+      }
+
       if (uploadedCount > 0) fetchTicket();
     } else {
       setReply("");
