@@ -108,10 +108,16 @@ export default function EmailTickets() {
           </h1>
           <p className="text-muted-foreground">Tickets originados por email — respostas são enviadas como email ao cliente</p>
         </div>
-        <Button variant="outline" onClick={triggerPoll} disabled={polling}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${polling ? "animate-spin" : ""}`} />
-          {polling ? "A verificar..." : "Verificar Emails"}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => triggerPoll(false)} disabled={polling}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${polling ? "animate-spin" : ""}`} />
+            {polling ? "A verificar..." : "Novos Emails"}
+          </Button>
+          <Button variant="secondary" onClick={() => triggerPoll(true)} disabled={polling}>
+            <Mail className="h-4 w-4 mr-2" />
+            Importar Recentes
+          </Button>
+        </div>
       </div>
 
       <div className="relative max-w-md">
