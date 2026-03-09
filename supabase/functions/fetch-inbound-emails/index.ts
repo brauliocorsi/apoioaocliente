@@ -42,7 +42,8 @@ class ImapClient {
   private conn!: Deno.TlsConn | Deno.Conn;
   private reader!: ReadableStreamDefaultReader<Uint8Array>;
   private encoder = new TextEncoder();
-  private decoder = new TextDecoder();
+  // Use latin1 to preserve raw byte values — charset-aware decoding happens later in MIME parser
+  private decoder = new TextDecoder("latin1");
   private tagCounter = 0;
 
   async connect(host: string, port: number): Promise<string> {
