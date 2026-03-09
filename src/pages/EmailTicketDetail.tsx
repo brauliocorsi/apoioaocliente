@@ -256,7 +256,7 @@ export default function EmailTicketDetail() {
                       )}
                     </div>
                     <div className={`rounded-xl px-4 py-2.5 text-sm ${isAgent ? "bg-primary/10 text-foreground" : "bg-muted"}`}>
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                      <p className="whitespace-pre-wrap">{cleanEmailText(msg.content)}</p>
                     </div>
                   </div>
                 </div>
