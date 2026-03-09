@@ -401,7 +401,7 @@ Deno.serve(async (req) => {
     }
 
     // Process emails in background using waitUntil
-    const resultPromise = processEmails({ fetchRecent, maxEmails });
+    const resultPromise = processEmails({ fetchRecent, maxEmails, agentId });
 
     // Use EdgeRuntime.waitUntil if available for background processing
     if (typeof (globalThis as any).EdgeRuntime !== "undefined" && (globalThis as any).EdgeRuntime.waitUntil) {
