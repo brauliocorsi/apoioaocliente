@@ -281,7 +281,7 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
 
       const nestedBoundaryMatch = part.match(/boundary="?([^"\r\n;]+)"?/i);
       if (contentType.includes("multipart/") && nestedBoundaryMatch) {
-        const nested = parseMimeMessage(part);
+        const nested = parseMimeMessage(part, depth + 1);
         if (!result.bodyText && nested.bodyText) result.bodyText = nested.bodyText;
         if (!result.bodyHtml && nested.bodyHtml) result.bodyHtml = nested.bodyHtml;
         result.attachments.push(...nested.attachments);
