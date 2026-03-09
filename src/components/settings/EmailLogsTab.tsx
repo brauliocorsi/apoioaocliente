@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, RefreshCw, CheckCircle2, XCircle, Mail, AlertTriangle, Clock, ArrowDownCircle } from "lucide-react";
+import { Loader2, RefreshCw, CheckCircle2, XCircle, Mail, AlertTriangle, Clock, ArrowDownCircle, Send, Server } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
