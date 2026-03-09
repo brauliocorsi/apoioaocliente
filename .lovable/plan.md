@@ -1,124 +1,95 @@
 
-# Motor de Regras Completo — Novas Regras, Macros e Etiquetas Alinhadas com o Contrato
 
-## Diagnóstico do Estado Actual
+## Tickets por Email -- Nova Area de Gestao
 
-O sistema tem uma estrutura sólida mas **incompleta**: existem 8 categorias, 33 subcategorias, 22 etiquetas, 18 macros e apenas 7 regras do Motor. O contrato tem 11 secções com dezenas de situações de suporte, das quais muitas ainda **não têm regra, macro ou etiqueta correspondente**.
+### Conceito
 
-Lacunas identificadas:
-- Categorias A (Entrega), G (Exposição), H (Manutenção) **não têm nenhuma regra** no Motor
-- Categoria B (Reclamação) só tem regra de tempo mas **não cobre danos, faltas, produto diferente**
-- Categoria C (Garantia) só tem 1 regra de exclusão mas **não cobre abertura normal nem assistência técnica paga**
-- Etiquetas em falta para: ausência do cliente, entrega em kit, produto sem embalagem, reembolso em curso, colchão/higiene, etc.
-- Macros em falta para: ausência no dia de entrega, produto diferente do pedido, falta de peças, entrega em kit, garantia com visita técnica, colchão/higiene, cancelamento E2/E3
+Criar uma nova secao **"Email Tickets"** no menu lateral, separada dos tickets existentes. Esta area funciona como um sistema de helpdesk por email:
 
----
+1. **Polling IMAP** busca emails novos periodicamente
+2. Se ja existe um ticket aberto com o mesmo email do remetente, a mensagem e adicionada como resposta nesse ticket
+3. Se nao existe, cria um novo ticket automaticamente
+4. Respostas do agente dentro do ticket sao enviadas como email via SMTP ao cliente
 
-## O Que Vai Ser Criado
+### Plano de Implementacao
 
-### 1. Novas Etiquetas (tags)
+#### 1. Base de Dados
 
-Serão adicionadas etiquetas organizadas nos grupos existentes para cobrir os casos em falta:
+- Adicionar campos a `system_settings` para configuracao IMAP (`imap_host`, `imap_port`, `imap_user`, `imap_pass`, `imap_folder`, `imap_enabled`)
+- Criar tabela `email_threads` para mapear email do remetente ao ticket:
 
-**Grupo `entrega`** (novo grupo):
-- `ausencia_cliente` — Cliente ausente no dia de entrega
-- `reagendamento` — Entrega reagendada
-- `entrega_kit` — Entrega sem montagem (kit)
-- `entrega_parcial` — Apenas parte da encomenda entregue
-- `meios_especiais` — Grua/escadas externas necessárias
-- `termo_responsabilidade` — Termo assinado pelo cliente
+```text
+email_threads
+├── id (uuid, PK)
+├── ticket_id (uuid, FK tickets)
+├── email_address (text, indexed)
+├── last_message_id (text) -- Message-ID do ultimo email processado
+├── created_at (timestamptz)
+```
 
-**Grupo `devolucao`** (novo grupo):
-- `sem_embalagem` — Produto sem embalagem original
-- `fora_prazo_devolucao` — Pedido após os 15 dias
-- `reembolso_em_curso` — Devolução aprovada, aguarda reembolso
-- `custo_recolha_cliente` — Custos de recolha imputados ao cliente
+- RLS: leitura/escrita para agentes autenticados
 
-**Grupo `pagamento`** (novo grupo):
-- `pagamento_entrega` — Pagamento na entrega (tag já pode existir)
-- `tpa_solicitado` — Terminal de pagamento solicitado
-- `transferencia_antecipada` — Transferência antecipada confirmada
-- `sequra_informado` — seQura explicado ao cliente
+#### 2. Edge Function `fetch-inbound-emails`
 
-**Grupo `garantia`** (novo grupo):
-- `garantia_valida` — Dentro dos 3 anos, defeito de fabrico
-- `garantia_excluida` — Fora da cobertura
-- `visita_tecnica` — Visita técnica agendada
-- `colchao_higiene` — Produto de higiene (colchão/almofada)
+- Le config IMAP de `system_settings` (service role)
+- Liga ao servidor via `Deno.connectTls()` com comandos IMAP raw (LOGIN, SELECT INBOX, SEARCH UNSEEN, FETCH, STORE +FLAGS \Seen)
+- Para cada email nao lido:
+  - Extrai From (email), Subject, Body
+  - Procura em `email_threads` se ja existe ticket aberto para esse email
+  - **Se existe**: insere `ticket_messages` como mensagem do cliente nesse ticket
+  - **Se nao existe**: cria novo ticket (status `novo`, prioridade `P2`) e regista em `email_threads`
+  - Regista em `email_logs` com `source: 'inbound'`
+- Config em `config.toml`: `verify_jwt = false`
 
-**Nota:** Etiquetas `acesso_dificil`, `48h_ok`, `48h_fora` serão adicionadas ao sistema se ainda não existirem (as regras R1-R7 referenciam-nas mas não estão na tabela de tags).
+#### 3. Edge Function `reply-email-ticket`
 
----
+- Recebe `ticket_id` e `content` (texto da resposta do agente)
+- Busca email do cliente via `email_threads` ou `tickets.client_email`
+- Envia email via SMTP (reutiliza logica do `send-ticket-email`)
+- Insere `ticket_messages` como mensagem do agente
+- Regista em `email_logs`
 
-### 2. Novas Macros
+#### 4. Agendar com pg_cron
 
-Serão criadas 12 macros novas para cobrir os cenários em falta:
+- Cron job a cada 5 minutos chamando `fetch-inbound-emails` via `pg_net`
 
-| ID | Categoria | Título | Baseada em |
-|---|---|---|---|
-| M19 | entrega | Ausência do cliente — nova taxa | V-g (via V-g real: re-entrega) — clausula V-g via contrato |
-| M20 | entrega | Entrega em kit — montagem não incluída | V-f, VI-b |
-| M21 | entrega | Meios especiais não incluídos | III-a |
-| M22 | reclamacao | Dano visível na entrega (registo) | V-e, V-f |
-| M23 | reclamacao | Falta de peças (registo formal) | V-e |
-| M24 | reclamacao | Produto diferente do pedido | V-e |
-| M25 | garantia | Garantia válida — abertura formal | VI-a |
-| M26 | garantia | Visita técnica com custos (não coberta) | VI-d |
-| M27 | devolucao | Devolução recusada — sem embalagem | IX-a, VII-a |
-| M28 | devolucao | Devolução recusada — fora de prazo | VII-a |
-| M29 | garantia | Colchão/higiene — devolução recusada | VII-d |
-| M30 | geral | Cancelamento personalizado — após 72h | I-d, E2 |
+#### 5. UI -- Nova Pagina `EmailTickets`
 
----
+- Nova rota `/email-tickets` no `App.tsx`
+- Novo item no menu lateral (icone `Mail`)
+- Pagina com lista de tickets originados por email (filtro por `email_threads`)
+- Vista de detalhe integrada ou reutilizando `/tickets/:id` com indicador visual "via Email"
+- Caixa de resposta que ao submeter chama `reply-email-ticket` (envia email) em vez de apenas guardar mensagem
 
-### 3. Novas Regras do Motor (10 regras)
+#### 6. UI -- Configuracao IMAP no painel SMTP
 
-| ID | Nome | Condição | Cláusulas | Tags | Macro |
-|---|---|---|---|---|---|
-| R8 | Ausência do cliente na entrega | subcategoria = A3 | V-g (nova), IV-b | ausencia_cliente | M19 |
-| R9 | Entrega em kit — aviso montagem | subcategoria = A7 | VI-b, V-f | entrega_kit | M20 |
-| R10 | Meios especiais (grua/escadas) | subcategoria = A4 + field: needs_special_access | III-a, V-d | meios_especiais | M21 |
-| R11 | Dano na entrega — registo obrigatório | subcategoria = B1 | V-e, V-f | dano_transporte, aguarda_fotos | M22 |
-| R12 | Falta de peças | subcategoria = B2 | V-e | falta_pecas, aguarda_fotos | M23 |
-| R13 | Produto diferente do pedido | subcategoria = B3 | V-e | produto_diferente, aguarda_fotos | M24 |
-| R14 | Garantia válida — defeito fabrico | subcategoria = C1 | VI-a | defeito_fabrico_suspeito, aguarda_fotos | M25 |
-| R15 | Garantia — visita técnica com custo | subcategoria = C4 | VI-d | aguarda_tecnico, visita_tecnica | M26 |
-| R16 | Devolução sem embalagem original | categoria = D + field: has_original_packaging = false | IX-a, VII-a | sem_embalagem | M27 |
-| R17 | Colchão/higiene — devolução condicionada | categoria = D + tag: higiene_colchao | VII-d | colchao_higiene | M29 |
+- Nova secao em `SmtpSettingsTab.tsx` com campos IMAP (host, porta, user, pass, pasta)
+- Toggle ativar/desativar recepcao
+- Botao "Testar Conexao IMAP"
 
-**Total após implementação:** 17 regras activas no Motor.
+### Fluxo Resumido
 
----
+```text
+Email recebido
+    │
+    ▼
+[fetch-inbound-emails] (cada 5 min)
+    │
+    ├── Email ja conhecido? ──► Adiciona mensagem ao ticket existente
+    │
+    └── Email novo? ──► Cria ticket + regista em email_threads
+                              │
+                              ▼
+                    Agente ve na lista "Email Tickets"
+                              │
+                              ▼
+                    Agente responde ──► [reply-email-ticket] ──► Email SMTP enviado ao cliente
+```
 
-## Execução Técnica
+### Notas Tecnicas
 
-### Operações na base de dados (sem alteração de schema):
-
-**A — INSERT de novas etiquetas** na tabela `tags`:
-Grupos novos: `entrega`, `devolucao`, `pagamento`, `garantia`
-Etiquetas que as regras R1–R7 referenciam mas ainda não existem: `acesso_dificil`, `48h_ok`, `48h_fora`, `tpa_solicitado`, `pagamento_entrega`, `transferencia_antecipada`
-
-**B — INSERT de novas macros** na tabela `macros` (M19 a M30):
-Conteúdo redigido em português formal, com referência às cláusulas do contrato e variáveis como `{nome_cliente}`, `{n_encomenda}`, `{clausulas}`
-
-**C — INSERT de novas regras** na tabela `decision_rules` (R8 a R17):
-Usando os tipos de condição existentes: `subcategory`, `field_bool`, `tag_exists`
-
-**D — UPDATE das cláusulas** na tabela `clauses`:
-Substituir os `description` actuais (resumos curtos) pelo texto integral do contrato em todas as 44 cláusulas
-
----
-
-## Cobertura Final por Categoria
-
-| Categoria | Regras Cobertas |
-|---|---|
-| A — Entrega e Montagem | R6 (acesso), R8 (ausência), R9 (kit), R10 (meios especiais) |
-| B — Reclamação pós-entrega | R1a/R1b (48h), R11 (dano), R12 (falta peças), R13 (produto diferente) |
-| C — Garantia | R7 (exclusões), R14 (defeito válido), R15 (visita técnica) |
-| D — Devolução/Troca | R2 (montado), R3 (personalizado), R16 (sem embalagem), R17 (colchão) |
-| E — Personalizado/Cancelamento | R3 (já cobre) + M30 (macro nova) |
-| F — Pagamentos | R4 (multibanco), R5 (transferência) |
-| G — Exposição | Cobertura via cláusulas VIII nas macros M15 |
-| H — Uso e Manutenção | R7 (via tag humidade/impacto) |
+- IMAP raw em Deno e verboso mas viavel -- implementar parser minimo para os comandos essenciais
+- O flag `\Seen` no IMAP previne reprocessamento de emails
+- A tabela `email_threads` permite agrupar conversas por email do remetente
+- Respostas do agente incluem `[Ticket #XXX]` no assunto para facilitar threading nos clientes de email
 
