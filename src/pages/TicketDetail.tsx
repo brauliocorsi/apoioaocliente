@@ -113,6 +113,7 @@ export default function TicketDetail() {
   const [isResolutionOpen, setIsResolutionOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState(false);
   const [subjectDraft, setSubjectDraft] = useState("");
+  const [hasEmailThread, setHasEmailThread] = useState(false);
 
   const fetchTicket = async () => {
     if (!id) return;
