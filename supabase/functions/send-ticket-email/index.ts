@@ -175,6 +175,8 @@ Deno.serve(async (req) => {
       }
       await adminClient.from("email_logs").insert({
         recipient: clientEmail, subject, status: "sent", source: "send-ticket-email", ticket_id, template_id,
+        smtp_response: useResend ? "Resend API" : `SMTP ${cfg.smtp_host}`,
+        delivery_details: useResend ? "Enviado via Resend API" : `Enviado via SMTP (${cfg.smtp_host})`,
       });
     } catch (sendErr) {
       await adminClient.from("email_logs").insert({
