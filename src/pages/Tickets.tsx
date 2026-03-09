@@ -154,20 +154,27 @@ export default function Tickets() {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (currentUser && data && data.length > 0) {
         const ticketIds = data.map((t: any) => t.id);
-        const [{ data: readStatuses }, { data: clientMsgs }] = await Promise.all([
+        const [{ data: readStatuses }, { data: clientMsgs }, { data: emailThreads }] = await Promise.all([
           supabase.from("ticket_read_status").select("ticket_id, last_read_at").in("ticket_id", ticketIds),
-          supabase.from("ticket_messages").select("ticket_id, created_at").eq("sender_type", "client").in("ticket_id", ticketIds),
+          supabase.from("ticket_messages").select("ticket_id, created_at, sender_type").eq("sender_type", "client").in("ticket_id", ticketIds),
+          supabase.from("email_threads").select("ticket_id").in("ticket_id", ticketIds),
         ]);
         const readMap: Record<string, string> = {};
         (readStatuses || []).forEach((r: any) => { readMap[r.ticket_id] = r.last_read_at; });
+        const emailTicketIds = new Set(((emailThreads as any[]) || []).map((t: any) => t.ticket_id));
         const unread: Record<string, number> = {};
+        const emailUnread: Record<string, number> = {};
         (clientMsgs || []).forEach((m: any) => {
           const lastRead = readMap[m.ticket_id];
           if (!lastRead || new Date(m.created_at) > new Date(lastRead)) {
             unread[m.ticket_id] = (unread[m.ticket_id] || 0) + 1;
+            if (emailTicketIds.has(m.ticket_id)) {
+              emailUnread[m.ticket_id] = (emailUnread[m.ticket_id] || 0) + 1;
+            }
           }
         });
         setUnreadCounts(unread);
+        setEmailUnreadCounts(emailUnread);
       }
     };
     fetch();
