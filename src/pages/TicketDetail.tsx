@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage, FileVideo, FileText, Trash2, Gavel, ChevronDown, ChevronRight, Check, Mail } from "lucide-react";
+import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage, FileVideo, FileText, Trash2, Gavel, ChevronDown, ChevronRight, Check, Mail, Maximize2, Minimize2 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
