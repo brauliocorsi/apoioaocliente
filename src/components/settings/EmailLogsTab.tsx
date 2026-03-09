@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, RefreshCw, CheckCircle2, XCircle, Mail, AlertTriangle, Clock, ArrowDownCircle } from "lucide-react";
+import { Loader2, RefreshCw, CheckCircle2, XCircle, Mail, AlertTriangle, Clock, ArrowDownCircle, Send, Server } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
@@ -38,6 +38,7 @@ export default function EmailLogsTab() {
   const [logs, setLogs] = useState<EmailLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
+  const [activeMethod, setActiveMethod] = useState<"smtp" | "resend" | null>(null);
 
   const loadLogs = async () => {
     setLoading(true);
@@ -52,6 +53,9 @@ export default function EmailLogsTab() {
 
   useEffect(() => {
     loadLogs();
+    supabase.from("system_settings").select("key, value").eq("key", "resend_enabled").maybeSingle().then(({ data }) => {
+      setActiveMethod(data?.value === "true" ? "resend" : "smtp");
+    });
   }, []);
 
   const sourceLabel = (s: string) => {
@@ -83,6 +87,17 @@ export default function EmailLogsTab() {
 
   return (
     <div className="space-y-4">
+      {/* Active method indicator */}
+      {activeMethod && (
+        <div className={`flex items-center gap-2 rounded-lg border p-3 text-sm ${activeMethod === "resend" ? "border-purple-300 bg-purple-50 dark:border-purple-700 dark:bg-purple-950/30" : "border-border bg-muted/30"}`}>
+          {activeMethod === "resend" ? <Send className="h-4 w-4 text-purple-600 dark:text-purple-400" /> : <Server className="h-4 w-4 text-muted-foreground" />}
+          <span className="font-medium">Método de envio ativo:</span>
+          <Badge variant={activeMethod === "resend" ? "default" : "secondary"} className={activeMethod === "resend" ? "bg-purple-600 hover:bg-purple-700" : ""}>
+            {activeMethod === "resend" ? "Resend API" : "SMTP Direto"}
+          </Badge>
+        </div>
+      )}
+
       {/* Stats cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Card className="cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all" onClick={() => setFilter("all")}>
@@ -170,6 +185,7 @@ export default function EmailLogsTab() {
                     <TableHead>Destinatário</TableHead>
                     <TableHead>Assunto</TableHead>
                     <TableHead className="w-[120px]">Origem</TableHead>
+                    <TableHead className="w-[60px]">Via</TableHead>
                     <TableHead className="w-[100px]">Envio</TableHead>
                     <TableHead className="w-[110px]">Entrega</TableHead>
                   </TableRow>
@@ -189,6 +205,22 @@ export default function EmailLogsTab() {
                         <TableCell className="text-sm max-w-[200px] truncate">{log.subject}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-[10px]">{sourceLabel(log.source)}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {log.source !== "inbound" && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                {log.smtp_response?.toLowerCase().includes("resend") ? (
+                                  <Send className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400 cursor-help" />
+                                ) : (
+                                  <Server className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                )}
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {log.smtp_response?.toLowerCase().includes("resend") ? "Enviado via Resend" : "Enviado via SMTP"}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
                         </TableCell>
                         <TableCell>
                           {log.status === "sent" || log.status === "received" ? (
