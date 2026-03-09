@@ -127,30 +127,27 @@ class ImapClient {
   }
 
   async fetchMessage(seqNum: number): Promise<{ from: string; subject: string; body: string; messageId: string }> {
-    const response = await this.command(`FETCH ${seqNum} (BODY[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID)] BODY[TEXT])`);
+    const response = await this.command(`FETCH ${seqNum} BODY[]`);
 
     let from = "";
     let subject = "";
     let messageId = "";
     let body = "";
 
-    const fromMatch = response.match(/From:\s*(.+?)(?:\r?\n(?!\s))/i);
+    const fromMatch = response.match(/^From:\s*(.+?)$/im);
     if (fromMatch) from = fromMatch[1].trim();
 
-    const subjectMatch = response.match(/Subject:\s*(.+?)(?:\r?\n(?!\s))/i);
-    if (subjectMatch) subject = subjectMatch[1].trim();
+    // Handle encoded subjects (=?UTF-8?Q?...?= or =?UTF-8?B?...?=)
+    const subjectMatch = response.match(/^Subject:\s*(.+?)$/im);
+    if (subjectMatch) subject = decodeHeaderValue(subjectMatch[1].trim());
 
-    const msgIdMatch = response.match(/Message-ID:\s*(.+?)(?:\r?\n(?!\s))/i);
+    const msgIdMatch = response.match(/^Message-ID:\s*(.+?)$/im);
     if (msgIdMatch) messageId = msgIdMatch[1].trim();
 
-    const bodyParts = response.split(/\r?\n\r?\n/);
-    if (bodyParts.length > 1) {
-      body = bodyParts.slice(1).join("\n\n");
-      body = body.replace(/\)\r?\n.*$/s, "").trim();
-      body = body.replace(/\s*A\d{4}\s+OK\s+.*$/s, "").trim();
-    }
+    // Extract body from MIME message
+    body = extractBodyFromMime(response);
 
-    body = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    // Limit body length
     if (body.length > 3000) body = body.substring(0, 3000);
 
     return { from, subject: subject || "Sem assunto", body, messageId };
@@ -169,6 +166,128 @@ class ImapClient {
 function extractEmail(from: string): string {
   const match = from.match(/<(.+?)>/);
   return match ? match[1] : from.replace(/[<>]/g, "").trim();
+}
+
+// Decode quoted-printable encoded string
+function decodeQuotedPrintable(str: string): string {
+  // Remove soft line breaks (= at end of line)
+  let result = str.replace(/=\r?\n/g, "");
+  // Decode =XX hex sequences
+  result = result.replace(/=([0-9A-Fa-f]{2})/g, (_match, hex) => {
+    return String.fromCharCode(parseInt(hex, 16));
+  });
+  // Try to decode as UTF-8
+  try {
+    const bytes = new Uint8Array([...result].map(c => c.charCodeAt(0)));
+    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch {
+    return result;
+  }
+}
+
+// Decode base64
+function decodeBase64(str: string): string {
+  try {
+    const cleaned = str.replace(/\r?\n/g, "").trim();
+    const bytes = Uint8Array.from(atob(cleaned), c => c.charCodeAt(0));
+    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch {
+    return str;
+  }
+}
+
+// Decode MIME header values (=?UTF-8?Q?...?= or =?UTF-8?B?...?=)
+function decodeHeaderValue(value: string): string {
+  return value.replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (_match, _charset, encoding, encoded) => {
+    if (encoding.toUpperCase() === "B") {
+      return decodeBase64(encoded);
+    } else {
+      // Q-encoding: like quoted-printable but _ = space
+      return decodeQuotedPrintable(encoded.replace(/_/g, " "));
+    }
+  });
+}
+
+// Extract readable body from a raw MIME email
+function extractBodyFromMime(raw: string): string {
+  // Find the boundary for multipart messages
+  const boundaryMatch = raw.match(/boundary="?([^"\r\n;]+)"?/i);
+  
+  if (boundaryMatch) {
+    const boundary = boundaryMatch[1];
+    const parts = raw.split(new RegExp(`--${boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    
+    // Look for text/plain part first, then text/html
+    let plainText = "";
+    let htmlText = "";
+    
+    for (const part of parts) {
+      const contentTypeMatch = part.match(/Content-Type:\s*([^;\r\n]+)/i);
+      if (!contentTypeMatch) continue;
+      
+      const contentType = contentTypeMatch[1].trim().toLowerCase();
+      const transferEncodingMatch = part.match(/Content-Transfer-Encoding:\s*(\S+)/i);
+      const transferEncoding = transferEncodingMatch ? transferEncodingMatch[1].trim().toLowerCase() : "";
+      
+      // Get body after headers (double newline)
+      const bodyStart = part.search(/\r?\n\r?\n/);
+      if (bodyStart === -1) continue;
+      let partBody = part.substring(bodyStart).trim();
+      
+      // Remove trailing boundary markers
+      partBody = partBody.replace(/--\s*$/, "").trim();
+      
+      // Decode based on transfer encoding
+      if (transferEncoding === "quoted-printable") {
+        partBody = decodeQuotedPrintable(partBody);
+      } else if (transferEncoding === "base64") {
+        partBody = decodeBase64(partBody);
+      }
+      
+      if (contentType.includes("text/plain")) {
+        plainText = partBody;
+      } else if (contentType.includes("text/html")) {
+        htmlText = partBody;
+      }
+    }
+    
+    // Prefer plain text, fall back to HTML stripped of tags
+    if (plainText) {
+      return plainText.trim();
+    }
+    if (htmlText) {
+      return htmlText.replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&#\d+;/g, "").replace(/\s+/g, " ").trim();
+    }
+  }
+  
+  // Not multipart - try to find body after headers
+  const headerEnd = raw.search(/\r?\n\r?\n/);
+  if (headerEnd === -1) return "";
+  
+  let body = raw.substring(headerEnd + 2).trim();
+  
+  // Check transfer encoding from headers
+  const headerSection = raw.substring(0, headerEnd);
+  const transferEncodingMatch = headerSection.match(/Content-Transfer-Encoding:\s*(\S+)/i);
+  const transferEncoding = transferEncodingMatch ? transferEncodingMatch[1].trim().toLowerCase() : "";
+  
+  // Clean IMAP artifacts
+  body = body.replace(/\)\r?\n\s*A\d{4}\s+OK.*$/s, "").trim();
+  body = body.replace(/\)\s*$/s, "").trim();
+  
+  if (transferEncoding === "quoted-printable") {
+    body = decodeQuotedPrintable(body);
+  } else if (transferEncoding === "base64") {
+    body = decodeBase64(body);
+  }
+  
+  // If HTML, strip tags
+  const contentTypeMatch = headerSection.match(/Content-Type:\s*([^;\r\n]+)/i);
+  if (contentTypeMatch && contentTypeMatch[1].toLowerCase().includes("text/html")) {
+    body = body.replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&#\d+;/g, "").replace(/\s+/g, " ").trim();
+  }
+  
+  return body;
 }
 
 function extractName(from: string): string {
