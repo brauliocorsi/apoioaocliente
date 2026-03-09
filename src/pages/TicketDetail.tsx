@@ -810,7 +810,8 @@ export default function TicketDetail() {
                         </div>
                       </div>
                     );
-                  })}
+                  });
+                  })()}
                   <div ref={messagesEndRef} />
                 </div>
               )}
