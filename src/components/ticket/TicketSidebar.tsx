@@ -49,12 +49,21 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
 
   useEffect(() => {
     if (ticket?.id) {
-      supabase
-        .from("phone_calls")
-        .select("id, subject, client_name, status, created_at")
-        .eq("ticket_id", ticket.id)
-        .order("created_at", { ascending: false })
-        .then(({ data }) => setLinkedCalls(data || []));
+      Promise.all([
+        supabase
+          .from("phone_calls")
+          .select("id, subject, client_name, status, created_at")
+          .eq("ticket_id", ticket.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("ticket_messages")
+          .select("id, sender_type, created_at, content")
+          .eq("ticket_id", ticket.id)
+          .order("created_at", { ascending: true }),
+      ]).then(([{ data: calls }, { data: msgs }]) => {
+        setLinkedCalls(calls || []);
+        setEmailMessages(msgs || []);
+      });
     }
   }, [ticket?.id]);
 
