@@ -24,6 +24,8 @@ import PortalTickets from "./pages/portal/PortalTickets";
 import PortalTicketDetail from "./pages/portal/PortalTicketDetail";
 import PortalNewTicket from "./pages/portal/PortalNewTicket";
 import PortalFAQ from "./pages/portal/PortalFAQ";
+import EmailTickets from "./pages/EmailTickets";
+import EmailTicketDetail from "./pages/EmailTicketDetail";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +49,8 @@ const App = () => (
               <Route path="/tickets/:id" element={<TicketDetail />} />
               <Route path="/macros" element={<Macros />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/email-tickets" element={<EmailTickets />} />
+              <Route path="/email-tickets/:id" element={<EmailTicketDetail />} />
             </Route>
 
             {/* Portal (client) routes */}

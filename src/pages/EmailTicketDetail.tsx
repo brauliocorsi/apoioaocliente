@@ -107,7 +107,7 @@ export default function EmailTicketDetail() {
 
   const updatePriority = async (newPriority: string) => {
     if (!id) return;
-    await supabase.from("tickets").update({ priority: newPriority }).eq("id", id);
+    await supabase.from("tickets").update({ priority: newPriority as any }).eq("id", id);
     toast({ title: "Prioridade atualizada" });
     fetchData();
   };

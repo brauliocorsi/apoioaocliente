@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Tickets", url: "/tickets", icon: Ticket },
+  { title: "Email Tickets", url: "/email-tickets", icon: Mail },
   { title: "Ligações", url: "/phone-calls", icon: Phone },
   { title: "Reg. Ligações", url: "/delivery-confirmations", icon: Truck },
   { title: "Pós-Entrega", url: "/post-delivery", icon: ClipboardCheck },
