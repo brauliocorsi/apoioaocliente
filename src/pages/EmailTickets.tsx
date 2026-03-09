@@ -75,9 +75,10 @@ export default function EmailTickets() {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
+      const userId = sessionData?.session?.user?.id;
       const { data } = await supabase.functions.invoke("fetch-inbound-emails", {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: { fetch_recent: fetchRecent, max_emails: fetchRecent ? 50 : 20 },
+        body: { fetch_recent: fetchRecent, max_emails: fetchRecent ? 50 : 20, agent_id: userId },
       });
       if (data?.message) {
         toast({ title: "Resultado", description: data.message });
