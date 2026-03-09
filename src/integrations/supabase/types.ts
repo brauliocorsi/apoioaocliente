@@ -1173,6 +1173,7 @@ export type Database = {
           delivery_date: string | null
           delivery_type: string | null
           description: string | null
+          email_received_at: string | null
           first_responded_at: string | null
           has_original_packaging: boolean | null
           id: string
@@ -1217,6 +1218,7 @@ export type Database = {
           delivery_date?: string | null
           delivery_type?: string | null
           description?: string | null
+          email_received_at?: string | null
           first_responded_at?: string | null
           has_original_packaging?: boolean | null
           id?: string
@@ -1261,6 +1263,7 @@ export type Database = {
           delivery_date?: string | null
           delivery_type?: string | null
           description?: string | null
+          email_received_at?: string | null
           first_responded_at?: string | null
           has_original_packaging?: boolean | null
           id?: string
