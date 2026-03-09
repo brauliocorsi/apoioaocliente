@@ -780,7 +780,7 @@ export default function TicketDetail() {
                             <p className="text-xs font-medium mb-1">
                               {senderName}
                             </p>
-                            <p className="whitespace-pre-wrap">{msg.content}</p>
+                            <RichContent content={msg.content} />
                             <p className="text-xs mt-1 opacity-70">
                               {new Date(msg.created_at).toLocaleString("pt-PT")}
                             </p>
