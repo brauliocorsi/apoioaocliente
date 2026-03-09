@@ -25,6 +25,63 @@ import MentionTextarea from "@/components/MentionTextarea";
 import ResolutionCard from "@/components/ticket/ResolutionCard";
 import MessageReactions from "@/components/chat/MessageReactions";
 
+// Detect HTML content
+function isHtmlContent(text: string): boolean {
+  if (!text) return false;
+  return /<\w+[^>]*>/.test(text) && (text.includes("</") || text.includes("/>"));
+}
+
+// Sanitize HTML for safe rendering
+function sanitizeForDisplay(html: string): string {
+  let safe = html;
+  safe = safe.replace(/<script[\s\S]*?<\/script>/gi, "");
+  safe = safe.replace(/<style[\s\S]*?<\/style>/gi, "");
+  safe = safe.replace(/\s+on\w+\s*=\s*"[^"]*"/gi, "");
+  safe = safe.replace(/\s+on\w+\s*=\s*'[^']*'/gi, "");
+  safe = safe.replace(/href\s*=\s*"javascript:[^"]*"/gi, 'href="#"');
+  return safe;
+}
+
+// Clean raw MIME content (strip headers, decode quoted-printable)
+function cleanMimeContent(text: string): string {
+  if (!text) return text;
+  // Strip IMAP BODY[TEXT] wrapper
+  let cleaned = text.replace(/^BODY\[TEXT\]\s*\{\d+\}\s*/i, "");
+  // Strip MIME boundaries and headers
+  cleaned = cleaned.replace(/--[a-zA-Z0-9]+\s*(Content-Type:[^\n]+\n(Content-Transfer-Encoding:[^\n]+\n)?(\n)?)?/gi, "");
+  cleaned = cleaned.replace(/Content-Type:\s*[^\r\n]+[\r\n]*/gi, "");
+  cleaned = cleaned.replace(/Content-Transfer-Encoding:\s*[^\r\n]+[\r\n]*/gi, "");
+  // Decode quoted-printable
+  cleaned = cleaned.replace(/=\r?\n/g, "");
+  cleaned = cleaned.replace(/=([0-9A-Fa-f]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+  try {
+    const bytes = new Uint8Array([...cleaned].map(c => c.charCodeAt(0)));
+    cleaned = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch { /* keep as-is */ }
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
+  return cleaned;
+}
+
+// Render content intelligently: HTML as HTML, MIME-encoded as cleaned text
+function RichContent({ content }: { content: string }) {
+  if (!content) return <span className="text-muted-foreground">Sem conteúdo</span>;
+
+  if (isHtmlContent(content)) {
+    return (
+      <div
+        className="prose prose-sm dark:prose-invert max-w-none [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1 [&_a]:text-primary [&_a]:underline [&_p]:my-1 [&_*]:max-w-full overflow-hidden break-words"
+        dangerouslySetInnerHTML={{ __html: sanitizeForDisplay(content) }}
+      />
+    );
+  }
+
+  // Check if it has raw MIME artifacts
+  const hasMimeArtifacts = content.includes("BODY[TEXT]") || content.includes("Content-Type:") || content.includes("Content-Transfer-Encoding:");
+  const display = hasMimeArtifacts ? cleanMimeContent(content) : content;
+
+  return <p className="text-sm whitespace-pre-wrap leading-relaxed">{display}</p>;
+}
+
 export default function TicketDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
