@@ -8,8 +8,7 @@ const corsHeaders = {
 
 async function testSmtpConnection(hostname: string, port: number): Promise<string> {
   const timeout = 10_000;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
+  const timer = setTimeout(() => {}, timeout);
 
   try {
     let conn: Deno.Conn;
@@ -24,29 +23,39 @@ async function testSmtpConnection(hostname: string, port: number): Promise<strin
     conn.close();
     clearTimeout(timer);
 
-    if (n === null) {
-      throw new Error("Servidor não respondeu.");
-    }
+    if (n === null) throw new Error("Servidor não respondeu.");
 
     const banner = new TextDecoder().decode(buf.subarray(0, n));
-    if (!banner.startsWith("220")) {
-      throw new Error(`Resposta inesperada do servidor: ${banner.trim()}`);
-    }
+    if (!banner.startsWith("220")) throw new Error(`Resposta inesperada do servidor: ${banner.trim()}`);
 
     return `Conexão SMTP com ${hostname}:${port} estabelecida com sucesso. Banner: ${banner.trim()}`;
   } catch (err) {
     clearTimeout(timer);
     const msg = (err as Error).message || String(err);
     if (msg.includes("abort") || msg.includes("timed out") || msg.includes("TimedOut")) {
-      throw new Error(`Timeout: o servidor ${hostname}:${port} não respondeu em ${timeout / 1000}s. Verifique o host e a porta.`);
+      throw new Error(`Timeout: o servidor ${hostname}:${port} não respondeu em ${timeout / 1000}s.`);
     }
     if (msg.includes("dns") || msg.includes("NotFound") || msg.includes("not known")) {
-      throw new Error(`Hostname não encontrado: ${hostname}. Verifique o endereço do servidor SMTP.`);
+      throw new Error(`Hostname não encontrado: ${hostname}.`);
     }
     if (msg.includes("refused")) {
-      throw new Error(`Conexão recusada em ${hostname}:${port}. Verifique se a porta está correta.`);
+      throw new Error(`Conexão recusada em ${hostname}:${port}.`);
     }
     throw err;
+  }
+}
+
+async function sendViaResend(from: string, to: string, subject: string, text: string) {
+  const apiKey = Deno.env.get("RESEND_API_KEY");
+  if (!apiKey) throw new Error("RESEND_API_KEY não configurada");
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to: [to], subject, text }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Resend error (${res.status}): ${body}`);
   }
 }
 
@@ -82,22 +91,22 @@ Deno.serve(async (req) => {
     try {
       const body = await req.json();
       sendTo = body?.send_to || null;
-    } catch {
-      // No body = connection test only
-    }
+    } catch { /* No body = connection test only */ }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const { data: settings } = await adminClient
       .from("system_settings")
       .select("key, value")
-      .in("key", ["smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from_name", "smtp_from_email"]);
+      .in("key", ["smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from_name", "smtp_from_email", "resend_enabled", "resend_from_email"]);
 
     const cfg: Record<string, string> = {};
     settings?.forEach((s: { key: string; value: string }) => { cfg[s.key] = s.value; });
 
-    if (!cfg.smtp_host || !cfg.smtp_user || !cfg.smtp_pass) {
+    const useResend = cfg.resend_enabled === "true";
+
+    if (!useResend && (!cfg.smtp_host || !cfg.smtp_user || !cfg.smtp_pass)) {
       return new Response(
-        JSON.stringify({ success: false, message: "Configuração SMTP incompleta. Preencha host, utilizador e password." }),
+        JSON.stringify({ success: false, message: "Configuração SMTP incompleta e Resend não está ativo." }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -105,56 +114,41 @@ Deno.serve(async (req) => {
     const port = Number(cfg.smtp_port) || 465;
 
     if (sendTo) {
-      // Send test email using denomailer
-      const client = new SMTPClient({
-        connection: {
-          hostname: cfg.smtp_host,
-          port,
-          tls: port === 465,
-          auth: { username: cfg.smtp_user, password: cfg.smtp_pass },
-        },
-      });
-
-      const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.smtp_from_email || cfg.smtp_user}>`;
       const testSubject = "Email de Teste - Sistema de Tickets";
+      const testText = "Este é um email de teste enviado pelo sistema de tickets.\n\n--\nUP Móveis - Apoio ao Cliente";
+
       try {
-        await client.send({
-          from: fromAddr,
-          to: sendTo,
-          subject: testSubject,
-          content: "Este é um email de teste enviado pelo sistema de tickets.",
-          html: `<div style="font-family:sans-serif;padding:20px;max-width:500px;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px">
-            <h2 style="color:#1f2937;margin-bottom:12px">✅ Email de Teste</h2>
-            <p style="color:#4b5563">Este email confirma que a configuração SMTP do sistema de tickets está a funcionar corretamente.</p>
-            <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0">
-            <p style="color:#9ca3af;font-size:12px">Enviado automaticamente pelo sistema.</p>
-          </div>`,
-        });
-        try { await client.close(); } catch { /* ignore */ }
-        await adminClient.from("email_logs").insert({
-          recipient: sendTo,
-          subject: testSubject,
-          status: "sent",
-          source: "test-smtp",
-        });
+        if (useResend) {
+          const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.resend_from_email || cfg.smtp_from_email || "noreply@upmoveis.pt"}>`;
+          await sendViaResend(fromAddr, sendTo, testSubject, testText);
+        } else {
+          const client = new SMTPClient({
+            connection: { hostname: cfg.smtp_host, port, tls: port === 465, auth: { username: cfg.smtp_user, password: cfg.smtp_pass } },
+          });
+          const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.smtp_from_email || cfg.smtp_user}>`;
+          await client.send({ from: fromAddr, to: sendTo, subject: testSubject, content: testText, html: testText });
+          try { await client.close(); } catch { /* ignore */ }
+        }
+
+        await adminClient.from("email_logs").insert({ recipient: sendTo, subject: testSubject, status: "sent", source: "test-smtp" });
         return new Response(
-          JSON.stringify({ success: true, message: `Email de teste enviado com sucesso para ${sendTo}.` }),
+          JSON.stringify({ success: true, message: `Email de teste enviado com sucesso para ${sendTo} via ${useResend ? "Resend" : "SMTP"}.` }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       } catch (sendErr) {
-        try { await client.close(); } catch { /* ignore */ }
-        await adminClient.from("email_logs").insert({
-          recipient: sendTo,
-          subject: testSubject,
-          status: "failed",
-          error_message: (sendErr as Error).message,
-          source: "test-smtp",
-        });
+        await adminClient.from("email_logs").insert({ recipient: sendTo, subject: testSubject, status: "failed", error_message: (sendErr as Error).message, source: "test-smtp" });
         throw sendErr;
       }
     }
 
-    // Connection test only — use raw TCP
+    // Connection test only
+    if (useResend) {
+      return new Response(
+        JSON.stringify({ success: true, message: "Resend está ativo. Use 'Enviar Email de Teste' para verificar o envio." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const message = await testSmtpConnection(cfg.smtp_host, port);
     return new Response(
       JSON.stringify({ success: true, message }),
