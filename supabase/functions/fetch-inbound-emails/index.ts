@@ -403,10 +403,18 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
     body = body.replace(/\)\r?\n\s*A\d{4}\s+OK.*$/s, "").trim();
     body = body.replace(/\)\s*$/s, "").trim();
 
+    const contentTypeFullMatch = headerSection.match(/Content-Type:\s*([^\r\n]+)/i);
+    const singleCharset = contentTypeFullMatch ? extractCharset(contentTypeFullMatch[1]) : "utf-8";
+
     if (transferEncoding === "quoted-printable") {
-      body = decodeQuotedPrintable(body);
+      body = decodeQuotedPrintable(body, singleCharset);
     } else if (transferEncoding === "base64") {
-      body = decodeBase64(body);
+      body = decodeBase64(body, singleCharset);
+    } else if (singleCharset && singleCharset.toLowerCase() !== "utf-8" && singleCharset.toLowerCase() !== "us-ascii") {
+      try {
+        const bytes = new Uint8Array([...body].map(c => c.charCodeAt(0)));
+        body = new TextDecoder(normalizeCharset(singleCharset), { fatal: false }).decode(bytes);
+      } catch { /* keep as-is */ }
     }
 
     const contentTypeMatch = headerSection.match(/Content-Type:\s*([^;\r\n]+)/i);
