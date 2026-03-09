@@ -752,13 +752,14 @@ export default function TicketDetail() {
                 <p className="text-sm text-muted-foreground text-center py-4">Sem mensagens do cliente</p>
               ) : (
                 <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                  {messages.map((msg, idx) => {
+                  {(() => {
+                    const lastClientIdx = messages.reduce((acc, m, i) => m.sender_type === "client" ? i : acc, -1);
+                    return messages.map((msg, idx) => {
                     const sender = senderProfiles[msg.sender_id];
                     const senderName = sender?.full_name || (msg.sender_type === "agent" ? "Agente" : "Cliente");
                     const senderInitials = senderName.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase();
                     const isAgent = msg.sender_type === "agent";
-                    const isLastClientMsg = !isAgent && idx === [...messages].reverse().findIndex((m) => m.sender_type === "client") ? false : 
-                      !isAgent && messages.length - 1 - [...messages].reverse().findIndex((m) => m.sender_type === "client") === idx;
+                    const isLastClientMsg = idx === lastClientIdx;
 
                     return (
                       <div
