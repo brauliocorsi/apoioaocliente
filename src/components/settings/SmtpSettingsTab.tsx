@@ -80,7 +80,7 @@ export default function SmtpSettingsTab() {
 
   const loadConfig = async () => {
     setLoading(true);
-    const allKeys = [...Object.keys(defaultSmtp), ...Object.keys(defaultImap), "notify_status_change_email"];
+    const allKeys = [...Object.keys(defaultSmtp), ...Object.keys(defaultImap), ...Object.keys(defaultResend), "notify_status_change_email"];
     const { data, error } = await supabase
       .from("system_settings")
       .select("key, value")
