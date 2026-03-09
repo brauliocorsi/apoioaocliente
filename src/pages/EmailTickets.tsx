@@ -124,24 +124,53 @@ export default function EmailTickets() {
 
   const triggerPoll = async (fetchRecent = false) => {
     setPolling(true);
+    setPollProgress("");
+    let totalProcessed = 0;
+    let round = 0;
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
       const userId = sessionData?.session?.user?.id;
-      const { data } = await supabase.functions.invoke("fetch-inbound-emails", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: { fetch_recent: fetchRecent, max_emails: fetchRecent ? 50 : 20, agent_id: userId },
-      });
-      if (data?.message) {
-        toast({ title: "Resultado", description: data.message });
+
+      // Loop until no remaining emails
+      while (true) {
+        round++;
+        setPollProgress(`A importar... (lote ${round}, ${totalProcessed} processados)`);
+
+        const { data } = await supabase.functions.invoke("fetch-inbound-emails", {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: { fetch_recent: fetchRecent, max_emails: fetchRecent ? 50 : 20, agent_id: userId },
+        });
+
+        if (data?.error) {
+          toast({ title: "Erro", description: data.error, variant: "destructive" });
+          break;
+        }
+
+        const batchTotal = data?.total || 0;
+        totalProcessed += batchTotal;
+        const remaining = data?.remaining || 0;
+
+        // Refresh lists after each batch
+        await Promise.all([fetchEmailTickets(), fetchPendingEmails()]);
+
+        if (remaining <= 0 || batchTotal === 0) {
+          // Done - show final summary
+          toast({
+            title: "Importação concluída",
+            description: data?.message || `${totalProcessed} emails processados no total.`,
+          });
+          break;
+        }
+
+        // Small delay between batches
+        await new Promise(r => setTimeout(r, 500));
       }
-      if (data?.error) {
-        toast({ title: "Erro", description: data.error, variant: "destructive" });
-      }
-      await Promise.all([fetchEmailTickets(), fetchPendingEmails()]);
     } catch (err) {
       console.error("Poll error:", err);
+      toast({ title: "Erro", description: (err as Error).message, variant: "destructive" });
     }
+    setPollProgress("");
     setPolling(false);
   };
 
