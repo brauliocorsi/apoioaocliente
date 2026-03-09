@@ -176,10 +176,20 @@ function extractName(from: string): string {
   return name || extractEmail(from);
 }
 
-async function processEmails(params: { fetchRecent: boolean; maxEmails: number }) {
+async function processEmails(params: { fetchRecent: boolean; maxEmails: number; agentId?: string }) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+  // Get a valid created_by: use provided agent_id or find first agent
+  let createdBy = params.agentId;
+  if (!createdBy) {
+    const { data: agents } = await adminClient.rpc("get_agent_profiles");
+    if (agents && agents.length > 0) createdBy = agents[0].id;
+  }
+  if (!createdBy) {
+    return { success: false, message: "Nenhum agente encontrado para criar tickets" };
+  }
 
   const imapCfg = await getImapConfig(adminClient);
   if (!imapCfg) {
