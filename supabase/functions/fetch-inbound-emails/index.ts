@@ -792,12 +792,24 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Mark THIS pending email as approved
       await adminClient.from("pending_emails").update({
         status: "approved",
         reviewed_by: agentId,
         reviewed_at: new Date().toISOString(),
         ticket_id: newTicket.id,
       }).eq("id", pendingId);
+
+      // Also auto-reject other duplicate pending emails from same address+subject
+      await adminClient.from("pending_emails").update({
+        status: "rejected",
+        reviewed_by: agentId,
+        reviewed_at: new Date().toISOString(),
+        rejection_reason: "Duplicado — ticket já criado",
+      }).eq("from_address", pe.from_address)
+        .eq("subject", pe.subject)
+        .eq("status", "pending")
+        .neq("id", pendingId);
 
       await adminClient.from("email_logs").insert({
         recipient: pe.from_address,
