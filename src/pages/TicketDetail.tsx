@@ -861,6 +861,12 @@ export default function TicketDetail() {
                 </div>
               )}
               <div className="border-t pt-3 space-y-2">
+                {hasEmailThread && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400">
+                    <Mail className="h-3.5 w-3.5 shrink-0" />
+                    <span className="text-xs font-medium">A resposta será enviada por email para {ticket?.client_email || "o cliente"}</span>
+                  </div>
+                )}
                 {replyFiles.length > 0 && (
                   <div className="flex flex-wrap gap-2 p-2 rounded-md bg-muted/50 border">
                     {replyFiles.map((file, i) => (
