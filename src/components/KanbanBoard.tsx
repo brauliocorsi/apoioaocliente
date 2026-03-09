@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import { getTicketSlaStatus, calcRemaining, type SlaStatus } from "@/components/ticket/SlaDashboard";
-import { AlertTriangle, Clock, CheckCircle, Timer, Pencil, Check, X, Phone } from "lucide-react";
+import { AlertTriangle, Clock, CheckCircle, Timer, Pencil, Check, X, Phone, Mail } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DndContext,
@@ -49,6 +49,7 @@ interface KanbanBoardProps {
   callCounts?: Record<string, number>;
   agentProfiles?: Record<string, { full_name: string; avatar_url: string | null }>;
   unreadCounts?: Record<string, number>;
+  emailUnreadCounts?: Record<string, number>;
   ticketTagsMap?: Record<string, string[]>;
   allTags?: { id: string; name: string; color: string | null }[];
 }
@@ -87,7 +88,7 @@ function KanbanSlaIcon({ ticket }: { ticket: TicketRow }) {
   );
 }
 
-function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile, unreadCount, ticketTags, allTags }: { ticket: TicketRow; isDragging?: boolean; categoryNames?: Record<string, string>; callCount?: number; agentProfile?: { full_name: string; avatar_url: string | null }; unreadCount?: number; ticketTags?: string[]; allTags?: { id: string; name: string; color: string | null }[] }) {
+function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile, unreadCount, emailUnreadCount, ticketTags, allTags }: { ticket: TicketRow; isDragging?: boolean; categoryNames?: Record<string, string>; callCount?: number; agentProfile?: { full_name: string; avatar_url: string | null }; unreadCount?: number; emailUnreadCount?: number; ticketTags?: string[]; allTags?: { id: string; name: string; color: string | null }[] }) {
   const initials = agentProfile
     ? agentProfile.full_name.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase()
     : null;
@@ -97,11 +98,16 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs font-mono text-muted-foreground">#{ticket.ticket_number}</span>
         <div className="flex items-center gap-1.5">
-          {unreadCount && unreadCount > 0 && (
+          {emailUnreadCount && emailUnreadCount > 0 ? (
+            <Badge className="text-[10px] h-4 min-w-[16px] justify-center px-1 gap-0.5 bg-blue-500 hover:bg-blue-600 text-white border-0 animate-pulse">
+              <Mail className="h-3 w-3" />
+              {emailUnreadCount}
+            </Badge>
+          ) : unreadCount && unreadCount > 0 ? (
             <Badge variant="destructive" className="text-[10px] h-4 min-w-[16px] justify-center px-1">
               {unreadCount}
             </Badge>
-          )}
+          ) : null}
           {callCount && callCount > 0 && (
             <span className="inline-flex items-center gap-0.5 text-muted-foreground">
               <Phone className="h-3 w-3" />
@@ -152,7 +158,7 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile
   );
 }
 
-function DraggableTicket({ ticket, categoryNames, callCount, agentProfile, unreadCount, ticketTags, allTags }: { ticket: TicketRow; categoryNames?: Record<string, string>; callCount?: number; agentProfile?: { full_name: string; avatar_url: string | null }; unreadCount?: number; ticketTags?: string[]; allTags?: { id: string; name: string; color: string | null }[] }) {
+function DraggableTicket({ ticket, categoryNames, callCount, agentProfile, unreadCount, emailUnreadCount, ticketTags, allTags }: { ticket: TicketRow; categoryNames?: Record<string, string>; callCount?: number; agentProfile?: { full_name: string; avatar_url: string | null }; unreadCount?: number; emailUnreadCount?: number; ticketTags?: string[]; allTags?: { id: string; name: string; color: string | null }[] }) {
   const navigate = useNavigate();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: ticket.id,
@@ -167,7 +173,7 @@ function DraggableTicket({ ticket, categoryNames, callCount, agentProfile, unrea
       className={`cursor-grab active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}
       onClick={() => navigate(`/tickets/${ticket.id}`)}
     >
-      <TicketCard ticket={ticket} categoryNames={categoryNames} callCount={callCount} agentProfile={agentProfile} unreadCount={unreadCount} ticketTags={ticketTags} allTags={allTags} />
+      <TicketCard ticket={ticket} categoryNames={categoryNames} callCount={callCount} agentProfile={agentProfile} unreadCount={unreadCount} emailUnreadCount={emailUnreadCount} ticketTags={ticketTags} allTags={allTags} />
     </div>
   );
 }
@@ -290,7 +296,7 @@ function InlineStatusHeader({
   );
 }
 
-export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, callCounts, agentProfiles, unreadCounts, ticketTagsMap, allTags }: KanbanBoardProps) {
+export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, callCounts, agentProfiles, unreadCounts, emailUnreadCounts, ticketTagsMap, allTags }: KanbanBoardProps) {
   const { toast } = useToast();
   const { statuses, statusLabels, refetch: refetchStatuses } = useTicketStatuses();
   const [activeTicket, setActiveTicket] = useState<TicketRow | null>(null);
@@ -387,7 +393,7 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, cal
             <ScrollArea className="h-[calc(100vh-320px)]">
               <div className="p-2 space-y-2">
                 {(grouped[s.id] || []).map((t) => (
-                  <DraggableTicket key={t.id} ticket={t} categoryNames={categoryNames} callCount={callCounts?.[t.id]} agentProfile={t.assigned_to ? agentProfiles?.[t.assigned_to] : undefined} unreadCount={unreadCounts?.[t.id]} ticketTags={ticketTagsMap?.[t.id]} allTags={allTags} />
+                  <DraggableTicket key={t.id} ticket={t} categoryNames={categoryNames} callCount={callCounts?.[t.id]} agentProfile={t.assigned_to ? agentProfiles?.[t.assigned_to] : undefined} unreadCount={unreadCounts?.[t.id]} emailUnreadCount={emailUnreadCounts?.[t.id]} ticketTags={ticketTagsMap?.[t.id]} allTags={allTags} />
                 ))}
                 {(grouped[s.id] || []).length === 0 && (
                   <p className="text-xs text-muted-foreground text-center py-8">Sem tickets</p>
@@ -399,7 +405,7 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, cal
       </div>
 
       <DragOverlay>
-        {activeTicket && <TicketCard ticket={activeTicket} isDragging categoryNames={categoryNames} callCount={callCounts?.[activeTicket.id]} agentProfile={activeTicket.assigned_to ? agentProfiles?.[activeTicket.assigned_to] : undefined} unreadCount={unreadCounts?.[activeTicket.id]} ticketTags={ticketTagsMap?.[activeTicket.id]} allTags={allTags} />}
+        {activeTicket && <TicketCard ticket={activeTicket} isDragging categoryNames={categoryNames} callCount={callCounts?.[activeTicket.id]} agentProfile={activeTicket.assigned_to ? agentProfiles?.[activeTicket.assigned_to] : undefined} unreadCount={unreadCounts?.[activeTicket.id]} emailUnreadCount={emailUnreadCounts?.[activeTicket.id]} ticketTags={ticketTagsMap?.[activeTicket.id]} allTags={allTags} />}
       </DragOverlay>
     </DndContext>
     </TooltipProvider>

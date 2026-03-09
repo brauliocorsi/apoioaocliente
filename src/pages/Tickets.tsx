@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Search, Loader2, List, LayoutGrid, AlertTriangle, Clock, CheckCircle, Timer, Phone } from "lucide-react";
+import { Plus, Search, Loader2, List, LayoutGrid, AlertTriangle, Clock, CheckCircle, Timer, Phone, Mail } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import KanbanBoard from "@/components/KanbanBoard";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
@@ -85,6 +85,7 @@ export default function Tickets() {
   const [slaFilter, setSlaFilter] = useState<string>("all");
   const [view, setView] = useState<"list" | "kanban">("kanban");
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [emailUnreadCounts, setEmailUnreadCounts] = useState<Record<string, number>>({});
   const [fetchKey, setFetchKey] = useState(0);
   const navigate = useNavigate();
   const { statuses, statusLabels } = useTicketStatuses();
@@ -153,20 +154,27 @@ export default function Tickets() {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (currentUser && data && data.length > 0) {
         const ticketIds = data.map((t: any) => t.id);
-        const [{ data: readStatuses }, { data: clientMsgs }] = await Promise.all([
+        const [{ data: readStatuses }, { data: clientMsgs }, { data: emailThreads }] = await Promise.all([
           supabase.from("ticket_read_status").select("ticket_id, last_read_at").in("ticket_id", ticketIds),
-          supabase.from("ticket_messages").select("ticket_id, created_at").eq("sender_type", "client").in("ticket_id", ticketIds),
+          supabase.from("ticket_messages").select("ticket_id, created_at, sender_type").eq("sender_type", "client").in("ticket_id", ticketIds),
+          supabase.from("email_threads").select("ticket_id").in("ticket_id", ticketIds),
         ]);
         const readMap: Record<string, string> = {};
         (readStatuses || []).forEach((r: any) => { readMap[r.ticket_id] = r.last_read_at; });
+        const emailTicketIds = new Set(((emailThreads as any[]) || []).map((t: any) => t.ticket_id));
         const unread: Record<string, number> = {};
+        const emailUnread: Record<string, number> = {};
         (clientMsgs || []).forEach((m: any) => {
           const lastRead = readMap[m.ticket_id];
           if (!lastRead || new Date(m.created_at) > new Date(lastRead)) {
             unread[m.ticket_id] = (unread[m.ticket_id] || 0) + 1;
+            if (emailTicketIds.has(m.ticket_id)) {
+              emailUnread[m.ticket_id] = (emailUnread[m.ticket_id] || 0) + 1;
+            }
           }
         });
         setUnreadCounts(unread);
+        setEmailUnreadCounts(emailUnread);
       }
     };
     fetch();
@@ -288,7 +296,7 @@ export default function Tickets() {
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : view === "kanban" ? (
-        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} callCounts={callCounts} agentProfiles={agentProfiles} unreadCounts={unreadCounts} ticketTagsMap={ticketTagsMap} allTags={allTags} />
+        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} callCounts={callCounts} agentProfiles={agentProfiles} unreadCounts={unreadCounts} emailUnreadCounts={emailUnreadCounts} ticketTagsMap={ticketTagsMap} allTags={allTags} />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -336,7 +344,13 @@ export default function Tickets() {
                         );
                       })}
                       {t.category_id && <Badge variant="outline" className="text-xs">{categories[t.category_id] || t.category_id}</Badge>}
-                      {unreadCounts[t.id] > 0 && (
+                      {emailUnreadCounts[t.id] > 0 && (
+                        <Badge className="text-[10px] h-5 min-w-[20px] justify-center gap-0.5 bg-blue-500 hover:bg-blue-600 text-white border-0">
+                          <Mail className="h-3 w-3" />
+                          {emailUnreadCounts[t.id]}
+                        </Badge>
+                      )}
+                      {unreadCounts[t.id] > 0 && !emailUnreadCounts[t.id] && (
                         <Badge variant="destructive" className="text-[10px] h-5 min-w-[20px] justify-center">
                           {unreadCounts[t.id]}
                         </Badge>
