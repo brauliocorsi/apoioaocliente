@@ -80,7 +80,6 @@ export default function EmailTickets() {
         body: { fetch_recent: fetchRecent, max_emails: fetchRecent ? 50 : 20 },
       });
       if (data?.message) {
-        const { toast } = await import("@/hooks/use-toast").then(m => ({ toast: m.toast }));
         toast({ title: "Resultado", description: data.message });
       }
       await fetchEmailTickets();
