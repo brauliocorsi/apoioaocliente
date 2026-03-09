@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Loader2, Mail, RefreshCw, ArrowRight, Check, X, Ban, Eye, Clock, Shield, RotateCw } from "lucide-react";
+import { Search, Loader2, Mail, RefreshCw, ArrowRight, Check, X, Ban, Eye, Clock, Shield, RotateCw, History, FileCheck, FileX } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
@@ -44,6 +44,19 @@ type PendingEmail = {
   attachments_meta: any;
 };
 
+type ProcessedEmail = {
+  id: string;
+  from_address: string;
+  from_name: string | null;
+  subject: string;
+  status: string;
+  rejection_reason: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  ticket_id: string | null;
+};
+
 function isHtmlContent(text: string): boolean {
   if (!text) return false;
   return /<\w+[^>]*>/.test(text) && (text.includes("</") || text.includes("/>"));
@@ -61,6 +74,7 @@ function sanitizeForDisplay(html: string): string {
 export default function EmailTickets() {
   const [tickets, setTickets] = useState<EmailTicketRow[]>([]);
   const [pendingEmails, setPendingEmails] = useState<PendingEmail[]>([]);
+  const [processedEmails, setProcessedEmails] = useState<ProcessedEmail[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [polling, setPolling] = useState(false);
@@ -101,10 +115,21 @@ export default function EmailTickets() {
     setPendingEmails((data as unknown as PendingEmail[]) || []);
   };
 
+  const fetchProcessedEmails = async () => {
+    const { data } = await supabase
+      .from("pending_emails" as any)
+      .select("id, from_address, from_name, subject, status, rejection_reason, created_at, reviewed_at, reviewed_by, ticket_id")
+      .in("status", ["approved", "rejected"])
+      .order("reviewed_at", { ascending: false })
+      .limit(200);
+    setProcessedEmails((data as unknown as ProcessedEmail[]) || []);
+  };
+
   useEffect(() => {
     Promise.all([
       fetchEmailTickets(),
       fetchPendingEmails(),
+      fetchProcessedEmails(),
       supabase.rpc("get_agent_profiles").then(({ data }) => {
         const map: Record<string, string> = {};
         ((data as any[]) || []).forEach((p: any) => { map[p.id] = p.full_name; });
@@ -152,7 +177,7 @@ export default function EmailTickets() {
         const remaining = data?.remaining || 0;
 
         // Refresh lists after each batch
-        await Promise.all([fetchEmailTickets(), fetchPendingEmails()]);
+        await Promise.all([fetchEmailTickets(), fetchPendingEmails(), fetchProcessedEmails()]);
 
         if (remaining <= 0 || batchTotal === 0) {
           // Done - show final summary
@@ -186,7 +211,7 @@ export default function EmailTickets() {
       if (data?.success) {
         toast({ title: "Ticket criado", description: `Ticket criado a partir do email de ${pe.from_name || pe.from_address}` });
         setSelectedPending(null);
-        await Promise.all([fetchEmailTickets(), fetchPendingEmails()]);
+        await Promise.all([fetchEmailTickets(), fetchPendingEmails(), fetchProcessedEmails()]);
         if (data.ticket_id) navigate(`/email-tickets/${data.ticket_id}`);
       } else {
         toast({ title: "Erro", description: data?.message || "Erro desconhecido", variant: "destructive" });
@@ -208,7 +233,7 @@ export default function EmailTickets() {
       }).eq("id", pe.id);
       toast({ title: "Email rejeitado" });
       setSelectedPending(null);
-      await fetchPendingEmails();
+      await Promise.all([fetchPendingEmails(), fetchProcessedEmails()]);
     } catch (err) {
       toast({ title: "Erro", description: (err as Error).message, variant: "destructive" });
     }
@@ -233,7 +258,7 @@ export default function EmailTickets() {
       }).eq("id", pe.id);
       toast({ title: "Domínio bloqueado", description: `Todos os emails de @${domain} serão bloqueados` });
       setSelectedPending(null);
-      await fetchPendingEmails();
+      await Promise.all([fetchPendingEmails(), fetchProcessedEmails()]);
     } catch (err) {
       toast({ title: "Erro", description: (err as Error).message, variant: "destructive" });
     }
@@ -319,6 +344,10 @@ export default function EmailTickets() {
               {blockedCount > 0 && (
                 <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">{blockedCount}</Badge>
               )}
+            </TabsTrigger>
+            <TabsTrigger value="history" className="gap-2">
+              <History className="h-3.5 w-3.5" />
+              Histórico ({processedEmails.length})
             </TabsTrigger>
           </TabsList>
 
@@ -480,6 +509,68 @@ export default function EmailTickets() {
                           >
                             <Check className="h-4 w-4" />
                           </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* History tab */}
+          <TabsContent value="history" className="mt-4">
+            {processedEmails.length === 0 ? (
+              <Card>
+                <CardContent className="py-16 text-center">
+                  <History className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+                  <p className="text-muted-foreground">Nenhum email processado ainda</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="p-0">
+                  <div className="divide-y">
+                    {processedEmails.map((pe) => (
+                      <div
+                        key={pe.id}
+                        className={`flex items-center justify-between px-4 py-3.5 transition-colors ${pe.ticket_id ? "cursor-pointer hover:bg-muted/50" : ""}`}
+                        onClick={() => pe.ticket_id && navigate(`/email-tickets/${pe.ticket_id}`)}
+                      >
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div className={`flex h-9 w-9 items-center justify-center rounded-lg shrink-0 ${
+                            pe.status === "approved"
+                              ? "bg-green-500/10 text-green-600"
+                              : "bg-destructive/10 text-destructive"
+                          }`}>
+                            {pe.status === "approved" ? <FileCheck className="h-4 w-4" /> : <FileX className="h-4 w-4" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{pe.subject}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {pe.from_name || pe.from_address} · {pe.from_address}
+                              {pe.reviewed_at && (
+                                <> · {format(new Date(pe.reviewed_at), "dd/MM/yyyy HH:mm", { locale: pt })}</>
+                              )}
+                              {pe.reviewed_by && agents[pe.reviewed_by] && (
+                                <> · por {agents[pe.reviewed_by]}</>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {pe.status === "approved" ? (
+                            <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 text-[10px]">
+                              Ticket criado
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 text-[10px]">
+                              Rejeitado
+                            </Badge>
+                          )}
+                          {pe.ticket_id && (
+                            <ArrowRight className="h-4 w-4 text-muted-foreground/40" />
+                          )}
                         </div>
                       </div>
                     ))}
