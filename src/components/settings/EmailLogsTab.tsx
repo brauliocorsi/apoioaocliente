@@ -87,6 +87,17 @@ export default function EmailLogsTab() {
 
   return (
     <div className="space-y-4">
+      {/* Active method indicator */}
+      {activeMethod && (
+        <div className={`flex items-center gap-2 rounded-lg border p-3 text-sm ${activeMethod === "resend" ? "border-purple-300 bg-purple-50 dark:border-purple-700 dark:bg-purple-950/30" : "border-border bg-muted/30"}`}>
+          {activeMethod === "resend" ? <Send className="h-4 w-4 text-purple-600 dark:text-purple-400" /> : <Server className="h-4 w-4 text-muted-foreground" />}
+          <span className="font-medium">Método de envio ativo:</span>
+          <Badge variant={activeMethod === "resend" ? "default" : "secondary"} className={activeMethod === "resend" ? "bg-purple-600 hover:bg-purple-700" : ""}>
+            {activeMethod === "resend" ? "Resend API" : "SMTP Direto"}
+          </Badge>
+        </div>
+      )}
+
       {/* Stats cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Card className="cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all" onClick={() => setFilter("all")}>
