@@ -134,21 +134,30 @@ class ImapClient {
   }> {
     const response = await this.command(`FETCH ${seqNum} BODY[]`);
 
+    // Strip IMAP FETCH wrapper: "* N FETCH (BODY[] {size}\r\n" prefix
+    let rawMessage = response;
+    const fetchStart = rawMessage.match(/\* \d+ FETCH \(BODY\[\] \{\d+\}\r?\n/);
+    if (fetchStart) {
+      rawMessage = rawMessage.substring((fetchStart.index || 0) + fetchStart[0].length);
+    }
+    // Strip trailing IMAP tag response
+    rawMessage = rawMessage.replace(/\)\r?\n\s*A\d{4}\s+OK.*$/s, "").trim();
+
     let from = "";
     let subject = "";
     let messageId = "";
 
-    const fromMatch = response.match(/^From:\s*(.+?)$/im);
+    const fromMatch = rawMessage.match(/^From:\s*(.+?)$/im);
     if (fromMatch) from = fromMatch[1].trim();
 
     // Handle multi-line folded Subject headers
-    subject = extractHeader(response, "Subject");
+    subject = extractHeader(rawMessage, "Subject");
     subject = decodeHeaderValue(subject);
 
-    const msgIdMatch = response.match(/^Message-ID:\s*(.+?)$/im);
+    const msgIdMatch = rawMessage.match(/^Message-ID:\s*(.+?)$/im);
     if (msgIdMatch) messageId = msgIdMatch[1].trim();
 
-    const parsed = parseMimeMessage(response);
+    const parsed = parseMimeMessage(rawMessage);
 
     return {
       from,
