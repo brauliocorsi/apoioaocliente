@@ -256,8 +256,9 @@ interface MimeParsed {
   attachments: { filename: string; contentType: string; data: Uint8Array }[];
 }
 
-function parseMimeMessage(raw: string): MimeParsed {
+function parseMimeMessage(raw: string, depth = 0): MimeParsed {
   const result: MimeParsed = { bodyText: "", bodyHtml: "", attachments: [] };
+  if (depth > 5) return result; // prevent stack overflow on deeply nested/malformed emails
   const boundaryMatch = raw.match(/boundary="?([^"\r\n;]+)"?/i);
 
   if (boundaryMatch) {
@@ -280,7 +281,7 @@ function parseMimeMessage(raw: string): MimeParsed {
 
       const nestedBoundaryMatch = part.match(/boundary="?([^"\r\n;]+)"?/i);
       if (contentType.includes("multipart/") && nestedBoundaryMatch) {
-        const nested = parseMimeMessage(part);
+        const nested = parseMimeMessage(part, depth + 1);
         if (!result.bodyText && nested.bodyText) result.bodyText = nested.bodyText;
         if (!result.bodyHtml && nested.bodyHtml) result.bodyHtml = nested.bodyHtml;
         result.attachments.push(...nested.attachments);
@@ -491,7 +492,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
     }
 
     let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
-    const batch = emailIds.slice(0, Math.min(params.maxEmails, 5));
+    const batch = emailIds.slice(0, params.maxEmails);
 
     for (const seqNum of batch) {
       try {
