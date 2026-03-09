@@ -634,12 +634,15 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
               continue;
             }
 
-            await adminClient.from("ticket_messages").insert({
+            const msgInsert: any = {
               ticket_id: ticketId,
               sender_id: "00000000-0000-0000-0000-000000000000",
               sender_type: "client",
               content: body,
-            });
+            };
+            if (msg.date) msgInsert.created_at = msg.date;
+
+            await adminClient.from("ticket_messages").insert(msgInsert);
             await adminClient.from("email_threads")
               .update({ last_message_id: emailFingerprint })
               .eq("ticket_id", existingThread.ticket_id);
