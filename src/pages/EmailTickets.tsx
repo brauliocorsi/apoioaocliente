@@ -258,7 +258,7 @@ export default function EmailTickets() {
       }).eq("id", pe.id);
       toast({ title: "Domínio bloqueado", description: `Todos os emails de @${domain} serão bloqueados` });
       setSelectedPending(null);
-      await fetchPendingEmails();
+      await Promise.all([fetchPendingEmails(), fetchProcessedEmails()]);
     } catch (err) {
       toast({ title: "Erro", description: (err as Error).message, variant: "destructive" });
     }
