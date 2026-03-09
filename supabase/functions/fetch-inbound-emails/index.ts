@@ -256,8 +256,9 @@ interface MimeParsed {
   attachments: { filename: string; contentType: string; data: Uint8Array }[];
 }
 
-function parseMimeMessage(raw: string): MimeParsed {
+function parseMimeMessage(raw: string, depth = 0): MimeParsed {
   const result: MimeParsed = { bodyText: "", bodyHtml: "", attachments: [] };
+  if (depth > 5) return result; // prevent stack overflow on deeply nested/malformed emails
   const boundaryMatch = raw.match(/boundary="?([^"\r\n;]+)"?/i);
 
   if (boundaryMatch) {
