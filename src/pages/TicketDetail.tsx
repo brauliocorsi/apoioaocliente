@@ -48,38 +48,98 @@ function cleanMimeContent(text: string): string {
   // Strip IMAP BODY[TEXT] wrapper
   let cleaned = text.replace(/^BODY\[TEXT\]\s*\{\d+\}\s*/i, "");
   // Strip MIME boundaries and headers
-  cleaned = cleaned.replace(/--[a-zA-Z0-9]+\s*(Content-Type:[^\n]+\n(Content-Transfer-Encoding:[^\n]+\n)?(\n)?)?/gi, "");
+  cleaned = cleaned.replace(/--[a-zA-Z0-9_-]+\s*(Content-Type:[^\n]+\n(Content-Transfer-Encoding:[^\n]+\n)*(charset=[^\n]+\n)*(\n)?)?/gi, "");
   cleaned = cleaned.replace(/Content-Type:\s*[^\r\n]+[\r\n]*/gi, "");
   cleaned = cleaned.replace(/Content-Transfer-Encoding:\s*[^\r\n]+[\r\n]*/gi, "");
-  // Decode quoted-printable
+  cleaned = cleaned.replace(/Content-Disposition:\s*[^\r\n]+[\r\n]*/gi, "");
+  // Decode quoted-printable: first join soft line breaks, then decode byte sequences
   cleaned = cleaned.replace(/=\r?\n/g, "");
-  cleaned = cleaned.replace(/=([0-9A-Fa-f]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
-  try {
-    const bytes = new Uint8Array([...cleaned].map(c => c.charCodeAt(0)));
-    cleaned = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
-  } catch { /* keep as-is */ }
+  // Collect all =XX sequences as bytes and decode as UTF-8
+  cleaned = decodeQuotedPrintableUtf8(cleaned);
+  // Also try to fix common HTML entity issues
+  cleaned = cleaned.replace(/&aacute;/gi, "á").replace(/&eacute;/gi, "é")
+    .replace(/&iacute;/gi, "í").replace(/&oacute;/gi, "ó").replace(/&uacute;/gi, "ú")
+    .replace(/&atilde;/gi, "ã").replace(/&otilde;/gi, "õ")
+    .replace(/&ccedil;/gi, "ç").replace(/&Ccedil;/gi, "Ç")
+    .replace(/&acirc;/gi, "â").replace(/&ecirc;/gi, "ê").replace(/&ocirc;/gi, "ô");
   cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
   return cleaned;
 }
 
-// Render content intelligently: HTML as HTML, MIME-encoded as cleaned text
-function RichContent({ content }: { content: string }) {
-  if (!content) return <span className="text-muted-foreground">Sem conteúdo</span>;
+// Properly decode quoted-printable with UTF-8 support
+function decodeQuotedPrintableUtf8(input: string): string {
+  // Replace sequences of =XX with properly decoded UTF-8
+  const parts: (string | number[])[] = [];
+  let i = 0;
+  let currentBytes: number[] = [];
 
-  if (isHtmlContent(content)) {
-    return (
-      <div
-        className="prose prose-sm dark:prose-invert max-w-none [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1 [&_a]:text-primary [&_a]:underline [&_p]:my-1 [&_*]:max-w-full overflow-hidden break-words"
-        dangerouslySetInnerHTML={{ __html: sanitizeForDisplay(content) }}
-      />
-    );
+  while (i < input.length) {
+    if (input[i] === "=" && i + 2 < input.length && /[0-9A-Fa-f]{2}/.test(input.substring(i + 1, i + 3))) {
+      currentBytes.push(parseInt(input.substring(i + 1, i + 3), 16));
+      i += 3;
+    } else {
+      if (currentBytes.length > 0) {
+        parts.push(currentBytes);
+        currentBytes = [];
+      }
+      parts.push(input[i]);
+      i++;
+    }
   }
+  if (currentBytes.length > 0) {
+    parts.push(currentBytes);
+  }
+
+  // Build result, decoding byte arrays as UTF-8
+  let result = "";
+  for (const part of parts) {
+    if (typeof part === "string") {
+      result += part;
+    } else {
+      try {
+        const bytes = new Uint8Array(part);
+        result += new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+      } catch {
+        // Fallback: decode as Latin-1
+        result += part.map(b => String.fromCharCode(b)).join("");
+      }
+    }
+  }
+  return result;
+}
+
+// Render content intelligently: HTML as HTML, MIME-encoded as cleaned text
+function RichContent({ content, onViewFull }: { content: string; onViewFull?: () => void }) {
+  if (!content) return <span className="text-muted-foreground">Sem conteúdo</span>;
 
   // Check if it has raw MIME artifacts
   const hasMimeArtifacts = content.includes("BODY[TEXT]") || content.includes("Content-Type:") || content.includes("Content-Transfer-Encoding:");
   const display = hasMimeArtifacts ? cleanMimeContent(content) : content;
 
-  return <p className="text-sm whitespace-pre-wrap leading-relaxed">{display}</p>;
+  if (isHtmlContent(display)) {
+    return (
+      <div className="relative group">
+        <div
+          className="prose prose-sm dark:prose-invert max-w-none [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1 [&_a]:text-primary [&_a]:underline [&_p]:my-1 [&_*]:max-w-full overflow-hidden break-words"
+          dangerouslySetInnerHTML={{ __html: sanitizeForDisplay(display) }}
+        />
+        {onViewFull && (
+          <Button variant="ghost" size="sm" className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity h-6 text-[10px] gap-1" onClick={onViewFull}>
+            <Maximize2 className="h-3 w-3" /> Ver completo
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  // Plain text: also clean any QP artifacts
+  const plainDisplay = hasMimeArtifacts ? display : decodeQuotedPrintableUtf8(display);
+  const trimmed = plainDisplay.trim();
+  if (!trimmed || trimmed.replace(/\s/g, "").length === 0) {
+    return <span className="text-muted-foreground italic text-xs">(Mensagem sem conteúdo de texto)</span>;
+  }
+
+  return <p className="text-sm whitespace-pre-wrap leading-relaxed">{trimmed}</p>;
 }
 
 export default function TicketDetail() {
