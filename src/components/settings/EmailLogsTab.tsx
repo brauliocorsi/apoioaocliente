@@ -207,6 +207,23 @@ export default function EmailLogsTab() {
                           <Badge variant="outline" className="text-[10px]">{sourceLabel(log.source)}</Badge>
                         </TableCell>
                         <TableCell>
+                          {log.source !== "inbound" && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                {log.smtp_response?.toLowerCase().includes("resend") ? (
+                                  <Send className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400 cursor-help" />
+                                ) : (
+                                  <Server className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                )}
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {log.smtp_response?.toLowerCase().includes("resend") ? "Enviado via Resend" : "Enviado via SMTP"}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </TableCell>
+                        </TableCell>
+                        <TableCell>
                           {log.status === "sent" || log.status === "received" ? (
                             <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
                               <CheckCircle2 className="h-3.5 w-3.5" />
