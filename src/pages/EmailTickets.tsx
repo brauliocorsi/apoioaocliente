@@ -115,10 +115,21 @@ export default function EmailTickets() {
     setPendingEmails((data as unknown as PendingEmail[]) || []);
   };
 
+  const fetchProcessedEmails = async () => {
+    const { data } = await supabase
+      .from("pending_emails" as any)
+      .select("id, from_address, from_name, subject, status, rejection_reason, created_at, reviewed_at, reviewed_by, ticket_id")
+      .in("status", ["approved", "rejected"])
+      .order("reviewed_at", { ascending: false })
+      .limit(200);
+    setProcessedEmails((data as unknown as ProcessedEmail[]) || []);
+  };
+
   useEffect(() => {
     Promise.all([
       fetchEmailTickets(),
       fetchPendingEmails(),
+      fetchProcessedEmails(),
       supabase.rpc("get_agent_profiles").then(({ data }) => {
         const map: Record<string, string> = {};
         ((data as any[]) || []).forEach((p: any) => { map[p.id] = p.full_name; });
