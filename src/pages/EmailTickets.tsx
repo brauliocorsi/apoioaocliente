@@ -33,6 +33,7 @@ export default function EmailTickets() {
   const [agents, setAgents] = useState<Record<string, string>>({});
   const navigate = useNavigate();
   const { statusLabels } = useTicketStatuses();
+  const { toast } = useToast();
 
   const fetchEmailTickets = async () => {
     // Get ticket IDs that have email threads
