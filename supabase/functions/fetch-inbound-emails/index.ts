@@ -44,34 +44,25 @@ class ImapClient {
   private encoder = new TextEncoder();
   private decoder = new TextDecoder();
   private tagCounter = 0;
-  private buffer = "";
 
   async connect(host: string, port: number): Promise<string> {
-    console.log(`Connecting to ${host}:${port}...`);
     if (port === 993) {
       this.conn = await Deno.connectTls({ hostname: host, port });
     } else {
       this.conn = await Deno.connect({ hostname: host, port });
     }
     this.reader = this.conn.readable.getReader();
-    const greeting = await this.readResponse("*");
-    console.log(`Greeting: ${greeting.substring(0, 200)}`);
-    return greeting;
+    return await this.readResponse("*");
   }
 
-  async startTls(host: string): Promise<string> {
-    console.log("Sending STARTTLS...");
+  async startTls(host: string): Promise<void> {
     const response = await this.command("STARTTLS");
     if (!response.includes("OK")) {
-      throw new Error(`STARTTLS failed: ${response}`);
+      throw new Error("STARTTLS failed");
     }
-    // Release the current reader before upgrading
     this.reader.releaseLock();
-    // Upgrade connection to TLS
     this.conn = await Deno.startTls(this.conn as Deno.Conn, { hostname: host });
     this.reader = this.conn.readable.getReader();
-    console.log("TLS upgrade successful");
-    return response;
   }
 
   private nextTag(): string {
@@ -87,49 +78,30 @@ class ImapClient {
 
   private async readResponse(tag: string): Promise<string> {
     let result = "";
-    const timeout = 30000;
     const start = Date.now();
-
-    while (Date.now() - start < timeout) {
-      if (this.buffer.length > 0) {
-        result += this.buffer;
-        this.buffer = "";
-      }
-
+    while (Date.now() - start < 15000) {
       const lines = result.split("\r\n");
       for (const line of lines) {
-        if (tag === "*" && line.startsWith("* OK")) {
-          return result;
-        }
-        if (line.startsWith(`${tag} `)) {
-          return result;
-        }
+        if (tag === "*" && line.startsWith("* OK")) return result;
+        if (line.startsWith(`${tag} `)) return result;
       }
-
       try {
         const readPromise = this.reader.read();
         const timeoutPromise = new Promise<{ value: undefined; done: true }>((resolve) =>
-          setTimeout(() => resolve({ value: undefined, done: true }), 10000)
+          setTimeout(() => resolve({ value: undefined, done: true }), 5000)
         );
         const { value, done } = await Promise.race([readPromise, timeoutPromise]);
         if (done || !value) break;
         result += this.decoder.decode(value);
-      } catch {
-        break;
-      }
+      } catch { break; }
     }
     return result;
   }
 
   async command(cmd: string): Promise<string> {
     const tag = this.nextTag();
-    const logCmd = cmd.startsWith("LOGIN") ? `LOGIN ***` : cmd;
-    console.log(`> ${tag} ${logCmd}`);
     await this.write(`${tag} ${cmd}\r\n`);
-    const response = await this.readResponse(tag);
-    // Log first 300 chars of response
-    console.log(`< ${response.substring(0, 300)}`);
-    return response;
+    return await this.readResponse(tag);
   }
 
   async login(user: string, pass: string): Promise<string> {
@@ -162,33 +134,24 @@ class ImapClient {
     let messageId = "";
     let body = "";
 
-    // Parse From - more flexible regex
     const fromMatch = response.match(/From:\s*(.+?)(?:\r?\n(?!\s))/i);
     if (fromMatch) from = fromMatch[1].trim();
 
-    // Parse Subject - more flexible regex
     const subjectMatch = response.match(/Subject:\s*(.+?)(?:\r?\n(?!\s))/i);
     if (subjectMatch) subject = subjectMatch[1].trim();
 
-    // Parse Message-ID
     const msgIdMatch = response.match(/Message-ID:\s*(.+?)(?:\r?\n(?!\s))/i);
     if (msgIdMatch) messageId = msgIdMatch[1].trim();
 
-    // Extract body text (everything after the header section)
     const bodyParts = response.split(/\r?\n\r?\n/);
     if (bodyParts.length > 1) {
       body = bodyParts.slice(1).join("\n\n");
-      // Clean up IMAP artifacts
       body = body.replace(/\)\r?\n.*$/s, "").trim();
       body = body.replace(/\s*A\d{4}\s+OK\s+.*$/s, "").trim();
-      body = body.replace(/\s*\d+\s+FETCH\s+.*$/s, "").trim();
     }
 
-    // Strip HTML tags for plain text
     body = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    if (body.length > 5000) body = body.substring(0, 5000);
-
-    console.log(`  Email #${seqNum}: From="${from.substring(0, 50)}" Subject="${subject.substring(0, 50)}" MsgID="${messageId.substring(0, 50)}" BodyLen=${body.length}`);
+    if (body.length > 3000) body = body.substring(0, 3000);
 
     return { from, subject: subject || "Sem assunto", body, messageId };
   }
@@ -198,12 +161,8 @@ class ImapClient {
   }
 
   async logout(): Promise<void> {
-    try {
-      await this.command("LOGOUT");
-    } catch { /* ignore */ }
-    try {
-      this.conn.close();
-    } catch { /* ignore */ }
+    try { await this.command("LOGOUT"); } catch { /* ignore */ }
+    try { this.conn.close(); } catch { /* ignore */ }
   }
 }
 
@@ -217,117 +176,82 @@ function extractName(from: string): string {
   return name || extractEmail(from);
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+async function processEmails(params: { fetchRecent: boolean; maxEmails: number }) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+  const imapCfg = await getImapConfig(adminClient);
+  if (!imapCfg) {
+    console.log("IMAP not configured");
+    return { success: false, message: "IMAP não configurado" };
   }
 
+  const imap = new ImapClient();
+  const port = Number(imapCfg.imap_port) || 993;
+
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
-
-    let testOnly = false;
-    let fetchRecent = false;
-    let maxEmails = 20;
-    try {
-      const body = await req.json();
-      testOnly = body?.test_only === true;
-      fetchRecent = body?.fetch_recent === true;
-      if (body?.max_emails) maxEmails = Math.min(Number(body.max_emails), 50);
-    } catch { /* no body */ }
-
-    const imapCfg = await getImapConfig(adminClient);
-    if (!imapCfg) {
-      return new Response(JSON.stringify({ success: false, message: "IMAP não configurado ou desativado" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    console.log(`IMAP Config: host=${imapCfg.imap_host} port=${imapCfg.imap_port} user=${imapCfg.imap_user} folder=${imapCfg.imap_folder}`);
-
-    const imap = new ImapClient();
-    const port = Number(imapCfg.imap_port) || 993;
-
     const greeting = await imap.connect(imapCfg.imap_host, port);
     if (!greeting.includes("OK")) {
-      return new Response(JSON.stringify({ success: false, message: "Servidor IMAP não respondeu" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { success: false, message: "Servidor IMAP não respondeu" };
     }
 
-    // For port 143, try STARTTLS before login
+    // STARTTLS for port 143
     if (port === 143) {
-      try {
-        await imap.startTls(imapCfg.imap_host);
-      } catch (e) {
-        console.log(`STARTTLS not available or failed: ${(e as Error).message}, continuing without TLS`);
+      try { await imap.startTls(imapCfg.imap_host); } catch (e) {
+        console.log(`STARTTLS skipped: ${(e as Error).message}`);
       }
     }
 
     const loginRes = await imap.login(imapCfg.imap_user, imapCfg.imap_pass);
     if (!loginRes.includes("OK")) {
       await imap.logout();
-      return new Response(JSON.stringify({ success: false, message: "Falha na autenticação IMAP" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (testOnly) {
-      await imap.logout();
-      return new Response(JSON.stringify({ success: true, message: "Conexão IMAP bem-sucedida" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { success: false, message: "Falha na autenticação IMAP" };
     }
 
     await imap.select(imapCfg.imap_folder);
 
     let emailIds: number[];
-    if (fetchRecent) {
+    if (params.fetchRecent) {
       const allIds = await imap.searchAll();
-      emailIds = allIds.slice(-maxEmails);
-      console.log(`Fetch recent mode: found ${allIds.length} total emails, processing last ${emailIds.length}`);
+      emailIds = allIds.slice(-params.maxEmails);
+      console.log(`Fetch recent: ${allIds.length} total, processing ${emailIds.length}`);
     } else {
       emailIds = await imap.searchUnseen();
-      console.log(`Found ${emailIds.length} unseen emails`);
+      console.log(`Unseen: ${emailIds.length}`);
     }
 
-    let created = 0;
-    let updated = 0;
-    let skipped = 0;
-    const errors: string[] = [];
+    let created = 0, updated = 0, skipped = 0;
 
-    const toProcess = emailIds.slice(0, maxEmails);
+    // Process max 5 emails per invocation to stay within limits
+    const batch = emailIds.slice(0, Math.min(params.maxEmails, 5));
 
-    for (const seqNum of toProcess) {
+    for (const seqNum of batch) {
       try {
         const msg = await imap.fetchMessage(seqNum);
         const clientEmail = extractEmail(msg.from);
         const clientName = extractName(msg.from);
 
         if (!clientEmail) {
-          console.log(`  Skipping #${seqNum}: no email extracted from "${msg.from}"`);
           await imap.markAsSeen(seqNum);
           continue;
         }
 
-        // Duplicate detection by message-id
-        if (msg.messageId && msg.messageId.trim()) {
-          const { data: existingThread2 } = await adminClient
+        // Duplicate check
+        if (msg.messageId?.trim()) {
+          const { data: dup } = await adminClient
             .from("email_threads")
             .select("id")
             .eq("last_message_id", msg.messageId.trim())
             .limit(1);
-
-          if (existingThread2 && existingThread2.length > 0) {
-            console.log(`  Skipping #${seqNum}: duplicate message-id`);
+          if (dup && dup.length > 0) {
             skipped++;
             await imap.markAsSeen(seqNum);
             continue;
           }
         }
 
-        // Check for existing open thread with this email
+        // Check existing thread
         const { data: existingThread } = await adminClient
           .from("email_threads")
           .select("ticket_id")
@@ -336,60 +260,66 @@ Deno.serve(async (req) => {
           .limit(1)
           .single();
 
-        let ticketId: string;
+        let ticketId: string | null = null;
 
         if (existingThread) {
-          const { data: existingTicket } = await adminClient
+          const { data: ticket } = await adminClient
             .from("tickets")
-            .select("id, status, ticket_number")
+            .select("id, status")
             .eq("id", existingThread.ticket_id)
             .single();
 
-          const { data: statusData } = existingTicket ? await adminClient
+          const { data: statusData } = ticket ? await adminClient
             .from("ticket_statuses")
             .select("is_closed")
-            .eq("id", existingTicket.status)
+            .eq("id", ticket.status)
             .single() : { data: null };
 
-          if (existingTicket && !statusData?.is_closed) {
-            ticketId = existingTicket.id;
-            const { error: msgError } = await adminClient.from("ticket_messages").insert({
+          if (ticket && !statusData?.is_closed) {
+            ticketId = ticket.id;
+            await adminClient.from("ticket_messages").insert({
               ticket_id: ticketId,
               sender_id: "00000000-0000-0000-0000-000000000000",
               sender_type: "client",
               content: msg.body || "(email sem conteúdo)",
             });
-            if (msgError) console.error(`  Error inserting message: ${msgError.message}`);
-
             await adminClient.from("email_threads")
               .update({ last_message_id: msg.messageId })
               .eq("ticket_id", existingThread.ticket_id);
-
             updated++;
-            console.log(`  Updated ticket for ${clientEmail}`);
-          } else {
-            // Create new ticket
-            const result = await createTicket(adminClient, clientName, clientEmail, msg);
-            if (result) {
-              ticketId = result;
-              created++;
-              console.log(`  Created new ticket for ${clientEmail} (previous closed)`);
-            } else {
-              continue;
-            }
-          }
-        } else {
-          const result = await createTicket(adminClient, clientName, clientEmail, msg);
-          if (result) {
-            ticketId = result;
-            created++;
-            console.log(`  Created new ticket for ${clientEmail}`);
-          } else {
-            continue;
           }
         }
 
-        // Log in email_logs
+        if (!ticketId) {
+          const { data: newTicket, error } = await adminClient
+            .from("tickets")
+            .insert({
+              client_name: clientName,
+              client_email: clientEmail.toLowerCase(),
+              subject: msg.subject.substring(0, 200),
+              description: msg.body.substring(0, 3000),
+              priority: "P2",
+              status: "novo",
+              created_by: "00000000-0000-0000-0000-000000000000",
+            })
+            .select("id")
+            .single();
+
+          if (error || !newTicket) {
+            console.error(`Ticket create error: ${error?.message}`);
+            await imap.markAsSeen(seqNum);
+            continue;
+          }
+
+          ticketId = newTicket.id;
+          await adminClient.from("email_threads").insert({
+            ticket_id: ticketId,
+            email_address: clientEmail.toLowerCase(),
+            last_message_id: msg.messageId,
+          });
+          created++;
+        }
+
         await adminClient.from("email_logs").insert({
           recipient: clientEmail,
           subject: msg.subject.substring(0, 200),
@@ -400,27 +330,90 @@ Deno.serve(async (req) => {
 
         await imap.markAsSeen(seqNum);
       } catch (err) {
-        const errMsg = (err as Error).message;
-        console.error(`Error processing email ${seqNum}: ${errMsg}`);
-        errors.push(`#${seqNum}: ${errMsg}`);
+        console.error(`Email ${seqNum} error: ${(err as Error).message}`);
       }
     }
 
     await imap.logout();
 
-    const message = `Processados: ${created} novos tickets, ${updated} atualizados, ${skipped} ignorados (duplicados)${errors.length > 0 ? `. Erros: ${errors.length}` : ""}`;
+    const remaining = emailIds.length - batch.length;
+    const message = `Processados: ${created} novos, ${updated} atualizados, ${skipped} duplicados${remaining > 0 ? `. Restam ${remaining} emails — clique novamente.` : ""}`;
     console.log(message);
 
-    return new Response(JSON.stringify({
-      success: true,
-      message,
-      created,
-      updated,
-      skipped,
-      errors: errors.length,
-      error_details: errors.slice(0, 5),
-      total: toProcess.length,
-    }), {
+    return { success: true, message, created, updated, skipped, total: batch.length, remaining };
+  } catch (err) {
+    try { await imap.logout(); } catch { /* */ }
+    throw err;
+  }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    let testOnly = false;
+    let fetchRecent = false;
+    let maxEmails = 5;
+    try {
+      const body = await req.json();
+      testOnly = body?.test_only === true;
+      fetchRecent = body?.fetch_recent === true;
+      if (body?.max_emails) maxEmails = Math.min(Number(body.max_emails), 10);
+    } catch { /* no body */ }
+
+    // Test-only: quick connection check
+    if (testOnly) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const adminClient = createClient(supabaseUrl, serviceRoleKey);
+      const imapCfg = await getImapConfig(adminClient);
+      if (!imapCfg) {
+        return new Response(JSON.stringify({ success: false, message: "IMAP não configurado" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const imap = new ImapClient();
+      const port = Number(imapCfg.imap_port) || 993;
+      const greeting = await imap.connect(imapCfg.imap_host, port);
+      if (port === 143) {
+        try { await imap.startTls(imapCfg.imap_host); } catch { /* */ }
+      }
+      const loginRes = await imap.login(imapCfg.imap_user, imapCfg.imap_pass);
+      await imap.logout();
+      const ok = greeting.includes("OK") && loginRes.includes("OK");
+      return new Response(JSON.stringify({ success: ok, message: ok ? "Conexão IMAP bem-sucedida" : "Falha na autenticação" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Process emails in background using waitUntil
+    const resultPromise = processEmails({ fetchRecent, maxEmails });
+
+    // Use EdgeRuntime.waitUntil if available for background processing
+    if (typeof (globalThis as any).EdgeRuntime !== "undefined" && (globalThis as any).EdgeRuntime.waitUntil) {
+      const sharedResult: { value?: any } = {};
+      const promise = resultPromise.then(r => { sharedResult.value = r; }).catch(err => {
+        sharedResult.value = { success: false, error: err.message };
+      });
+      (globalThis as any).EdgeRuntime.waitUntil(promise);
+
+      // Wait briefly for result (up to 8s)
+      const deadline = Date.now() + 8000;
+      while (!sharedResult.value && Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 200));
+      }
+
+      const result = sharedResult.value || { success: true, message: "A processar em segundo plano..." };
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Fallback: await directly
+    const result = await resultPromise;
+    return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
@@ -431,41 +424,3 @@ Deno.serve(async (req) => {
     });
   }
 });
-
-async function createTicket(
-  adminClient: ReturnType<typeof createClient>,
-  clientName: string,
-  clientEmail: string,
-  msg: { subject: string; body: string; messageId: string }
-): Promise<string | null> {
-  const { data: newTicket, error } = await adminClient
-    .from("tickets")
-    .insert({
-      client_name: clientName,
-      client_email: clientEmail.toLowerCase(),
-      subject: msg.subject.substring(0, 200),
-      description: msg.body.substring(0, 5000),
-      priority: "P2",
-      status: "novo",
-      created_by: "00000000-0000-0000-0000-000000000000",
-    })
-    .select("id, ticket_number")
-    .single();
-
-  if (error || !newTicket) {
-    console.error(`  Error creating ticket: ${error?.message || "no data returned"}`);
-    return null;
-  }
-
-  const { error: threadError } = await adminClient.from("email_threads").insert({
-    ticket_id: newTicket.id,
-    email_address: clientEmail.toLowerCase(),
-    last_message_id: msg.messageId,
-  });
-
-  if (threadError) {
-    console.error(`  Error creating email thread: ${threadError.message}`);
-  }
-
-  return newTicket.id;
-}
