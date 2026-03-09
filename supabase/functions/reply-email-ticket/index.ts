@@ -119,33 +119,72 @@ Deno.serve(async (req) => {
       </div>
     `;
 
-    // Send email via SMTP
+    // Send email via SMTP with detailed error tracking
     const port = Number(smtpCfg.smtp_port) || 465;
-    const client = new SMTPClient({
-      connection: {
-        hostname: smtpCfg.smtp_host,
-        port,
-        tls: port === 465,
-        auth: {
-          username: smtpCfg.smtp_user,
-          password: smtpCfg.smtp_pass,
+    let deliveryStatus = "accepted";
+    let deliveryDetails: string | null = null;
+    let smtpResponse: string | null = null;
+    let sendError: string | null = null;
+
+    try {
+      const client = new SMTPClient({
+        connection: {
+          hostname: smtpCfg.smtp_host,
+          port,
+          tls: port === 465,
+          auth: {
+            username: smtpCfg.smtp_user,
+            password: smtpCfg.smtp_pass,
+          },
         },
-      },
-    });
+      });
 
-    const fromAddr = `${smtpCfg.smtp_from_name || "Apoio ao Cliente"} <${smtpCfg.smtp_from_email || smtpCfg.smtp_user}>`;
+      const fromAddr = `${smtpCfg.smtp_from_name || "Apoio ao Cliente"} <${smtpCfg.smtp_from_email || smtpCfg.smtp_user}>`;
 
-    await client.send({
-      from: fromAddr,
-      to: clientEmail,
-      subject,
-      content: content,
-      html: htmlContent,
-    });
+      const sendResult = await client.send({
+        from: fromAddr,
+        to: clientEmail,
+        subject,
+        content: content,
+        html: htmlContent,
+      });
 
-    try { await client.close(); } catch { /* ignore */ }
+      // Capture SMTP response for tracking
+      if (sendResult) {
+        smtpResponse = typeof sendResult === "string" ? sendResult : JSON.stringify(sendResult);
+      }
 
-    // Insert ticket message as agent reply
+      deliveryStatus = "delivered";
+      deliveryDetails = `SMTP accepted by ${smtpCfg.smtp_host}:${port}`;
+
+      try { await client.close(); } catch { /* ignore */ }
+    } catch (smtpErr) {
+      const errMsg = (smtpErr as Error).message || String(smtpErr);
+      console.error("SMTP send error:", errMsg);
+
+      // Classify error
+      if (errMsg.includes("550") || errMsg.includes("551") || errMsg.includes("553")) {
+        deliveryStatus = "bounced";
+        deliveryDetails = "Endereço de email rejeitado pelo servidor destino";
+      } else if (errMsg.includes("552") || errMsg.includes("554")) {
+        deliveryStatus = "rejected";
+        deliveryDetails = "Mensagem rejeitada pelo servidor destino";
+      } else if (errMsg.includes("421") || errMsg.includes("451") || errMsg.includes("452")) {
+        deliveryStatus = "deferred";
+        deliveryDetails = "Servidor temporariamente indisponível, entrega adiada";
+      } else if (errMsg.includes("connect") || errMsg.includes("timeout") || errMsg.includes("EHLO")) {
+        deliveryStatus = "failed";
+        deliveryDetails = "Falha na conexão SMTP";
+      } else {
+        deliveryStatus = "failed";
+        deliveryDetails = "Erro no envio SMTP";
+      }
+
+      sendError = errMsg;
+      smtpResponse = errMsg;
+    }
+
+    // Insert ticket message as agent reply (always, even if email failed)
     await adminClient.from("ticket_messages").insert({
       ticket_id,
       sender_id: userData.user.id,
@@ -153,13 +192,17 @@ Deno.serve(async (req) => {
       content,
     });
 
-    // Log email
+    // Log email with delivery tracking
     await adminClient.from("email_logs").insert({
       recipient: clientEmail,
       subject,
-      status: "sent",
+      status: deliveryStatus === "delivered" || deliveryStatus === "accepted" ? "sent" : "failed",
+      error_message: sendError,
       source: "reply-email-ticket",
       ticket_id,
+      delivery_status: deliveryStatus,
+      delivery_details: deliveryDetails,
+      smtp_response: smtpResponse,
     });
 
     // Update first_responded_at if not set
@@ -175,7 +218,19 @@ Deno.serve(async (req) => {
         .eq("id", ticket_id);
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    // If email failed, return error to UI
+    if (deliveryStatus !== "delivered" && deliveryStatus !== "accepted") {
+      return new Response(JSON.stringify({ 
+        error: `Email não enviado: ${deliveryDetails}`,
+        delivery_status: deliveryStatus,
+        message_saved: true 
+      }), {
+        status: 200, // 200 because the message was saved
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ success: true, delivery_status: deliveryStatus }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
