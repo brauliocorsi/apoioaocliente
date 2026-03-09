@@ -1133,6 +1133,33 @@ export default function TicketDetail() {
 
         <TicketSidebar ticket={ticket} tags={tags} clauses={clauses} userId={user?.id || ""} onUpdate={fetchTicket} />
       </div>
+
+      {/* Full email view dialog */}
+      {fullViewContent && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setFullViewContent(null)}>
+          <div className="bg-background rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="font-semibold flex items-center gap-2"><Mail className="h-4 w-4" /> Conteúdo completo</h3>
+              <Button variant="ghost" size="sm" onClick={() => setFullViewContent(null)}><X className="h-4 w-4" /></Button>
+            </div>
+            <div className="flex-1 overflow-auto p-6">
+              {(() => {
+                const hasMime = fullViewContent.includes("BODY[TEXT]") || fullViewContent.includes("Content-Type:") || fullViewContent.includes("Content-Transfer-Encoding:");
+                const cleaned = hasMime ? cleanMimeContent(fullViewContent) : decodeQuotedPrintableUtf8(fullViewContent);
+                if (isHtmlContent(cleaned)) {
+                  return (
+                    <div
+                      className="prose prose-sm dark:prose-invert max-w-none [&_img]:max-w-full [&_table]:border-collapse [&_td]:p-1 [&_a]:text-primary [&_a]:underline"
+                      dangerouslySetInnerHTML={{ __html: sanitizeForDisplay(cleaned) }}
+                    />
+                  );
+                }
+                return <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed">{cleaned}</pre>;
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
