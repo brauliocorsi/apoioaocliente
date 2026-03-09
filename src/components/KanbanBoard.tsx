@@ -49,6 +49,7 @@ interface KanbanBoardProps {
   callCounts?: Record<string, number>;
   agentProfiles?: Record<string, { full_name: string; avatar_url: string | null }>;
   unreadCounts?: Record<string, number>;
+  emailUnreadCounts?: Record<string, number>;
   ticketTagsMap?: Record<string, string[]>;
   allTags?: { id: string; name: string; color: string | null }[];
 }
