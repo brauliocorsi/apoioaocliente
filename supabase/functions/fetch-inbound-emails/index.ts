@@ -207,11 +207,15 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Check if this is a test-only request
+    // Check request params
     let testOnly = false;
+    let fetchRecent = false;
+    let maxEmails = 20;
     try {
       const body = await req.json();
       testOnly = body?.test_only === true;
+      fetchRecent = body?.fetch_recent === true;
+      if (body?.max_emails) maxEmails = Math.min(Number(body.max_emails), 50);
     } catch { /* no body */ }
 
     const imapCfg = await getImapConfig(adminClient);
@@ -251,15 +255,24 @@ Deno.serve(async (req) => {
     // Select folder
     await imap.select(imapCfg.imap_folder);
 
-    // Search unseen
-    const unseenIds = await imap.searchUnseen();
-    console.log(`Found ${unseenIds.length} unseen emails`);
+    // Search emails - UNSEEN for cron, ALL for manual fetch_recent
+    let emailIds: number[];
+    if (fetchRecent) {
+      const allIds = await imap.searchAll();
+      // Take only the most recent N emails (highest sequence numbers)
+      emailIds = allIds.slice(-maxEmails);
+      console.log(`Fetch recent mode: found ${allIds.length} total emails, processing last ${emailIds.length}`);
+    } else {
+      emailIds = await imap.searchUnseen();
+      console.log(`Found ${emailIds.length} unseen emails`);
+    }
 
     let created = 0;
     let updated = 0;
+    let skipped = 0;
 
-    // Process max 20 emails per run to avoid timeouts
-    const toProcess = unseenIds.slice(0, 20);
+    // Process
+    const toProcess = emailIds.slice(0, maxEmails);
 
     for (const seqNum of toProcess) {
       try {
