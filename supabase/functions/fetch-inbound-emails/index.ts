@@ -917,7 +917,7 @@ Deno.serve(async (req) => {
       }
 
       // ── No existing open ticket — create a new one ──
-      const { data: newTicket, error } = await adminClient.from("tickets").insert({
+      const ticketInsert: any = {
         client_name: pe.from_name || pe.from_address,
         client_email: pe.from_address,
         subject: pe.subject,
@@ -925,7 +925,12 @@ Deno.serve(async (req) => {
         priority: "P2",
         status: "novo",
         created_by: agentId,
-      }).select("id").single();
+      };
+      // Store original email date separately from ticket creation date
+      if (pe.created_at && pe.created_at !== new Date().toISOString()) {
+        ticketInsert.email_received_at = pe.created_at;
+      }
+      const { data: newTicket, error } = await adminClient.from("tickets").insert(ticketInsert).select("id").single();
 
       if (error || !newTicket) {
         return new Response(JSON.stringify({ success: false, message: error?.message || "Erro ao criar ticket" }), {

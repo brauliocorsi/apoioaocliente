@@ -302,9 +302,18 @@ export default function EmailTicketDetail() {
           </CardHeader>
           <CardContent>
             <EmailBody content={ticket.description} />
-            <p className="text-xs text-muted-foreground mt-3">
-              {format(new Date(ticket.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: pt })}
-            </p>
+            <div className="flex flex-wrap gap-4 mt-3">
+              {ticket.email_received_at && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Mail className="h-3 w-3" />
+                  Email enviado: {format(new Date(ticket.email_received_at), "dd/MM/yyyy 'às' HH:mm", { locale: pt })}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                Ticket criado: {format(new Date(ticket.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: pt })}
+              </p>
+            </div>
           </CardContent>
         </Card>
       )}
