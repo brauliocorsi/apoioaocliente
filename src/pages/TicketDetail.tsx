@@ -907,11 +907,11 @@ export default function TicketDetail() {
                     <Paperclip className="h-4 w-4" />
                   </Button>
                   <Textarea
-                    placeholder="Responder ao cliente..."
+                    placeholder={hasEmailThread ? "Escreva a sua resposta... (será enviada por email)" : "Responder ao cliente..."}
                     value={reply}
                     onChange={(e) => setReply(e.target.value)}
                     onKeyDown={handleReplyKeyDown}
-                    rows={2}
+                    rows={4}
                     className="flex-1 resize-none"
                   />
                   <Button size="icon" onClick={sendReply} disabled={sendingReply || (!reply.trim() && replyFiles.length === 0)}>
