@@ -589,6 +589,26 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
               ? sanitizeHtml(msg.bodyHtml).substring(0, 10000)
               : (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
 
+            // Check for duplicate message content in this ticket (first 200 chars)
+            const contentSnippet = body.substring(0, 200).trim();
+            const { data: existingMsgs } = await adminClient
+              .from("ticket_messages")
+              .select("id, content")
+              .eq("ticket_id", ticketId)
+              .eq("sender_type", "client")
+              .order("created_at", { ascending: false })
+              .limit(5);
+
+            const isDuplicateContent = existingMsgs?.some(
+              (m: any) => m.content.substring(0, 200).trim() === contentSnippet
+            );
+
+            if (isDuplicateContent) {
+              skipped++;
+              await imap.markAsSeen(seqNum);
+              continue;
+            }
+
             await adminClient.from("ticket_messages").insert({
               ticket_id: ticketId,
               sender_id: "00000000-0000-0000-0000-000000000000",
@@ -596,7 +616,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
               content: body,
             });
             await adminClient.from("email_threads")
-              .update({ last_message_id: msg.messageId })
+              .update({ last_message_id: emailFingerprint })
               .eq("ticket_id", existingThread.ticket_id);
 
             // Upload attachments to existing ticket
