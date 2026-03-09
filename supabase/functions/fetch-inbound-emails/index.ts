@@ -130,6 +130,7 @@ class ImapClient {
     bodyText: string;
     bodyHtml: string;
     messageId: string;
+    date: string | null;
     attachments: { filename: string; contentType: string; data: Uint8Array }[];
   }> {
     const response = await this.command(`FETCH ${seqNum} BODY[]`);
@@ -146,6 +147,7 @@ class ImapClient {
     let from = "";
     let subject = "";
     let messageId = "";
+    let date: string | null = null;
 
     const fromMatch = rawMessage.match(/^From:\s*(.+?)$/im);
     if (fromMatch) from = fromMatch[1].trim();
@@ -157,6 +159,17 @@ class ImapClient {
     const msgIdMatch = rawMessage.match(/^Message-ID:\s*(.+?)$/im);
     if (msgIdMatch) messageId = msgIdMatch[1].trim();
 
+    // Extract the Date header for exact email timestamp
+    const dateMatch = rawMessage.match(/^Date:\s*(.+?)$/im);
+    if (dateMatch) {
+      try {
+        const parsed = new Date(dateMatch[1].trim());
+        if (!isNaN(parsed.getTime())) {
+          date = parsed.toISOString();
+        }
+      } catch { /* keep null */ }
+    }
+
     const parsed = parseMimeMessage(rawMessage);
 
     return {
@@ -165,6 +178,7 @@ class ImapClient {
       bodyText: parsed.bodyText,
       bodyHtml: parsed.bodyHtml,
       messageId,
+      date,
       attachments: parsed.attachments,
     };
   }
@@ -620,12 +634,15 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
               continue;
             }
 
-            await adminClient.from("ticket_messages").insert({
+            const msgInsert: any = {
               ticket_id: ticketId,
               sender_id: "00000000-0000-0000-0000-000000000000",
               sender_type: "client",
               content: body,
-            });
+            };
+            if (msg.date) msgInsert.created_at = msg.date;
+
+            await adminClient.from("ticket_messages").insert(msgInsert);
             await adminClient.from("email_threads")
               .update({ last_message_id: emailFingerprint })
               .eq("ticket_id", existingThread.ticket_id);
@@ -648,7 +665,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         }
 
         // New email from unknown/closed thread → goes to pending review queue
-        const { data: pendingEmail } = await adminClient.from("pending_emails").insert({
+        const pendingInsert: any = {
           from_address: clientEmail.toLowerCase(),
           from_name: clientName,
           subject: msg.subject.substring(0, 500),
@@ -656,7 +673,10 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           body_html: (msg.bodyHtml ? sanitizeHtml(msg.bodyHtml) : "").substring(0, 10000),
           message_id: emailFingerprint,
           status: "pending",
-        }).select("id").single();
+        };
+        if (msg.date) pendingInsert.created_at = msg.date;
+
+        const { data: pendingEmail } = await adminClient.from("pending_emails").insert(pendingInsert).select("id").single();
 
         // Store attachments meta for pending email
         if (pendingEmail && msg.attachments.length > 0) {
