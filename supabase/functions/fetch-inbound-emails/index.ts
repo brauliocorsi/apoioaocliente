@@ -176,10 +176,20 @@ function extractName(from: string): string {
   return name || extractEmail(from);
 }
 
-async function processEmails(params: { fetchRecent: boolean; maxEmails: number }) {
+async function processEmails(params: { fetchRecent: boolean; maxEmails: number; agentId?: string }) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+  // Get a valid created_by: use provided agent_id or find first agent
+  let createdBy = params.agentId;
+  if (!createdBy) {
+    const { data: agents } = await adminClient.rpc("get_agent_profiles");
+    if (agents && agents.length > 0) createdBy = agents[0].id;
+  }
+  if (!createdBy) {
+    return { success: false, message: "Nenhum agente encontrado para criar tickets" };
+  }
 
   const imapCfg = await getImapConfig(adminClient);
   if (!imapCfg) {
@@ -300,7 +310,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number }
               description: msg.body.substring(0, 3000),
               priority: "P2",
               status: "novo",
-              created_by: "00000000-0000-0000-0000-000000000000",
+              created_by: createdBy,
             })
             .select("id")
             .single();
@@ -356,11 +366,13 @@ Deno.serve(async (req) => {
     let testOnly = false;
     let fetchRecent = false;
     let maxEmails = 5;
+    let agentId: string | undefined;
     try {
       const body = await req.json();
       testOnly = body?.test_only === true;
       fetchRecent = body?.fetch_recent === true;
       if (body?.max_emails) maxEmails = Math.min(Number(body.max_emails), 10);
+      if (body?.agent_id) agentId = body.agent_id;
     } catch { /* no body */ }
 
     // Test-only: quick connection check
@@ -389,7 +401,7 @@ Deno.serve(async (req) => {
     }
 
     // Process emails in background using waitUntil
-    const resultPromise = processEmails({ fetchRecent, maxEmails });
+    const resultPromise = processEmails({ fetchRecent, maxEmails, agentId });
 
     // Use EdgeRuntime.waitUntil if available for background processing
     if (typeof (globalThis as any).EdgeRuntime !== "undefined" && (globalThis as any).EdgeRuntime.waitUntil) {
