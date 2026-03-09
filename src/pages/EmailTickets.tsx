@@ -276,11 +276,11 @@ export default function EmailTickets() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => triggerPoll(false)} disabled={polling}>
             <RefreshCw className={`h-4 w-4 mr-2 ${polling ? "animate-spin" : ""}`} />
-            {polling ? "A verificar..." : "Novos Emails"}
+            {polling ? (pollProgress || "A verificar...") : "Novos Emails"}
           </Button>
           <Button variant="secondary" onClick={() => triggerPoll(true)} disabled={polling}>
             <Mail className="h-4 w-4 mr-2" />
-            Importar Recentes
+            {polling ? (pollProgress || "A importar...") : "Importar Todos"}
           </Button>
         </div>
       </div>
