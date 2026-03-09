@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage, FileVideo, FileText, Trash2, Gavel, ChevronDown, ChevronRight, Check } from "lucide-react";
+import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage, FileVideo, FileText, Trash2, Gavel, ChevronDown, ChevronRight, Check, Mail } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -113,6 +113,7 @@ export default function TicketDetail() {
   const [isResolutionOpen, setIsResolutionOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState(false);
   const [subjectDraft, setSubjectDraft] = useState("");
+  const [hasEmailThread, setHasEmailThread] = useState(false);
 
   const fetchTicket = async () => {
     if (!id) return;
@@ -130,6 +131,11 @@ export default function TicketDetail() {
     setTicket(t);
     setEvents(evts || []);
     setMessages(msgs || []);
+    // Check for email thread
+    if (t) {
+      const { data: et } = await supabase.from("email_threads").select("id").eq("ticket_id", id).limit(1).maybeSingle();
+      setHasEmailThread(!!(et || t.client_email));
+    }
     setTags((tTags || []).map((r: any) => r.tag_id));
     setClauses((tClauses || []).map((r: any) => r.clause_id));
     setAttachments((tAttachments || []).map((a: any) => ({
@@ -855,6 +861,12 @@ export default function TicketDetail() {
                 </div>
               )}
               <div className="border-t pt-3 space-y-2">
+                {hasEmailThread && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400">
+                    <Mail className="h-3.5 w-3.5 shrink-0" />
+                    <span className="text-xs font-medium">A resposta será enviada por email para {ticket?.client_email || "o cliente"}</span>
+                  </div>
+                )}
                 {replyFiles.length > 0 && (
                   <div className="flex flex-wrap gap-2 p-2 rounded-md bg-muted/50 border">
                     {replyFiles.map((file, i) => (
