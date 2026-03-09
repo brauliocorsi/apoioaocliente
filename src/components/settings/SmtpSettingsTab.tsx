@@ -57,6 +57,8 @@ const defaultResend: ResendConfig = {
 };
 
 export default function SmtpSettingsTab() {
+  const [resend, setResend] = useState<ResendConfig>(defaultResend);
+  const [savingResend, setSavingResend] = useState(false);
   const [smtp, setSmtp] = useState<SmtpConfig>(defaultSmtp);
   const [imap, setImap] = useState<ImapConfig>(defaultImap);
   const [notifyStatusChange, setNotifyStatusChange] = useState(false);
