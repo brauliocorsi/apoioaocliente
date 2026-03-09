@@ -89,6 +89,7 @@ export default function SmtpSettingsTab() {
     if (!error && data) {
       const loadedSmtp = { ...defaultSmtp };
       const loadedImap = { ...defaultImap };
+      const loadedResend = { ...defaultResend };
       data.forEach((row: { key: string; value: string }) => {
         if (row.key in loadedSmtp) {
           (loadedSmtp as Record<string, string>)[row.key] = row.value;
@@ -96,12 +97,16 @@ export default function SmtpSettingsTab() {
         if (row.key in loadedImap) {
           (loadedImap as Record<string, string>)[row.key] = row.value;
         }
+        if (row.key in loadedResend) {
+          (loadedResend as Record<string, string>)[row.key] = row.value;
+        }
         if (row.key === "notify_status_change_email") {
           setNotifyStatusChange(row.value === "true");
         }
       });
       setSmtp(loadedSmtp);
       setImap(loadedImap);
+      setResend(loadedResend);
     }
     setLoading(false);
   };
