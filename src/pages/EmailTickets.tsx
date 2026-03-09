@@ -345,6 +345,10 @@ export default function EmailTickets() {
                 <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">{blockedCount}</Badge>
               )}
             </TabsTrigger>
+            <TabsTrigger value="history" className="gap-2">
+              <History className="h-3.5 w-3.5" />
+              Histórico ({processedEmails.length})
+            </TabsTrigger>
           </TabsList>
 
           {/* Pending emails tab */}
