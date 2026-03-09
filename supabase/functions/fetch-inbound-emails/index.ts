@@ -134,21 +134,30 @@ class ImapClient {
   }> {
     const response = await this.command(`FETCH ${seqNum} BODY[]`);
 
+    // Strip IMAP FETCH wrapper: "* N FETCH (BODY[] {size}\r\n" prefix
+    let rawMessage = response;
+    const fetchStart = rawMessage.match(/\* \d+ FETCH \(BODY\[\] \{\d+\}\r?\n/);
+    if (fetchStart) {
+      rawMessage = rawMessage.substring((fetchStart.index || 0) + fetchStart[0].length);
+    }
+    // Strip trailing IMAP tag response
+    rawMessage = rawMessage.replace(/\)\r?\n\s*A\d{4}\s+OK.*$/s, "").trim();
+
     let from = "";
     let subject = "";
     let messageId = "";
 
-    const fromMatch = response.match(/^From:\s*(.+?)$/im);
+    const fromMatch = rawMessage.match(/^From:\s*(.+?)$/im);
     if (fromMatch) from = fromMatch[1].trim();
 
     // Handle multi-line folded Subject headers
-    subject = extractHeader(response, "Subject");
+    subject = extractHeader(rawMessage, "Subject");
     subject = decodeHeaderValue(subject);
 
-    const msgIdMatch = response.match(/^Message-ID:\s*(.+?)$/im);
+    const msgIdMatch = rawMessage.match(/^Message-ID:\s*(.+?)$/im);
     if (msgIdMatch) messageId = msgIdMatch[1].trim();
 
-    const parsed = parseMimeMessage(response);
+    const parsed = parseMimeMessage(rawMessage);
 
     return {
       from,
@@ -396,6 +405,15 @@ async function isBlocked(
   return { blocked: false, reason: "" };
 }
 
+// Generate a fingerprint for dedup when message_id is missing
+async function generateFingerprint(from: string, subject: string, bodySnippet: string): Promise<string> {
+  const raw = `${from.toLowerCase()}|${subject.substring(0, 100)}|${bodySnippet.substring(0, 200)}`;
+  const data = new TextEncoder().encode(raw);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("").substring(0, 40);
+}
+
+
 async function uploadAttachment(
   adminClient: ReturnType<typeof createClient>,
   ticketId: string,
@@ -505,18 +523,26 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           continue;
         }
 
-        // Duplicate check by message_id
-        if (msg.messageId?.trim()) {
+        // Generate a unique identifier for dedup
+        const bodySnippet = msg.bodyText || msg.bodyHtml || "";
+        const emailFingerprint = msg.messageId?.trim() || await generateFingerprint(clientEmail, msg.subject, bodySnippet);
+
+        // Duplicate check: search email_threads, pending_emails, AND ticket descriptions
+        if (emailFingerprint) {
+          // Check email_threads (any last_message_id match)
           const { data: dupThread } = await adminClient
             .from("email_threads")
             .select("id")
-            .eq("last_message_id", msg.messageId.trim())
+            .eq("last_message_id", emailFingerprint)
             .limit(1);
+
+          // Check pending_emails (message_id or fingerprint)
           const { data: dupPending } = await adminClient
             .from("pending_emails")
             .select("id")
-            .eq("message_id", msg.messageId.trim())
+            .eq("message_id", emailFingerprint)
             .limit(1);
+
           if ((dupThread && dupThread.length > 0) || (dupPending && dupPending.length > 0)) {
             skipped++;
             await imap.markAsSeen(seqNum);
@@ -573,6 +599,26 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
               ? sanitizeHtml(msg.bodyHtml).substring(0, 10000)
               : (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
 
+            // Check for duplicate message content in this ticket (first 200 chars)
+            const contentSnippet = body.substring(0, 200).trim();
+            const { data: existingMsgs } = await adminClient
+              .from("ticket_messages")
+              .select("id, content")
+              .eq("ticket_id", ticketId)
+              .eq("sender_type", "client")
+              .order("created_at", { ascending: false })
+              .limit(5);
+
+            const isDuplicateContent = existingMsgs?.some(
+              (m: any) => m.content.substring(0, 200).trim() === contentSnippet
+            );
+
+            if (isDuplicateContent) {
+              skipped++;
+              await imap.markAsSeen(seqNum);
+              continue;
+            }
+
             await adminClient.from("ticket_messages").insert({
               ticket_id: ticketId,
               sender_id: "00000000-0000-0000-0000-000000000000",
@@ -580,7 +626,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
               content: body,
             });
             await adminClient.from("email_threads")
-              .update({ last_message_id: msg.messageId })
+              .update({ last_message_id: emailFingerprint })
               .eq("ticket_id", existingThread.ticket_id);
 
             // Upload attachments to existing ticket
@@ -607,7 +653,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           subject: msg.subject.substring(0, 500),
           body_text: (msg.bodyText || "").substring(0, 5000),
           body_html: (msg.bodyHtml ? sanitizeHtml(msg.bodyHtml) : "").substring(0, 10000),
-          message_id: msg.messageId,
+          message_id: emailFingerprint,
           status: "pending",
         }).select("id").single();
 
@@ -756,12 +802,24 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Mark THIS pending email as approved
       await adminClient.from("pending_emails").update({
         status: "approved",
         reviewed_by: agentId,
         reviewed_at: new Date().toISOString(),
         ticket_id: newTicket.id,
       }).eq("id", pendingId);
+
+      // Also auto-reject other duplicate pending emails from same address+subject
+      await adminClient.from("pending_emails").update({
+        status: "rejected",
+        reviewed_by: agentId,
+        reviewed_at: new Date().toISOString(),
+        rejection_reason: "Duplicado — ticket já criado",
+      }).eq("from_address", pe.from_address)
+        .eq("subject", pe.subject)
+        .eq("status", "pending")
+        .neq("id", pendingId);
 
       await adminClient.from("email_logs").insert({
         recipient: pe.from_address,
