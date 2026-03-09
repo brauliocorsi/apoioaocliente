@@ -517,6 +517,68 @@ export default function EmailTickets() {
               </Card>
             )}
           </TabsContent>
+
+          {/* History tab */}
+          <TabsContent value="history" className="mt-4">
+            {processedEmails.length === 0 ? (
+              <Card>
+                <CardContent className="py-16 text-center">
+                  <History className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+                  <p className="text-muted-foreground">Nenhum email processado ainda</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="p-0">
+                  <div className="divide-y">
+                    {processedEmails.map((pe) => (
+                      <div
+                        key={pe.id}
+                        className={`flex items-center justify-between px-4 py-3.5 transition-colors ${pe.ticket_id ? "cursor-pointer hover:bg-muted/50" : ""}`}
+                        onClick={() => pe.ticket_id && navigate(`/email-tickets/${pe.ticket_id}`)}
+                      >
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div className={`flex h-9 w-9 items-center justify-center rounded-lg shrink-0 ${
+                            pe.status === "approved"
+                              ? "bg-green-500/10 text-green-600"
+                              : "bg-destructive/10 text-destructive"
+                          }`}>
+                            {pe.status === "approved" ? <FileCheck className="h-4 w-4" /> : <FileX className="h-4 w-4" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{pe.subject}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {pe.from_name || pe.from_address} · {pe.from_address}
+                              {pe.reviewed_at && (
+                                <> · {format(new Date(pe.reviewed_at), "dd/MM/yyyy HH:mm", { locale: pt })}</>
+                              )}
+                              {pe.reviewed_by && agents[pe.reviewed_by] && (
+                                <> · por {agents[pe.reviewed_by]}</>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {pe.status === "approved" ? (
+                            <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 text-[10px]">
+                              Ticket criado
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 text-[10px]">
+                              Rejeitado
+                            </Badge>
+                          )}
+                          {pe.ticket_id && (
+                            <ArrowRight className="h-4 w-4 text-muted-foreground/40" />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
         </Tabs>
       )}
 
