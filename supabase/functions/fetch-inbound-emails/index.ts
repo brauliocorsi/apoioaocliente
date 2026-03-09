@@ -126,31 +126,40 @@ class ImapClient {
     return match[1].trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
   }
 
-  async fetchMessage(seqNum: number): Promise<{ from: string; subject: string; body: string; messageId: string }> {
+  async fetchMessage(seqNum: number): Promise<{
+    from: string;
+    subject: string;
+    bodyText: string;
+    bodyHtml: string;
+    messageId: string;
+    attachments: { filename: string; contentType: string; data: Uint8Array }[];
+  }> {
     const response = await this.command(`FETCH ${seqNum} BODY[]`);
 
     let from = "";
     let subject = "";
     let messageId = "";
-    let body = "";
 
     const fromMatch = response.match(/^From:\s*(.+?)$/im);
     if (fromMatch) from = fromMatch[1].trim();
 
-    // Handle encoded subjects (=?UTF-8?Q?...?= or =?UTF-8?B?...?=)
     const subjectMatch = response.match(/^Subject:\s*(.+?)$/im);
     if (subjectMatch) subject = decodeHeaderValue(subjectMatch[1].trim());
 
     const msgIdMatch = response.match(/^Message-ID:\s*(.+?)$/im);
     if (msgIdMatch) messageId = msgIdMatch[1].trim();
 
-    // Extract body from MIME message
-    body = extractBodyFromMime(response);
+    // Extract body parts and attachments from MIME
+    const parsed = parseMimeMessage(response);
 
-    // Limit body length
-    if (body.length > 3000) body = body.substring(0, 3000);
-
-    return { from, subject: subject || "Sem assunto", body, messageId };
+    return {
+      from,
+      subject: subject || "Sem assunto",
+      bodyText: parsed.bodyText,
+      bodyHtml: parsed.bodyHtml,
+      messageId,
+      attachments: parsed.attachments,
+    };
   }
 
   async markAsSeen(seqNum: number): Promise<void> {
@@ -168,15 +177,11 @@ function extractEmail(from: string): string {
   return match ? match[1] : from.replace(/[<>]/g, "").trim();
 }
 
-// Decode quoted-printable encoded string
 function decodeQuotedPrintable(str: string): string {
-  // Remove soft line breaks (= at end of line)
   let result = str.replace(/=\r?\n/g, "");
-  // Decode =XX hex sequences
   result = result.replace(/=([0-9A-Fa-f]{2})/g, (_match, hex) => {
     return String.fromCharCode(parseInt(hex, 16));
   });
-  // Try to decode as UTF-8
   try {
     const bytes = new Uint8Array([...result].map(c => c.charCodeAt(0)));
     return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
@@ -185,7 +190,6 @@ function decodeQuotedPrintable(str: string): string {
   }
 }
 
-// Decode base64
 function decodeBase64(str: string): string {
   try {
     const cleaned = str.replace(/\r?\n/g, "").trim();
@@ -196,98 +200,138 @@ function decodeBase64(str: string): string {
   }
 }
 
-// Decode MIME header values (=?UTF-8?Q?...?= or =?UTF-8?B?...?=)
+function decodeBase64ToBytes(str: string): Uint8Array {
+  try {
+    const cleaned = str.replace(/\r?\n/g, "").trim();
+    return Uint8Array.from(atob(cleaned), c => c.charCodeAt(0));
+  } catch {
+    return new Uint8Array(0);
+  }
+}
+
 function decodeHeaderValue(value: string): string {
   return value.replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (_match, _charset, encoding, encoded) => {
     if (encoding.toUpperCase() === "B") {
       return decodeBase64(encoded);
     } else {
-      // Q-encoding: like quoted-printable but _ = space
       return decodeQuotedPrintable(encoded.replace(/_/g, " "));
     }
   });
 }
 
-// Extract readable body from a raw MIME email
-function extractBodyFromMime(raw: string): string {
-  // Find the boundary for multipart messages
+interface MimeParsed {
+  bodyText: string;
+  bodyHtml: string;
+  attachments: { filename: string; contentType: string; data: Uint8Array }[];
+}
+
+function parseMimeMessage(raw: string): MimeParsed {
+  const result: MimeParsed = { bodyText: "", bodyHtml: "", attachments: [] };
+
   const boundaryMatch = raw.match(/boundary="?([^"\r\n;]+)"?/i);
-  
+
   if (boundaryMatch) {
     const boundary = boundaryMatch[1];
-    const parts = raw.split(new RegExp(`--${boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-    
-    // Look for text/plain part first, then text/html
-    let plainText = "";
-    let htmlText = "";
-    
+    const escapedBoundary = boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parts = raw.split(new RegExp(`--${escapedBoundary}`));
+
     for (const part of parts) {
       const contentTypeMatch = part.match(/Content-Type:\s*([^;\r\n]+)/i);
       if (!contentTypeMatch) continue;
-      
+
       const contentType = contentTypeMatch[1].trim().toLowerCase();
       const transferEncodingMatch = part.match(/Content-Transfer-Encoding:\s*(\S+)/i);
       const transferEncoding = transferEncodingMatch ? transferEncodingMatch[1].trim().toLowerCase() : "";
-      
+
+      // Check for attachment disposition or non-text content types
+      const dispositionMatch = part.match(/Content-Disposition:\s*([^;\r\n]+)/i);
+      const disposition = dispositionMatch ? dispositionMatch[1].trim().toLowerCase() : "";
+      const filenameMatch = part.match(/(?:file)?name="?([^"\r\n;]+)"?/i);
+      const filename = filenameMatch ? decodeHeaderValue(filenameMatch[1].trim()) : "";
+
+      // Check for nested multipart
+      const nestedBoundaryMatch = part.match(/boundary="?([^"\r\n;]+)"?/i);
+      if (contentType.includes("multipart/") && nestedBoundaryMatch) {
+        const nested = parseMimeMessage(part);
+        if (!result.bodyText && nested.bodyText) result.bodyText = nested.bodyText;
+        if (!result.bodyHtml && nested.bodyHtml) result.bodyHtml = nested.bodyHtml;
+        result.attachments.push(...nested.attachments);
+        continue;
+      }
+
       // Get body after headers (double newline)
       const bodyStart = part.search(/\r?\n\r?\n/);
       if (bodyStart === -1) continue;
       let partBody = part.substring(bodyStart).trim();
-      
-      // Remove trailing boundary markers
       partBody = partBody.replace(/--\s*$/, "").trim();
-      
-      // Decode based on transfer encoding
+
+      const isAttachment = disposition === "attachment" ||
+        (filename && !contentType.includes("text/")) ||
+        contentType.includes("application/") ||
+        contentType.includes("image/") ||
+        contentType.includes("audio/") ||
+        contentType.includes("video/");
+
+      if (isAttachment && filename) {
+        // Decode attachment data
+        let attachData: Uint8Array;
+        if (transferEncoding === "base64") {
+          attachData = decodeBase64ToBytes(partBody);
+        } else {
+          attachData = new TextEncoder().encode(partBody);
+        }
+        // Limit attachment size to 5MB
+        if (attachData.length <= 5 * 1024 * 1024) {
+          result.attachments.push({
+            filename,
+            contentType: contentTypeMatch[1].trim(),
+            data: attachData,
+          });
+        }
+        continue;
+      }
+
+      // Decode text body
       if (transferEncoding === "quoted-printable") {
         partBody = decodeQuotedPrintable(partBody);
       } else if (transferEncoding === "base64") {
         partBody = decodeBase64(partBody);
       }
-      
-      if (contentType.includes("text/plain")) {
-        plainText = partBody;
-      } else if (contentType.includes("text/html")) {
-        htmlText = partBody;
+
+      if (contentType.includes("text/plain") && !result.bodyText) {
+        result.bodyText = partBody.trim();
+      } else if (contentType.includes("text/html") && !result.bodyHtml) {
+        result.bodyHtml = partBody.trim();
       }
     }
-    
-    // Prefer plain text, fall back to HTML stripped of tags
-    if (plainText) {
-      return plainText.trim();
+  } else {
+    // Not multipart
+    const headerEnd = raw.search(/\r?\n\r?\n/);
+    if (headerEnd === -1) return result;
+
+    let body = raw.substring(headerEnd + 2).trim();
+    const headerSection = raw.substring(0, headerEnd);
+    const transferEncodingMatch = headerSection.match(/Content-Transfer-Encoding:\s*(\S+)/i);
+    const transferEncoding = transferEncodingMatch ? transferEncodingMatch[1].trim().toLowerCase() : "";
+
+    body = body.replace(/\)\r?\n\s*A\d{4}\s+OK.*$/s, "").trim();
+    body = body.replace(/\)\s*$/s, "").trim();
+
+    if (transferEncoding === "quoted-printable") {
+      body = decodeQuotedPrintable(body);
+    } else if (transferEncoding === "base64") {
+      body = decodeBase64(body);
     }
-    if (htmlText) {
-      return htmlText.replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&#\d+;/g, "").replace(/\s+/g, " ").trim();
+
+    const contentTypeMatch = headerSection.match(/Content-Type:\s*([^;\r\n]+)/i);
+    if (contentTypeMatch && contentTypeMatch[1].toLowerCase().includes("text/html")) {
+      result.bodyHtml = body;
+    } else {
+      result.bodyText = body;
     }
   }
-  
-  // Not multipart - try to find body after headers
-  const headerEnd = raw.search(/\r?\n\r?\n/);
-  if (headerEnd === -1) return "";
-  
-  let body = raw.substring(headerEnd + 2).trim();
-  
-  // Check transfer encoding from headers
-  const headerSection = raw.substring(0, headerEnd);
-  const transferEncodingMatch = headerSection.match(/Content-Transfer-Encoding:\s*(\S+)/i);
-  const transferEncoding = transferEncodingMatch ? transferEncodingMatch[1].trim().toLowerCase() : "";
-  
-  // Clean IMAP artifacts
-  body = body.replace(/\)\r?\n\s*A\d{4}\s+OK.*$/s, "").trim();
-  body = body.replace(/\)\s*$/s, "").trim();
-  
-  if (transferEncoding === "quoted-printable") {
-    body = decodeQuotedPrintable(body);
-  } else if (transferEncoding === "base64") {
-    body = decodeBase64(body);
-  }
-  
-  // If HTML, strip tags
-  const contentTypeMatch = headerSection.match(/Content-Type:\s*([^;\r\n]+)/i);
-  if (contentTypeMatch && contentTypeMatch[1].toLowerCase().includes("text/html")) {
-    body = body.replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&#\d+;/g, "").replace(/\s+/g, " ").trim();
-  }
-  
-  return body;
+
+  return result;
 }
 
 function extractName(from: string): string {
@@ -295,12 +339,57 @@ function extractName(from: string): string {
   return name || extractEmail(from);
 }
 
+// Sanitize HTML: remove script/style tags, on* attributes
+function sanitizeHtml(html: string): string {
+  let safe = html;
+  // Remove script and style blocks
+  safe = safe.replace(/<script[\s\S]*?<\/script>/gi, "");
+  safe = safe.replace(/<style[\s\S]*?<\/style>/gi, "");
+  // Remove on* event attributes
+  safe = safe.replace(/\s+on\w+\s*=\s*"[^"]*"/gi, "");
+  safe = safe.replace(/\s+on\w+\s*=\s*'[^']*'/gi, "");
+  // Remove javascript: hrefs
+  safe = safe.replace(/href\s*=\s*"javascript:[^"]*"/gi, 'href="#"');
+  safe = safe.replace(/href\s*=\s*'javascript:[^']*'/gi, "href='#'");
+  return safe;
+}
+
+async function uploadAttachment(
+  adminClient: ReturnType<typeof createClient>,
+  ticketId: string,
+  attachment: { filename: string; contentType: string; data: Uint8Array },
+  agentId: string,
+): Promise<void> {
+  const safeName = attachment.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const filePath = `${ticketId}/${Date.now()}_${safeName}`;
+
+  const { error: uploadError } = await adminClient.storage
+    .from("ticket-attachments")
+    .upload(filePath, attachment.data, {
+      contentType: attachment.contentType,
+      upsert: false,
+    });
+
+  if (uploadError) {
+    console.error(`Attachment upload failed: ${uploadError.message}`);
+    return;
+  }
+
+  await adminClient.from("ticket_attachments").insert({
+    ticket_id: ticketId,
+    file_name: attachment.filename,
+    file_path: filePath,
+    file_type: attachment.contentType,
+    file_size: attachment.data.length,
+    uploaded_by: agentId,
+  });
+}
+
 async function processEmails(params: { fetchRecent: boolean; maxEmails: number; agentId?: string }) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-  // Get a valid created_by: use provided agent_id or find first agent
   let createdBy = params.agentId;
   if (!createdBy) {
     const { data: agents } = await adminClient.rpc("get_agent_profiles");
@@ -312,7 +401,6 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
   const imapCfg = await getImapConfig(adminClient);
   if (!imapCfg) {
-    console.log("IMAP not configured");
     return { success: false, message: "IMAP não configurado" };
   }
 
@@ -325,7 +413,6 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
       return { success: false, message: "Servidor IMAP não respondeu" };
     }
 
-    // STARTTLS for port 143
     if (port === 143) {
       try { await imap.startTls(imapCfg.imap_host); } catch (e) {
         console.log(`STARTTLS skipped: ${(e as Error).message}`);
@@ -344,15 +431,11 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
     if (params.fetchRecent) {
       const allIds = await imap.searchAll();
       emailIds = allIds.slice(-params.maxEmails);
-      console.log(`Fetch recent: ${allIds.length} total, processing ${emailIds.length}`);
     } else {
       emailIds = await imap.searchUnseen();
-      console.log(`Unseen: ${emailIds.length}`);
     }
 
     let created = 0, updated = 0, skipped = 0;
-
-    // Process max 5 emails per invocation to stay within limits
     const batch = emailIds.slice(0, Math.min(params.maxEmails, 5));
 
     for (const seqNum of batch) {
@@ -379,6 +462,12 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             continue;
           }
         }
+
+        // Build description: prefer HTML (sanitized), fall back to plain text
+        const description = msg.bodyHtml
+          ? sanitizeHtml(msg.bodyHtml).substring(0, 10000)
+          : (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
+        const isHtml = !!msg.bodyHtml;
 
         // Check existing thread
         const { data: existingThread } = await adminClient
@@ -410,7 +499,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
               ticket_id: ticketId,
               sender_id: "00000000-0000-0000-0000-000000000000",
               sender_type: "client",
-              content: msg.body || "(email sem conteúdo)",
+              content: description,
             });
             await adminClient.from("email_threads")
               .update({ last_message_id: msg.messageId })
@@ -426,7 +515,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
               client_name: clientName,
               client_email: clientEmail.toLowerCase(),
               subject: msg.subject.substring(0, 200),
-              description: msg.body.substring(0, 3000),
+              description: description,
               priority: "P2",
               status: "novo",
               created_by: createdBy,
@@ -447,6 +536,18 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             last_message_id: msg.messageId,
           });
           created++;
+        }
+
+        // Upload attachments
+        if (msg.attachments.length > 0 && ticketId) {
+          for (const att of msg.attachments) {
+            try {
+              await uploadAttachment(adminClient, ticketId, att, createdBy!);
+              console.log(`Attachment uploaded: ${att.filename} (${att.data.length} bytes)`);
+            } catch (err) {
+              console.error(`Attachment error: ${(err as Error).message}`);
+            }
+          }
         }
 
         await adminClient.from("email_logs").insert({
@@ -494,7 +595,6 @@ Deno.serve(async (req) => {
       if (body?.agent_id) agentId = body.agent_id;
     } catch { /* no body */ }
 
-    // Test-only: quick connection check
     if (testOnly) {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -519,10 +619,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Process emails in background using waitUntil
     const resultPromise = processEmails({ fetchRecent, maxEmails, agentId });
 
-    // Use EdgeRuntime.waitUntil if available for background processing
     if (typeof (globalThis as any).EdgeRuntime !== "undefined" && (globalThis as any).EdgeRuntime.waitUntil) {
       const sharedResult: { value?: any } = {};
       const promise = resultPromise.then(r => { sharedResult.value = r; }).catch(err => {
@@ -530,7 +628,6 @@ Deno.serve(async (req) => {
       });
       (globalThis as any).EdgeRuntime.waitUntil(promise);
 
-      // Wait briefly for result (up to 8s)
       const deadline = Date.now() + 8000;
       while (!sharedResult.value && Date.now() < deadline) {
         await new Promise(r => setTimeout(r, 200));
@@ -542,7 +639,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Fallback: await directly
     const result = await resultPromise;
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -8,36 +8,72 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Send, Mail, User, Clock } from "lucide-react";
+import { ArrowLeft, Loader2, Send, Mail, User, Clock, Paperclip, Download, FileText, Image } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
-import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { formatDistanceToNow, format } from "date-fns";
 import { pt } from "date-fns/locale";
 
+// Check if content looks like HTML
+function isHtmlContent(text: string): boolean {
+  if (!text) return false;
+  return /<\w+[^>]*>/.test(text) && (text.includes("</") || text.includes("/>"));
+}
 
-// Decode quoted-printable artifacts that may remain in stored text
+// Sanitize HTML for safe rendering (extra frontend layer)
+function sanitizeForDisplay(html: string): string {
+  let safe = html;
+  safe = safe.replace(/<script[\s\S]*?<\/script>/gi, "");
+  safe = safe.replace(/<style[\s\S]*?<\/style>/gi, "");
+  safe = safe.replace(/\s+on\w+\s*=\s*"[^"]*"/gi, "");
+  safe = safe.replace(/\s+on\w+\s*=\s*'[^']*'/gi, "");
+  safe = safe.replace(/href\s*=\s*"javascript:[^"]*"/gi, 'href="#"');
+  return safe;
+}
+
+// Clean plain text email
 function cleanEmailText(text: string): string {
   if (!text) return text;
-  // Remove MIME headers that leaked into body
   let cleaned = text.replace(/^BODY\[TEXT\].*?Content-Transfer-Encoding:\s*\S+\s*/is, "");
   cleaned = cleaned.replace(/Content-Type:\s*[^\r\n]+[\r\n]*/gi, "");
   cleaned = cleaned.replace(/Content-Transfer-Encoding:\s*[^\r\n]+[\r\n]*/gi, "");
-  // Decode =XX quoted-printable sequences
   cleaned = cleaned.replace(/=\r?\n/g, "");
   cleaned = cleaned.replace(/=([0-9A-Fa-f]{2})/g, (_match: string, hex: string) => {
     return String.fromCharCode(parseInt(hex, 16));
   });
-  // Try UTF-8 decode
   try {
     const bytes = new Uint8Array([...cleaned].map(c => c.charCodeAt(0)));
     cleaned = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
   } catch { /* keep as-is */ }
-  // Remove MIME boundary artifacts
   cleaned = cleaned.replace(/--[0-9a-f]{20,}--?/g, "");
-  // Clean excess whitespace
-  cleaned = cleaned.replace(/\s+/g, " ").trim();
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
   return cleaned;
+}
+
+function EmailBody({ content }: { content: string }) {
+  if (!content) return null;
+
+  if (isHtmlContent(content)) {
+    return (
+      <div
+        className="email-html-content text-sm prose prose-sm dark:prose-invert max-w-none [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1 [&_a]:text-primary [&_a]:underline"
+        dangerouslySetInnerHTML={{ __html: sanitizeForDisplay(content) }}
+      />
+    );
+  }
+
+  return <p className="text-sm whitespace-pre-wrap">{cleanEmailText(content)}</p>;
+}
+
+function getFileIcon(fileType: string) {
+  if (fileType.startsWith("image/")) return <Image className="h-4 w-4" />;
+  return <FileText className="h-4 w-4" />;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export default function EmailTicketDetail() {
@@ -45,9 +81,10 @@ export default function EmailTicketDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
-  const { statuses, statusLabels } = useTicketStatuses();
+  const { statuses } = useTicketStatuses();
   const [ticket, setTicket] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
+  const [attachments, setAttachments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
@@ -57,15 +94,17 @@ export default function EmailTicketDetail() {
 
   const fetchData = async () => {
     if (!id) return;
-    const [{ data: t }, { data: msgs }, { data: thread }, { data: profiles }] = await Promise.all([
+    const [{ data: t }, { data: msgs }, { data: thread }, { data: profiles }, { data: atts }] = await Promise.all([
       supabase.from("tickets").select("*").eq("id", id).single(),
       supabase.from("ticket_messages").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
       supabase.from("email_threads" as any).select("*").eq("ticket_id", id).limit(1).single(),
       supabase.from("profiles").select("id, full_name, avatar_url"),
+      supabase.from("ticket_attachments").select("*").eq("ticket_id", id).order("created_at", { ascending: true }),
     ]);
     setTicket(t);
     setMessages(msgs || []);
     setEmailThread(thread);
+    setAttachments(atts || []);
     const profileMap: Record<string, { full_name: string; avatar_url?: string | null }> = {};
     ((profiles as any[]) || []).forEach((p: any) => { profileMap[p.id] = { full_name: p.full_name, avatar_url: p.avatar_url }; });
     setAgents(profileMap);
@@ -74,7 +113,6 @@ export default function EmailTicketDetail() {
 
   useEffect(() => { fetchData(); }, [id]);
 
-  // Realtime messages
   useEffect(() => {
     if (!id) return;
     const channel = supabase
@@ -96,7 +134,6 @@ export default function EmailTicketDetail() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Mark as read
   useEffect(() => {
     if (!id || !user) return;
     supabase.from("ticket_read_status").upsert(
@@ -142,6 +179,11 @@ export default function EmailTicketDetail() {
     await supabase.from("tickets").update({ assigned_to: agentId === "unassigned" ? null : agentId }).eq("id", id);
     toast({ title: "Agente atualizado" });
     fetchData();
+  };
+
+  const downloadAttachment = (att: any) => {
+    const { data } = supabase.storage.from("ticket-attachments").getPublicUrl(att.file_path);
+    window.open(data.publicUrl, "_blank");
   };
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -201,7 +243,7 @@ export default function EmailTicketDetail() {
         </Select>
       </div>
 
-      {/* Description */}
+      {/* Description (original email) */}
       {ticket.description && (
         <Card>
           <CardHeader className="pb-2">
@@ -211,10 +253,42 @@ export default function EmailTicketDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm whitespace-pre-wrap">{cleanEmailText(ticket.description)}</p>
+            <EmailBody content={ticket.description} />
             <p className="text-xs text-muted-foreground mt-3">
               {format(new Date(ticket.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: pt })}
             </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Attachments */}
+      {attachments.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Paperclip className="h-4 w-4" />
+              Anexos ({attachments.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {attachments.map((att) => (
+                <button
+                  key={att.id}
+                  onClick={() => downloadAttachment(att)}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors text-left w-full group"
+                >
+                  <div className="shrink-0 h-9 w-9 rounded-md bg-primary/10 text-primary flex items-center justify-center">
+                    {getFileIcon(att.file_type)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">{att.file_name}</p>
+                    <p className="text-xs text-muted-foreground">{formatFileSize(att.file_size)}</p>
+                  </div>
+                  <Download className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                </button>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -256,7 +330,7 @@ export default function EmailTicketDetail() {
                       )}
                     </div>
                     <div className={`rounded-xl px-4 py-2.5 text-sm ${isAgent ? "bg-primary/10 text-foreground" : "bg-muted"}`}>
-                      <p className="whitespace-pre-wrap">{cleanEmailText(msg.content)}</p>
+                      <EmailBody content={msg.content} />
                     </div>
                   </div>
                 </div>
