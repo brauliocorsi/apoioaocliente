@@ -434,9 +434,10 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      message: `Processados: ${created} novos tickets, ${updated} atualizados`,
+      message: `Processados: ${created} novos tickets, ${updated} atualizados, ${skipped} ignorados (duplicados)`,
       created,
       updated,
+      skipped,
       total: toProcess.length,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

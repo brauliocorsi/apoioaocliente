@@ -68,14 +68,19 @@ export default function EmailTickets() {
     ]);
   }, []);
 
-  const triggerPoll = async () => {
+  const triggerPoll = async (fetchRecent = false) => {
     setPolling(true);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
-      await supabase.functions.invoke("fetch-inbound-emails", {
+      const { data } = await supabase.functions.invoke("fetch-inbound-emails", {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: { fetch_recent: fetchRecent, max_emails: fetchRecent ? 50 : 20 },
       });
+      if (data?.message) {
+        const { toast } = await import("@/hooks/use-toast").then(m => ({ toast: m.toast }));
+        toast({ title: "Resultado", description: data.message });
+      }
       await fetchEmailTickets();
     } catch (err) {
       console.error("Poll error:", err);
