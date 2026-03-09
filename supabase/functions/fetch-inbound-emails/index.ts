@@ -224,15 +224,24 @@ function extractEmail(from: string): string {
 }
 
 function decodeQuotedPrintable(str: string): string {
-  let result = str.replace(/=\r?\n/g, "");
-  result = result.replace(/=([0-9A-Fa-f]{2})/g, (_match, hex) => {
-    return String.fromCharCode(parseInt(hex, 16));
-  });
+  // Remove soft line breaks
+  const input = str.replace(/=\r?\n/g, "");
+  // Collect bytes: ASCII chars as-is, =XX as byte values
+  const byteChunks: number[] = [];
+  let i = 0;
+  while (i < input.length) {
+    if (input[i] === "=" && i + 2 < input.length && /[0-9A-Fa-f]{2}/.test(input.substring(i + 1, i + 3))) {
+      byteChunks.push(parseInt(input.substring(i + 1, i + 3), 16));
+      i += 3;
+    } else {
+      byteChunks.push(input.charCodeAt(i));
+      i++;
+    }
+  }
   try {
-    const bytes = new Uint8Array([...result].map(c => c.charCodeAt(0)));
-    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    return new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(byteChunks));
   } catch {
-    return result;
+    return input.replace(/=([0-9A-Fa-f]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
   }
 }
 
