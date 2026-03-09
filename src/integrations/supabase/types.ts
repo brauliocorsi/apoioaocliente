@@ -265,9 +265,12 @@ export type Database = {
       email_logs: {
         Row: {
           created_at: string
+          delivery_details: string | null
+          delivery_status: string
           error_message: string | null
           id: string
           recipient: string
+          smtp_response: string | null
           source: string
           status: string
           subject: string
@@ -276,9 +279,12 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          delivery_details?: string | null
+          delivery_status?: string
           error_message?: string | null
           id?: string
           recipient: string
+          smtp_response?: string | null
           source?: string
           status?: string
           subject: string
@@ -287,9 +293,12 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          delivery_details?: string | null
+          delivery_status?: string
           error_message?: string | null
           id?: string
           recipient?: string
+          smtp_response?: string | null
           source?: string
           status?: string
           subject?: string
