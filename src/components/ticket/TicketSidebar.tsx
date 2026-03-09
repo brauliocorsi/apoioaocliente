@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, Check, X, UserPlus, Loader2, Phone } from "lucide-react";
+import { Pencil, Check, X, UserPlus, Loader2, Phone, Mail } from "lucide-react";
 import TagSelector from "./TagSelector";
 import TicketDocuments from "./TicketDocuments";
 import { useNavigate } from "react-router-dom";
