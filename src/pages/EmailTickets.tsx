@@ -177,7 +177,7 @@ export default function EmailTickets() {
         const remaining = data?.remaining || 0;
 
         // Refresh lists after each batch
-        await Promise.all([fetchEmailTickets(), fetchPendingEmails()]);
+        await Promise.all([fetchEmailTickets(), fetchPendingEmails(), fetchProcessedEmails()]);
 
         if (remaining <= 0 || batchTotal === 0) {
           // Done - show final summary
