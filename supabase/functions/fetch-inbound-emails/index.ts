@@ -128,6 +128,13 @@ class ImapClient {
     return match[1].trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
   }
 
+  async searchAll(): Promise<number[]> {
+    const response = await this.command("SEARCH ALL");
+    const match = response.match(/\* SEARCH([\d\s]*)/);
+    if (!match || !match[1].trim()) return [];
+    return match[1].trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
+  }
+
   async fetchMessage(seqNum: number): Promise<{ from: string; subject: string; body: string; messageId: string }> {
     const response = await this.command(`FETCH ${seqNum} (BODY[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID)] BODY[TEXT])`);
 
