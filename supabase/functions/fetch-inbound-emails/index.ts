@@ -394,6 +394,7 @@ async function isBlocked(
     }
   }
   return { blocked: false, reason: "" };
+}
 
 // Generate a fingerprint for dedup when message_id is missing
 async function generateFingerprint(from: string, subject: string, bodySnippet: string): Promise<string> {
