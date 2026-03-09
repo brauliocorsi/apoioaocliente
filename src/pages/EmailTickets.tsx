@@ -233,7 +233,7 @@ export default function EmailTickets() {
       }).eq("id", pe.id);
       toast({ title: "Email rejeitado" });
       setSelectedPending(null);
-      await fetchPendingEmails();
+      await Promise.all([fetchPendingEmails(), fetchProcessedEmails()]);
     } catch (err) {
       toast({ title: "Erro", description: (err as Error).message, variant: "destructive" });
     }
