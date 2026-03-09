@@ -394,7 +394,15 @@ async function isBlocked(
     }
   }
   return { blocked: false, reason: "" };
+
+// Generate a fingerprint for dedup when message_id is missing
+async function generateFingerprint(from: string, subject: string, bodySnippet: string): Promise<string> {
+  const raw = `${from.toLowerCase()}|${subject.substring(0, 100)}|${bodySnippet.substring(0, 200)}`;
+  const data = new TextEncoder().encode(raw);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("").substring(0, 40);
 }
+
 
 async function uploadAttachment(
   adminClient: ReturnType<typeof createClient>,
