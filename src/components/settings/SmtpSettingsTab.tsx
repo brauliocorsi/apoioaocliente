@@ -49,6 +49,7 @@ const defaultImap: ImapConfig = {
 export default function SmtpSettingsTab() {
   const [smtp, setSmtp] = useState<SmtpConfig>(defaultSmtp);
   const [imap, setImap] = useState<ImapConfig>(defaultImap);
+  const [notifyStatusChange, setNotifyStatusChange] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingSmtp, setSavingSmtp] = useState(false);
   const [savingImap, setSavingImap] = useState(false);
@@ -67,7 +68,7 @@ export default function SmtpSettingsTab() {
 
   const loadConfig = async () => {
     setLoading(true);
-    const allKeys = [...Object.keys(defaultSmtp), ...Object.keys(defaultImap)];
+    const allKeys = [...Object.keys(defaultSmtp), ...Object.keys(defaultImap), "notify_status_change_email"];
     const { data, error } = await supabase
       .from("system_settings")
       .select("key, value")
@@ -82,6 +83,9 @@ export default function SmtpSettingsTab() {
         }
         if (row.key in loadedImap) {
           (loadedImap as Record<string, string>)[row.key] = row.value;
+        }
+        if (row.key === "notify_status_change_email") {
+          setNotifyStatusChange(row.value === "true");
         }
       });
       setSmtp(loadedSmtp);
@@ -169,8 +173,40 @@ export default function SmtpSettingsTab() {
   const isSmtpConfigured = smtp.smtp_host && smtp.smtp_user && smtp.smtp_pass;
   const isImapConfigured = imap.imap_host && imap.imap_user && imap.imap_pass;
 
+  const handleToggleNotifyStatus = async (checked: boolean) => {
+    setNotifyStatusChange(checked);
+    await supabase.from("system_settings").upsert(
+      { key: "notify_status_change_email", value: checked ? "true" : "false", updated_at: new Date().toISOString() },
+      { onConflict: "key" }
+    );
+    toast({ title: checked ? "Notificação de mudança de estado activada" : "Notificação de mudança de estado desactivada" });
+  };
+
   return (
     <div className="space-y-6 max-w-2xl">
+      {/* Email Notifications */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Mail className="h-4 w-4" />
+            Notificações por Email
+          </CardTitle>
+          <CardDescription>Controlar quando os emails automáticos são enviados ao cliente</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
+            <div>
+              <p className="text-sm font-medium">Enviar email ao cliente quando o estado do ticket muda</p>
+              <p className="text-xs text-muted-foreground">Inclui mudanças no Kanban e no detalhe do ticket</p>
+            </div>
+            <Switch
+              checked={notifyStatusChange}
+              onCheckedChange={handleToggleNotifyStatus}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* SMTP Section */}
       <Card>
         <CardHeader>

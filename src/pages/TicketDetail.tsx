@@ -272,8 +272,14 @@ export default function TicketDetail() {
       metadata: { from: oldStatus, to: newStatus },
     });
 
-    // Send email notification on status change
-    if (ticket.client_user_id || ticket.client_email) {
+    // Check if status change email notifications are enabled
+    const { data: notifySetting } = await supabase
+      .from("system_settings")
+      .select("value")
+      .eq("key", "notify_status_change_email")
+      .maybeSingle();
+
+    if (notifySetting?.value === "true" && (ticket.client_user_id || ticket.client_email)) {
       supabase.functions.invoke("send-ticket-email", {
         body: { ticket_id: id, template_id: "status_changed" },
       }).then(({ error }) => {
