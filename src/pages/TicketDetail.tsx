@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage, FileVideo, FileText, Trash2, Gavel, ChevronDown, ChevronRight, Check, Mail } from "lucide-react";
+import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage, FileVideo, FileText, Trash2, Gavel, ChevronDown, ChevronRight, Check, Mail, Maximize2, Minimize2 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -114,6 +114,7 @@ export default function TicketDetail() {
   const [editingSubject, setEditingSubject] = useState(false);
   const [subjectDraft, setSubjectDraft] = useState("");
   const [hasEmailThread, setHasEmailThread] = useState(false);
+  const [messagesFullscreen, setMessagesFullscreen] = useState(false);
 
   const fetchTicket = async () => {
     if (!id) return;
@@ -785,18 +786,30 @@ export default function TicketDetail() {
           </Card>
 
           {/* Client Messages */}
-          <Card>
-            <CardHeader>
+          <Card className={messagesFullscreen ? "fixed inset-0 z-50 rounded-none flex flex-col" : ""}>
+            <CardHeader className="flex-row items-center justify-between space-y-0">
               <CardTitle className="text-sm flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
                 Mensagens do Cliente
+                {messages.length > 0 && (
+                  <Badge variant="secondary" className="text-[10px] h-5 px-1.5">{messages.length}</Badge>
+                )}
               </CardTitle>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => setMessagesFullscreen((v) => !v)}
+                title={messagesFullscreen ? "Minimizar" : "Expandir em tela cheia"}
+              >
+                {messagesFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </Button>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className={`space-y-3 ${messagesFullscreen ? "flex-1 overflow-hidden flex flex-col" : ""}`}>
               {messages.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">Sem mensagens do cliente</p>
               ) : (
-                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1 pr-1">
+                <div className={`space-y-3 overflow-y-auto pr-1 ${messagesFullscreen ? "flex-1" : "max-h-[600px]"}`}>
                   {(() => {
                     const lastClientIdx = messages.reduce((acc, m, i) => m.sender_type === "client" ? i : acc, -1);
                     return messages.map((msg, idx) => {
