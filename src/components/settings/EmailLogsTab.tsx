@@ -185,6 +185,7 @@ export default function EmailLogsTab() {
                     <TableHead>Destinatário</TableHead>
                     <TableHead>Assunto</TableHead>
                     <TableHead className="w-[120px]">Origem</TableHead>
+                    <TableHead className="w-[60px]">Via</TableHead>
                     <TableHead className="w-[100px]">Envio</TableHead>
                     <TableHead className="w-[110px]">Entrega</TableHead>
                   </TableRow>
