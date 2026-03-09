@@ -796,7 +796,7 @@ export default function TicketDetail() {
               {messages.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">Sem mensagens do cliente</p>
               ) : (
-                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1 pr-1">
                   {(() => {
                     const lastClientIdx = messages.reduce((acc, m, i) => m.sender_type === "client" ? i : acc, -1);
                     return messages.map((msg, idx) => {
@@ -820,7 +820,7 @@ export default function TicketDetail() {
                             {senderInitials}
                           </AvatarFallback>
                         </Avatar>
-                        <div className={`max-w-[70%] space-y-1`}>
+                        <div className={`ma85w-[70%] space-y-1`}>
                           <div
                             className={`rounded-lg px-4 py-2 text-sm ${
                               isAgent
