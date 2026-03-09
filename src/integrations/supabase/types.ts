@@ -303,6 +303,38 @@ export type Database = {
         }
         Relationships: []
       }
+      email_threads: {
+        Row: {
+          created_at: string
+          email_address: string
+          id: string
+          last_message_id: string | null
+          ticket_id: string
+        }
+        Insert: {
+          created_at?: string
+          email_address: string
+          id?: string
+          last_message_id?: string | null
+          ticket_id: string
+        }
+        Update: {
+          created_at?: string
+          email_address?: string
+          id?: string
+          last_message_id?: string | null
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_threads_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       faq_items: {
         Row: {
           answer: string
