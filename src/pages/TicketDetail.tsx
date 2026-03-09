@@ -39,6 +39,10 @@ function sanitizeForDisplay(html: string): string {
   safe = safe.replace(/\s+on\w+\s*=\s*"[^"]*"/gi, "");
   safe = safe.replace(/\s+on\w+\s*=\s*'[^']*'/gi, "");
   safe = safe.replace(/href\s*=\s*"javascript:[^"]*"/gi, 'href="#"');
+  // Fix charset meta tag to prevent browser re-interpretation
+  safe = safe.replace(/<meta[^>]*charset[^>]*>/gi, '<meta charset="utf-8">');
+  // Replace Unicode replacement characters with a visible placeholder
+  safe = safe.replace(/\uFFFD+/g, "?");
   return safe;
 }
 
