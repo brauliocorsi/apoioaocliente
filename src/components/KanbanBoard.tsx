@@ -98,11 +98,16 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs font-mono text-muted-foreground">#{ticket.ticket_number}</span>
         <div className="flex items-center gap-1.5">
-          {unreadCount && unreadCount > 0 && (
+          {emailUnreadCount && emailUnreadCount > 0 ? (
+            <Badge className="text-[10px] h-4 min-w-[16px] justify-center px-1 gap-0.5 bg-blue-500 hover:bg-blue-600 text-white border-0 animate-pulse">
+              <Mail className="h-3 w-3" />
+              {emailUnreadCount}
+            </Badge>
+          ) : unreadCount && unreadCount > 0 ? (
             <Badge variant="destructive" className="text-[10px] h-4 min-w-[16px] justify-center px-1">
               {unreadCount}
             </Badge>
-          )}
+          ) : null}
           {callCount && callCount > 0 && (
             <span className="inline-flex items-center gap-0.5 text-muted-foreground">
               <Phone className="h-3 w-3" />
