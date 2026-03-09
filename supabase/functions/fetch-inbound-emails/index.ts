@@ -643,7 +643,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           subject: msg.subject.substring(0, 500),
           body_text: (msg.bodyText || "").substring(0, 5000),
           body_html: (msg.bodyHtml ? sanitizeHtml(msg.bodyHtml) : "").substring(0, 10000),
-          message_id: msg.messageId,
+          message_id: emailFingerprint,
           status: "pending",
         }).select("id").single();
 
