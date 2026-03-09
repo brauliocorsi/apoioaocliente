@@ -101,23 +101,8 @@ Deno.serve(async (req) => {
 
     // Build email
     const subject = `Re: [Ticket #${ticket.ticket_number}] ${ticket.subject || ""}`;
-    const plainText = `Olá ${ticket.client_name || "Cliente"},\n\n${content}\n\n---\nPara responder, basta responder a este email.\nUP Móveis — Apoio ao Cliente`;
-    const htmlContent = `<!DOCTYPE html>
-<html lang="pt">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background-color:#ffffff;font-family:Arial,Helvetica,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr><td style="padding:32px;max-width:600px;">
-<p style="color:#d32f2f;font-size:18px;font-weight:bold;margin:0 0 24px;">UP Móveis — Apoio ao Cliente</p>
-<p style="color:#333;font-size:15px;line-height:1.6;margin:0 0 12px;">Olá <strong>${ticket.client_name || "Cliente"}</strong>,</p>
-<p style="color:#333;font-size:15px;line-height:1.6;white-space:pre-wrap;margin:0 0 20px;">${content.replace(/\n/g, "<br>")}</p>
-<hr style="border:none;border-top:1px solid #ddd;margin:24px 0 16px;">
-<p style="color:#666;font-size:12px;margin:0 0 4px;">Para responder, basta responder a este email.</p>
-<p style="color:#999;font-size:12px;margin:0;">UP Móveis — Tudo para casa.</p>
-</td></tr>
-</table>
-</body>
-</html>`;
+    const plainText = `Olá ${ticket.client_name || "Cliente"},\n\n${content}\n\n--\nUP Móveis - Apoio ao Cliente\nPara responder, basta responder a este email.`;
+    const htmlContent = plainText;
 
     // Send email via SMTP with detailed error tracking
     const port = Number(smtpCfg.smtp_port) || 465;
