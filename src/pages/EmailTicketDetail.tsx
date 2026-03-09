@@ -211,7 +211,7 @@ export default function EmailTicketDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm whitespace-pre-wrap">{ticket.description}</p>
+            <p className="text-sm whitespace-pre-wrap">{cleanEmailText(ticket.description)}</p>
             <p className="text-xs text-muted-foreground mt-3">
               {format(new Date(ticket.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: pt })}
             </p>
