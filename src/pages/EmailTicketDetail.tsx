@@ -54,15 +54,39 @@ function EmailBody({ content }: { content: string }) {
   if (!content) return null;
 
   if (isHtmlContent(content)) {
+    // Clean up email cruft: remove quoted replies, signatures, excessive whitespace
+    let cleaned = sanitizeForDisplay(content);
+    // Remove common email client quote markers
+    cleaned = cleaned.replace(/<blockquote[^>]*>[\s\S]*?<\/blockquote>/gi, "");
+    // Remove "On ... wrote:" patterns
+    cleaned = cleaned.replace(/(<br\s*\/?>|\n)\s*Em\s+.*?escreveu:[\s\S]*$/i, "");
+    cleaned = cleaned.replace(/(<br\s*\/?>|\n)\s*On\s+.*?wrote:[\s\S]*$/i, "");
+    // Remove excessive <br> sequences
+    cleaned = cleaned.replace(/(<br\s*\/?>[\s]*){3,}/gi, "<br><br>");
+
     return (
       <div
-        className="email-html-content text-sm prose prose-sm dark:prose-invert max-w-none [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1 [&_a]:text-primary [&_a]:underline"
-        dangerouslySetInnerHTML={{ __html: sanitizeForDisplay(content) }}
+        className="email-html-content text-sm prose prose-sm dark:prose-invert max-w-none 
+          [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1 
+          [&_a]:text-primary [&_a]:underline [&_p]:my-1 [&_br+br+br]:hidden
+          [&_*]:max-w-full overflow-hidden break-words"
+        dangerouslySetInnerHTML={{ __html: cleaned }}
       />
     );
   }
 
-  return <p className="text-sm whitespace-pre-wrap">{cleanEmailText(content)}</p>;
+  const cleaned = cleanEmailText(content);
+  // Remove quoted replies in plain text (lines starting with >)
+  const lines = cleaned.split("\n");
+  const filtered = [];
+  for (const line of lines) {
+    if (line.startsWith(">")) continue;
+    if (/^Em .+ escreveu:/.test(line)) break;
+    if (/^On .+ wrote:/.test(line)) break;
+    filtered.push(line);
+  }
+
+  return <p className="text-sm whitespace-pre-wrap leading-relaxed">{filtered.join("\n").trim()}</p>;
 }
 
 function getFileIcon(fileType: string) {
