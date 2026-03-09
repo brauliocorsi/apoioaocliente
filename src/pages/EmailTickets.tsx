@@ -97,7 +97,7 @@ export default function EmailTickets() {
       .select("*")
       .in("status", ["pending", "blocked"])
       .order("created_at", { ascending: false });
-    setPendingEmails((data as PendingEmail[]) || []);
+    setPendingEmails((data as unknown as PendingEmail[]) || []);
   };
 
   useEffect(() => {
