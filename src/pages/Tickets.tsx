@@ -344,7 +344,13 @@ export default function Tickets() {
                         );
                       })}
                       {t.category_id && <Badge variant="outline" className="text-xs">{categories[t.category_id] || t.category_id}</Badge>}
-                      {unreadCounts[t.id] > 0 && (
+                      {emailUnreadCounts[t.id] > 0 && (
+                        <Badge className="text-[10px] h-5 min-w-[20px] justify-center gap-0.5 bg-blue-500 hover:bg-blue-600 text-white border-0">
+                          <Mail className="h-3 w-3" />
+                          {emailUnreadCounts[t.id]}
+                        </Badge>
+                      )}
+                      {unreadCounts[t.id] > 0 && !emailUnreadCounts[t.id] && (
                         <Badge variant="destructive" className="text-[10px] h-5 min-w-[20px] justify-center">
                           {unreadCounts[t.id]}
                         </Badge>
