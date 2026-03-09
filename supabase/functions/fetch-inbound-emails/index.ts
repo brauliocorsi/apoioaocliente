@@ -599,18 +599,19 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
               ? sanitizeHtml(msg.bodyHtml).substring(0, 10000)
               : (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
 
-            // Check for duplicate message content in this ticket (first 200 chars)
-            const contentSnippet = body.substring(0, 200).trim();
+            // Check for duplicate message content in this ticket (compare stripped text)
+            const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+            const contentSnippet = stripHtml(body).substring(0, 200).trim().toLowerCase();
             const { data: existingMsgs } = await adminClient
               .from("ticket_messages")
               .select("id, content")
               .eq("ticket_id", ticketId)
               .eq("sender_type", "client")
               .order("created_at", { ascending: false })
-              .limit(5);
+              .limit(10);
 
             const isDuplicateContent = existingMsgs?.some(
-              (m: any) => m.content.substring(0, 200).trim() === contentSnippet
+              (m: any) => stripHtml(m.content).substring(0, 200).trim().toLowerCase() === contentSnippet
             );
 
             if (isDuplicateContent) {
