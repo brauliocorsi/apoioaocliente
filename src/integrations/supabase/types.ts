@@ -235,6 +235,33 @@ export type Database = {
         }
         Relationships: []
       }
+      email_blocked_senders: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          pattern: string
+          pattern_type: string
+          reason: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          pattern: string
+          pattern_type?: string
+          reason?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          pattern?: string
+          pattern_type?: string
+          reason?: string | null
+        }
+        Relationships: []
+      }
       email_logs: {
         Row: {
           created_at: string
@@ -417,6 +444,65 @@ export type Database = {
             columns: ["message_id"]
             isOneToOne: false
             referencedRelation: "ticket_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pending_emails: {
+        Row: {
+          attachments_meta: Json | null
+          body_html: string | null
+          body_text: string | null
+          created_at: string
+          from_address: string
+          from_name: string | null
+          id: string
+          message_id: string | null
+          rejection_reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          subject: string
+          ticket_id: string | null
+        }
+        Insert: {
+          attachments_meta?: Json | null
+          body_html?: string | null
+          body_text?: string | null
+          created_at?: string
+          from_address: string
+          from_name?: string | null
+          id?: string
+          message_id?: string | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          subject: string
+          ticket_id?: string | null
+        }
+        Update: {
+          attachments_meta?: Json | null
+          body_html?: string | null
+          body_text?: string | null
+          created_at?: string
+          from_address?: string
+          from_name?: string | null
+          id?: string
+          message_id?: string | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          subject?: string
+          ticket_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_emails_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
             referencedColumns: ["id"]
           },
         ]
