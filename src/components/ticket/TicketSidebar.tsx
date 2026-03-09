@@ -35,6 +35,7 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
   const [form, setForm] = useState<any>({});
   const [linkedCalls, setLinkedCalls] = useState<any[]>([]);
   const [emailMessages, setEmailMessages] = useState<any[]>([]);
+  const [selectedEmail, setSelectedEmail] = useState<any>(null);
 
   useEffect(() => {
     Promise.all([
