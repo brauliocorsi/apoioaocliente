@@ -371,6 +371,35 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
                 </div>
               </div>
 
+              {/* === Emails === */}
+              {emailMessages.length > 0 && (
+                <>
+                  <hr className="border-border" />
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                      <Mail className="h-3 w-3" />
+                      Emails ({emailMessages.length})
+                    </p>
+                    <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                      {emailMessages.map((msg) => (
+                        <div key={msg.id} className="flex items-start gap-2 text-xs p-1.5 rounded-md bg-muted/30">
+                          <div className={`h-1.5 w-1.5 rounded-full mt-1.5 shrink-0 ${msg.sender_type === 'client' ? 'bg-blue-500' : 'bg-primary'}`} />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-foreground">
+                              {msg.sender_type === 'client' ? 'Cliente' : 'Agente'}
+                            </p>
+                            <p className="text-muted-foreground truncate">{(msg.content || '').substring(0, 60)}{(msg.content || '').length > 60 ? '...' : ''}</p>
+                            <p className="text-muted-foreground/70 text-[10px]">
+                              {new Date(msg.created_at).toLocaleString("pt-PT", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
               <hr className="border-border" />
 
               {/* === Encomenda / Entrega === */}
