@@ -82,6 +82,13 @@ export default function EmailTickets() {
       if (data?.message) {
         toast({ title: "Resultado", description: data.message });
       }
+      if (data?.error_details?.length > 0) {
+        console.log("Import errors:", data.error_details);
+        toast({ title: "Erros de importação", description: data.error_details.join("; "), variant: "destructive" });
+      }
+      if (data?.error) {
+        toast({ title: "Erro", description: data.error, variant: "destructive" });
+      }
       await fetchEmailTickets();
     } catch (err) {
       console.error("Poll error:", err);
