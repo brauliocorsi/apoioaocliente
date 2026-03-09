@@ -325,10 +325,12 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
     const parts = raw.split(new RegExp(`--${escapedBoundary}`));
 
     for (const part of parts) {
-      const contentTypeMatch = part.match(/Content-Type:\s*([^;\r\n]+)/i);
+      const contentTypeMatch = part.match(/Content-Type:\s*([^\r\n]+)/i);
       if (!contentTypeMatch) continue;
 
-      const contentType = contentTypeMatch[1].trim().toLowerCase();
+      const fullContentType = contentTypeMatch[1].trim();
+      const contentType = fullContentType.split(";")[0].trim().toLowerCase();
+      const charset = extractCharset(fullContentType);
       const transferEncodingMatch = part.match(/Content-Transfer-Encoding:\s*(\S+)/i);
       const transferEncoding = transferEncodingMatch ? transferEncodingMatch[1].trim().toLowerCase() : "";
 
@@ -366,15 +368,21 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
           attachData = new TextEncoder().encode(partBody);
         }
         if (attachData.length <= 5 * 1024 * 1024) {
-          result.attachments.push({ filename, contentType: contentTypeMatch[1].trim(), data: attachData });
+          result.attachments.push({ filename, contentType: fullContentType.split(";")[0].trim(), data: attachData });
         }
         continue;
       }
 
       if (transferEncoding === "quoted-printable") {
-        partBody = decodeQuotedPrintable(partBody);
+        partBody = decodeQuotedPrintable(partBody, charset);
       } else if (transferEncoding === "base64") {
-        partBody = decodeBase64(partBody);
+        partBody = decodeBase64(partBody, charset);
+      } else if (charset && charset.toLowerCase() !== "utf-8" && charset.toLowerCase() !== "us-ascii") {
+        // Raw body with non-UTF-8 charset — re-decode
+        try {
+          const bytes = new Uint8Array([...partBody].map(c => c.charCodeAt(0)));
+          partBody = new TextDecoder(normalizeCharset(charset), { fatal: false }).decode(bytes);
+        } catch { /* keep as-is */ }
       }
 
       if (contentType.includes("text/plain") && !result.bodyText) {
