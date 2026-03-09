@@ -383,8 +383,12 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
                       Emails ({emailMessages.length})
                     </p>
                     <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-                      {emailMessages.map((msg) => (
-                        <div key={msg.id} className="flex items-start gap-2 text-xs p-1.5 rounded-md bg-muted/30">
+                      {emailMessages.map((msg, idx) => (
+                        <div
+                          key={msg.id}
+                          className="flex items-start gap-2 text-xs p-1.5 rounded-md bg-muted/30 cursor-pointer hover:bg-muted/60 transition-colors"
+                          onClick={() => setSelectedEmail(msg)}
+                        >
                           <div className={`h-1.5 w-1.5 rounded-full mt-1.5 shrink-0 ${msg.sender_type === 'client' ? 'bg-blue-500' : 'bg-primary'}`} />
                           <div className="min-w-0 flex-1">
                             <p className="font-medium text-foreground">
@@ -401,6 +405,74 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
                   </div>
                 </>
               )}
+
+              {/* Email Reader Dialog */}
+              <Dialog open={!!selectedEmail} onOpenChange={(open) => { if (!open) setSelectedEmail(null); }}>
+                <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-sm">
+                      <Mail className="h-4 w-4" />
+                      {selectedEmail?.sender_type === 'client' ? 'Email do Cliente' : 'Email Enviado'}
+                      <Badge variant={selectedEmail?.sender_type === 'client' ? 'secondary' : 'default'} className="text-[10px]">
+                        {selectedEmail?.sender_type === 'client' ? 'Recebido' : 'Enviado'}
+                      </Badge>
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="text-xs text-muted-foreground mb-2">
+                    {selectedEmail && new Date(selectedEmail.created_at).toLocaleString("pt-PT")}
+                  </div>
+                  <div className="flex-1 overflow-y-auto border rounded-md p-4 bg-muted/20">
+                    {selectedEmail && (() => {
+                      const content = selectedEmail.content || '';
+                      const isHtml = /<\w+[^>]*>/.test(content) && (content.includes("</") || content.includes("/>"));
+                      if (isHtml) {
+                        let safe = content
+                          .replace(/<script[\s\S]*?<\/script>/gi, "")
+                          .replace(/<style[\s\S]*?<\/style>/gi, "")
+                          .replace(/\s+on\w+\s*=\s*"[^"]*"/gi, "")
+                          .replace(/href\s*=\s*"javascript:[^"]*"/gi, 'href="#"');
+                        return (
+                          <div
+                            className="prose prose-sm dark:prose-invert max-w-none [&_img]:max-w-full [&_a]:text-primary break-words"
+                            dangerouslySetInnerHTML={{ __html: safe }}
+                          />
+                        );
+                      }
+                      return <p className="text-sm whitespace-pre-wrap leading-relaxed">{content}</p>;
+                    })()}
+                  </div>
+                  {/* Navigation */}
+                  {emailMessages.length > 1 && selectedEmail && (
+                    <div className="flex items-center justify-between pt-2 border-t">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={emailMessages.indexOf(selectedEmail) <= 0}
+                        onClick={() => {
+                          const idx = emailMessages.indexOf(selectedEmail);
+                          if (idx > 0) setSelectedEmail(emailMessages[idx - 1]);
+                        }}
+                      >
+                        <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Anterior
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        {emailMessages.indexOf(selectedEmail) + 1} de {emailMessages.length}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={emailMessages.indexOf(selectedEmail) >= emailMessages.length - 1}
+                        onClick={() => {
+                          const idx = emailMessages.indexOf(selectedEmail);
+                          if (idx < emailMessages.length - 1) setSelectedEmail(emailMessages[idx + 1]);
+                        }}
+                      >
+                        Seguinte <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                      </Button>
+                    </div>
+                  )}
+                </DialogContent>
+              </Dialog>
 
               <hr className="border-border" />
 
