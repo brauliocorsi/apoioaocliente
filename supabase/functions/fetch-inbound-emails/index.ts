@@ -223,10 +223,8 @@ function extractEmail(from: string): string {
   return match ? match[1] : from.replace(/[<>]/g, "").trim();
 }
 
-function decodeQuotedPrintable(str: string): string {
-  // Remove soft line breaks
+function decodeQuotedPrintable(str: string, charset = "utf-8"): string {
   const input = str.replace(/=\r?\n/g, "");
-  // Collect bytes: ASCII chars as-is, =XX as byte values
   const byteChunks: number[] = [];
   let i = 0;
   while (i < input.length) {
@@ -239,17 +237,45 @@ function decodeQuotedPrintable(str: string): string {
     }
   }
   try {
-    return new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(byteChunks));
+    // Map common charset names to TextDecoder labels
+    const decoderCharset = normalizeCharset(charset);
+    return new TextDecoder(decoderCharset, { fatal: false }).decode(new Uint8Array(byteChunks));
   } catch {
-    return input.replace(/=([0-9A-Fa-f]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+    // Fallback: try latin1 then raw
+    try {
+      return new TextDecoder("iso-8859-1", { fatal: false }).decode(new Uint8Array(byteChunks));
+    } catch {
+      return input.replace(/=([0-9A-Fa-f]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+    }
   }
 }
 
-function decodeBase64(str: string): string {
+function normalizeCharset(charset: string): string {
+  const c = charset.toLowerCase().replace(/[^a-z0-9-]/g, "");
+  const map: Record<string, string> = {
+    "iso88591": "iso-8859-1",
+    "iso885915": "iso-8859-15",
+    "latin1": "iso-8859-1",
+    "windows1252": "windows-1252",
+    "cp1252": "windows-1252",
+    "utf8": "utf-8",
+    "usascii": "utf-8",
+    "ascii": "utf-8",
+  };
+  return map[c] || charset;
+}
+
+function extractCharset(contentTypeHeader: string): string {
+  const match = contentTypeHeader.match(/charset="?([^"\s;]+)"?/i);
+  return match ? match[1].trim() : "utf-8";
+}
+
+function decodeBase64(str: string, charset = "utf-8"): string {
   try {
     const cleaned = str.replace(/\r?\n/g, "").trim();
     const bytes = Uint8Array.from(atob(cleaned), c => c.charCodeAt(0));
-    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    const decoderCharset = normalizeCharset(charset);
+    return new TextDecoder(decoderCharset, { fatal: false }).decode(bytes);
   } catch {
     return str;
   }
@@ -299,10 +325,12 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
     const parts = raw.split(new RegExp(`--${escapedBoundary}`));
 
     for (const part of parts) {
-      const contentTypeMatch = part.match(/Content-Type:\s*([^;\r\n]+)/i);
+      const contentTypeMatch = part.match(/Content-Type:\s*([^\r\n]+)/i);
       if (!contentTypeMatch) continue;
 
-      const contentType = contentTypeMatch[1].trim().toLowerCase();
+      const fullContentType = contentTypeMatch[1].trim();
+      const contentType = fullContentType.split(";")[0].trim().toLowerCase();
+      const charset = extractCharset(fullContentType);
       const transferEncodingMatch = part.match(/Content-Transfer-Encoding:\s*(\S+)/i);
       const transferEncoding = transferEncodingMatch ? transferEncodingMatch[1].trim().toLowerCase() : "";
 
@@ -340,15 +368,21 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
           attachData = new TextEncoder().encode(partBody);
         }
         if (attachData.length <= 5 * 1024 * 1024) {
-          result.attachments.push({ filename, contentType: contentTypeMatch[1].trim(), data: attachData });
+          result.attachments.push({ filename, contentType: fullContentType.split(";")[0].trim(), data: attachData });
         }
         continue;
       }
 
       if (transferEncoding === "quoted-printable") {
-        partBody = decodeQuotedPrintable(partBody);
+        partBody = decodeQuotedPrintable(partBody, charset);
       } else if (transferEncoding === "base64") {
-        partBody = decodeBase64(partBody);
+        partBody = decodeBase64(partBody, charset);
+      } else if (charset && charset.toLowerCase() !== "utf-8" && charset.toLowerCase() !== "us-ascii") {
+        // Raw body with non-UTF-8 charset — re-decode
+        try {
+          const bytes = new Uint8Array([...partBody].map(c => c.charCodeAt(0)));
+          partBody = new TextDecoder(normalizeCharset(charset), { fatal: false }).decode(bytes);
+        } catch { /* keep as-is */ }
       }
 
       if (contentType.includes("text/plain") && !result.bodyText) {
@@ -369,10 +403,18 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
     body = body.replace(/\)\r?\n\s*A\d{4}\s+OK.*$/s, "").trim();
     body = body.replace(/\)\s*$/s, "").trim();
 
+    const contentTypeFullMatch = headerSection.match(/Content-Type:\s*([^\r\n]+)/i);
+    const singleCharset = contentTypeFullMatch ? extractCharset(contentTypeFullMatch[1]) : "utf-8";
+
     if (transferEncoding === "quoted-printable") {
-      body = decodeQuotedPrintable(body);
+      body = decodeQuotedPrintable(body, singleCharset);
     } else if (transferEncoding === "base64") {
-      body = decodeBase64(body);
+      body = decodeBase64(body, singleCharset);
+    } else if (singleCharset && singleCharset.toLowerCase() !== "utf-8" && singleCharset.toLowerCase() !== "us-ascii") {
+      try {
+        const bytes = new Uint8Array([...body].map(c => c.charCodeAt(0)));
+        body = new TextDecoder(normalizeCharset(singleCharset), { fatal: false }).decode(bytes);
+      } catch { /* keep as-is */ }
     }
 
     const contentTypeMatch = headerSection.match(/Content-Type:\s*([^;\r\n]+)/i);
