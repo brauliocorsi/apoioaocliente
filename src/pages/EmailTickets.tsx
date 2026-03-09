@@ -211,7 +211,7 @@ export default function EmailTickets() {
       if (data?.success) {
         toast({ title: "Ticket criado", description: `Ticket criado a partir do email de ${pe.from_name || pe.from_address}` });
         setSelectedPending(null);
-        await Promise.all([fetchEmailTickets(), fetchPendingEmails()]);
+        await Promise.all([fetchEmailTickets(), fetchPendingEmails(), fetchProcessedEmails()]);
         if (data.ticket_id) navigate(`/email-tickets/${data.ticket_id}`);
       } else {
         toast({ title: "Erro", description: data?.message || "Erro desconhecido", variant: "destructive" });
