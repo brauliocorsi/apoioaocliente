@@ -1,0 +1,1 @@
+ALTER TABLE public.tickets ADD COLUMN email_received_at timestamp with time zone;
