@@ -708,7 +708,7 @@ export default function TicketDetail() {
           <Card>
             <CardHeader><CardTitle className="text-sm">Descrição</CardTitle></CardHeader>
             <CardContent>
-              <p className="text-sm whitespace-pre-wrap">{ticket.description || "Sem descrição"}</p>
+              <RichContent content={ticket.description || "Sem descrição"} />
             </CardContent>
           </Card>
 
