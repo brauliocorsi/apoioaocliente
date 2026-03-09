@@ -237,7 +237,55 @@ export default function SmtpSettingsTab() {
         </CardContent>
       </Card>
 
-      {/* SMTP Section */}
+      {/* Resend (Opcional) */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Send className="h-4 w-4" />
+                Resend (Opcional)
+              </CardTitle>
+              <CardDescription>Ativar o envio de emails pela API do Resend em vez do SMTP direto. Melhora a entregabilidade.</CardDescription>
+            </div>
+            {resend.resend_enabled === "true" ? (
+              <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Ativo</Badge>
+            ) : (
+              <Badge variant="secondary">Inativo</Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
+            <div>
+              <p className="text-sm font-medium">Enviar emails via Resend</p>
+              <p className="text-xs text-muted-foreground">Quando ativo, todos os emails saem pela API do Resend (requer API Key configurada)</p>
+            </div>
+            <Switch
+              checked={resend.resend_enabled === "true"}
+              onCheckedChange={(checked) => setResend((c) => ({ ...c, resend_enabled: checked ? "true" : "false" }))}
+            />
+          </div>
+          {resend.resend_enabled === "true" && (
+            <div className="space-y-2">
+              <Label htmlFor="resend_from_email">Email Remetente (Resend)</Label>
+              <Input
+                id="resend_from_email"
+                type="email"
+                placeholder="noreply@upmoveis.pt"
+                value={resend.resend_from_email}
+                onChange={(e) => setResend((c) => ({ ...c, resend_from_email: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">Deve ser um email verificado no Resend (domínio configurado no painel Resend)</p>
+            </div>
+          )}
+          <Button onClick={handleSaveResend} disabled={savingResend} size="sm">
+            {savingResend ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+            Guardar Resend
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
