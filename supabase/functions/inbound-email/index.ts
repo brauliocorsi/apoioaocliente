@@ -67,6 +67,7 @@ Deno.serve(async (req) => {
         priority: "P2",
         status: "novo",
         created_by: "00000000-0000-0000-0000-000000000000",
+        email_received_at: new Date().toISOString(),
       })
       .select("id, ticket_number")
       .single();
