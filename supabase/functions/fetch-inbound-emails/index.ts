@@ -513,18 +513,26 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           continue;
         }
 
-        // Duplicate check by message_id
-        if (msg.messageId?.trim()) {
+        // Generate a unique identifier for dedup
+        const bodySnippet = msg.bodyText || msg.bodyHtml || "";
+        const emailFingerprint = msg.messageId?.trim() || await generateFingerprint(clientEmail, msg.subject, bodySnippet);
+
+        // Duplicate check: search email_threads, pending_emails, AND ticket descriptions
+        if (emailFingerprint) {
+          // Check email_threads (any last_message_id match)
           const { data: dupThread } = await adminClient
             .from("email_threads")
             .select("id")
-            .eq("last_message_id", msg.messageId.trim())
+            .eq("last_message_id", emailFingerprint)
             .limit(1);
+
+          // Check pending_emails (message_id or fingerprint)
           const { data: dupPending } = await adminClient
             .from("pending_emails")
             .select("id")
-            .eq("message_id", msg.messageId.trim())
+            .eq("message_id", emailFingerprint)
             .limit(1);
+
           if ((dupThread && dupThread.length > 0) || (dupPending && dupPending.length > 0)) {
             skipped++;
             await imap.markAsSeen(seqNum);
