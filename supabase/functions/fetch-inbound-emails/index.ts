@@ -128,6 +128,13 @@ class ImapClient {
     return match[1].trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
   }
 
+  async searchAll(): Promise<number[]> {
+    const response = await this.command("SEARCH ALL");
+    const match = response.match(/\* SEARCH([\d\s]*)/);
+    if (!match || !match[1].trim()) return [];
+    return match[1].trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
+  }
+
   async fetchMessage(seqNum: number): Promise<{ from: string; subject: string; body: string; messageId: string }> {
     const response = await this.command(`FETCH ${seqNum} (BODY[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID)] BODY[TEXT])`);
 
@@ -200,11 +207,15 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Check if this is a test-only request
+    // Check request params
     let testOnly = false;
+    let fetchRecent = false;
+    let maxEmails = 20;
     try {
       const body = await req.json();
       testOnly = body?.test_only === true;
+      fetchRecent = body?.fetch_recent === true;
+      if (body?.max_emails) maxEmails = Math.min(Number(body.max_emails), 50);
     } catch { /* no body */ }
 
     const imapCfg = await getImapConfig(adminClient);
@@ -244,15 +255,24 @@ Deno.serve(async (req) => {
     // Select folder
     await imap.select(imapCfg.imap_folder);
 
-    // Search unseen
-    const unseenIds = await imap.searchUnseen();
-    console.log(`Found ${unseenIds.length} unseen emails`);
+    // Search emails - UNSEEN for cron, ALL for manual fetch_recent
+    let emailIds: number[];
+    if (fetchRecent) {
+      const allIds = await imap.searchAll();
+      // Take only the most recent N emails (highest sequence numbers)
+      emailIds = allIds.slice(-maxEmails);
+      console.log(`Fetch recent mode: found ${allIds.length} total emails, processing last ${emailIds.length}`);
+    } else {
+      emailIds = await imap.searchUnseen();
+      console.log(`Found ${emailIds.length} unseen emails`);
+    }
 
     let created = 0;
     let updated = 0;
+    let skipped = 0;
 
-    // Process max 20 emails per run to avoid timeouts
-    const toProcess = unseenIds.slice(0, 20);
+    // Process
+    const toProcess = emailIds.slice(0, maxEmails);
 
     for (const seqNum of toProcess) {
       try {
@@ -263,6 +283,30 @@ Deno.serve(async (req) => {
         if (!clientEmail) {
           await imap.markAsSeen(seqNum);
           continue;
+        }
+
+        // Duplicate detection: check if this message-id was already processed
+        if (msg.messageId && msg.messageId.trim()) {
+          const { data: existingLog } = await adminClient
+            .from("email_logs")
+            .select("id")
+            .eq("source", "inbound")
+            .eq("subject", msg.subject.substring(0, 200))
+            .eq("recipient", clientEmail.toLowerCase())
+            .limit(1);
+
+          // Also check email_threads for this exact message-id
+          const { data: existingThread2 } = await adminClient
+            .from("email_threads")
+            .select("id")
+            .eq("last_message_id", msg.messageId.trim())
+            .limit(1);
+
+          if ((existingThread2 && existingThread2.length > 0)) {
+            skipped++;
+            await imap.markAsSeen(seqNum);
+            continue;
+          }
         }
 
         // Check for existing open thread with this email
@@ -390,9 +434,10 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      message: `Processados: ${created} novos tickets, ${updated} atualizados`,
+      message: `Processados: ${created} novos tickets, ${updated} atualizados, ${skipped} ignorados (duplicados)`,
       created,
       updated,
+      skipped,
       total: toProcess.length,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -8,6 +8,7 @@ import { Search, Loader2, Mail, RefreshCw, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
+import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { pt } from "date-fns/locale";
 
@@ -32,6 +33,7 @@ export default function EmailTickets() {
   const [agents, setAgents] = useState<Record<string, string>>({});
   const navigate = useNavigate();
   const { statusLabels } = useTicketStatuses();
+  const { toast } = useToast();
 
   const fetchEmailTickets = async () => {
     // Get ticket IDs that have email threads
@@ -68,14 +70,18 @@ export default function EmailTickets() {
     ]);
   }, []);
 
-  const triggerPoll = async () => {
+  const triggerPoll = async (fetchRecent = false) => {
     setPolling(true);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
-      await supabase.functions.invoke("fetch-inbound-emails", {
+      const { data } = await supabase.functions.invoke("fetch-inbound-emails", {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: { fetch_recent: fetchRecent, max_emails: fetchRecent ? 50 : 20 },
       });
+      if (data?.message) {
+        toast({ title: "Resultado", description: data.message });
+      }
       await fetchEmailTickets();
     } catch (err) {
       console.error("Poll error:", err);
@@ -103,10 +109,16 @@ export default function EmailTickets() {
           </h1>
           <p className="text-muted-foreground">Tickets originados por email — respostas são enviadas como email ao cliente</p>
         </div>
-        <Button variant="outline" onClick={triggerPoll} disabled={polling}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${polling ? "animate-spin" : ""}`} />
-          {polling ? "A verificar..." : "Verificar Emails"}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => triggerPoll(false)} disabled={polling}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${polling ? "animate-spin" : ""}`} />
+            {polling ? "A verificar..." : "Novos Emails"}
+          </Button>
+          <Button variant="secondary" onClick={() => triggerPoll(true)} disabled={polling}>
+            <Mail className="h-4 w-4 mr-2" />
+            Importar Recentes
+          </Button>
+        </div>
       </div>
 
       <div className="relative max-w-md">
