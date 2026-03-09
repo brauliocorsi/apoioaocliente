@@ -412,18 +412,12 @@ export default function TicketDetail() {
         created_at: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, optimisticMsg]);
+      const originalReply = reply.trim();
       setReply("");
       setReplyFiles([]);
       setSendingReply(false);
 
-      await supabase.from("ticket_messages").insert({
-        ticket_id: id,
-        sender_id: user.id,
-        sender_type: "agent",
-        content,
-      });
-
-      // If ticket has an email thread, also send the reply via email
+      // Check if ticket has an email thread — if so, send via edge function (which also inserts the message)
       const { data: emailThread } = await supabase
         .from("email_threads")
         .select("id")
@@ -433,13 +427,38 @@ export default function TicketDetail() {
 
       if (emailThread || ticket?.client_email) {
         try {
-          await supabase.functions.invoke("reply-email-ticket", {
-            body: { ticket_id: id, content: reply.trim() || content },
+          const { error: emailError } = await supabase.functions.invoke("reply-email-ticket", {
+            body: { ticket_id: id, content: originalReply || content },
           });
+          if (emailError) {
+            console.error("Erro ao enviar email:", emailError);
+            toast({ title: "Erro ao enviar email", description: "A resposta não foi enviada por email.", variant: "destructive" });
+            // Fallback: insert message locally since edge function failed
+            await supabase.from("ticket_messages").insert({
+              ticket_id: id,
+              sender_id: user.id,
+              sender_type: "agent",
+              content,
+            });
+          }
         } catch (emailErr) {
           console.error("Erro ao enviar email de resposta:", emailErr);
           toast({ title: "Mensagem guardada mas email não enviado", description: "A resposta foi registada mas houve um erro ao enviar o email.", variant: "destructive" });
+          await supabase.from("ticket_messages").insert({
+            ticket_id: id,
+            sender_id: user.id,
+            sender_type: "agent",
+            content,
+          });
         }
+      } else {
+        // No email thread — just insert message normally
+        await supabase.from("ticket_messages").insert({
+          ticket_id: id,
+          sender_id: user.id,
+          sender_type: "agent",
+          content,
+        });
       }
 
       if (uploadedCount > 0) fetchTicket();
