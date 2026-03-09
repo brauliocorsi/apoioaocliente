@@ -130,6 +130,7 @@ class ImapClient {
     bodyText: string;
     bodyHtml: string;
     messageId: string;
+    date: string | null;
     attachments: { filename: string; contentType: string; data: Uint8Array }[];
   }> {
     const response = await this.command(`FETCH ${seqNum} BODY[]`);
@@ -146,6 +147,7 @@ class ImapClient {
     let from = "";
     let subject = "";
     let messageId = "";
+    let date: string | null = null;
 
     const fromMatch = rawMessage.match(/^From:\s*(.+?)$/im);
     if (fromMatch) from = fromMatch[1].trim();
@@ -157,6 +159,17 @@ class ImapClient {
     const msgIdMatch = rawMessage.match(/^Message-ID:\s*(.+?)$/im);
     if (msgIdMatch) messageId = msgIdMatch[1].trim();
 
+    // Extract the Date header for exact email timestamp
+    const dateMatch = rawMessage.match(/^Date:\s*(.+?)$/im);
+    if (dateMatch) {
+      try {
+        const parsed = new Date(dateMatch[1].trim());
+        if (!isNaN(parsed.getTime())) {
+          date = parsed.toISOString();
+        }
+      } catch { /* keep null */ }
+    }
+
     const parsed = parseMimeMessage(rawMessage);
 
     return {
@@ -165,6 +178,7 @@ class ImapClient {
       bodyText: parsed.bodyText,
       bodyHtml: parsed.bodyHtml,
       messageId,
+      date,
       attachments: parsed.attachments,
     };
   }
