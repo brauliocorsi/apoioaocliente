@@ -72,6 +72,7 @@ export default function EmailTickets() {
   const { statusLabels } = useTicketStatuses();
   const { toast } = useToast();
   const { user } = useAuth();
+  const [pollProgress, setPollProgress] = useState("");
 
   const fetchEmailTickets = async () => {
     const { data: threads } = await supabase
