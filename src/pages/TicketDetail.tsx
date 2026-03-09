@@ -114,6 +114,7 @@ export default function TicketDetail() {
   const [editingSubject, setEditingSubject] = useState(false);
   const [subjectDraft, setSubjectDraft] = useState("");
   const [hasEmailThread, setHasEmailThread] = useState(false);
+  const [messagesFullscreen, setMessagesFullscreen] = useState(false);
 
   const fetchTicket = async () => {
     if (!id) return;
