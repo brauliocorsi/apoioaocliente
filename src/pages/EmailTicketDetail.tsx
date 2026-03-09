@@ -227,7 +227,7 @@ export default function EmailTicketDetail() {
             </Badge>
             <span className="text-sm font-mono text-muted-foreground">#{ticket.ticket_number}</span>
           </div>
-          <h1 className="text-xl font-bold tracking-tight truncate mt-0.5">{ticket.subject}</h1>
+          <h1 className="text-xl font-bold tracking-tight truncate mt-0.5">{ticket.subject?.replace(/^(Re:\s*)*(\[Ticket\s*#\d+\]\s*)*/gi, "").trim() || ticket.subject}</h1>
           <p className="text-sm text-muted-foreground">
             {ticket.client_name}
             {ticket.client_email ? ` · ${ticket.client_email}` : ""}
