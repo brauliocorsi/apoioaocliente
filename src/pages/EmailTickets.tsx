@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Loader2, Mail, RefreshCw, ArrowRight, Check, X, Ban, Eye, Clock, Shield } from "lucide-react";
+import { Search, Loader2, Mail, RefreshCw, ArrowRight, Check, X, Ban, Eye, Clock, Shield, RotateCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
@@ -72,6 +72,7 @@ export default function EmailTickets() {
   const { statusLabels } = useTicketStatuses();
   const { toast } = useToast();
   const { user } = useAuth();
+  const [pollProgress, setPollProgress] = useState("");
 
   const fetchEmailTickets = async () => {
     const { data: threads } = await supabase
@@ -123,24 +124,53 @@ export default function EmailTickets() {
 
   const triggerPoll = async (fetchRecent = false) => {
     setPolling(true);
+    setPollProgress("");
+    let totalProcessed = 0;
+    let round = 0;
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
       const userId = sessionData?.session?.user?.id;
-      const { data } = await supabase.functions.invoke("fetch-inbound-emails", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: { fetch_recent: fetchRecent, max_emails: fetchRecent ? 50 : 20, agent_id: userId },
-      });
-      if (data?.message) {
-        toast({ title: "Resultado", description: data.message });
+
+      // Loop until no remaining emails
+      while (true) {
+        round++;
+        setPollProgress(`A importar... (lote ${round}, ${totalProcessed} processados)`);
+
+        const { data } = await supabase.functions.invoke("fetch-inbound-emails", {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: { fetch_recent: fetchRecent, max_emails: fetchRecent ? 50 : 20, agent_id: userId },
+        });
+
+        if (data?.error) {
+          toast({ title: "Erro", description: data.error, variant: "destructive" });
+          break;
+        }
+
+        const batchTotal = data?.total || 0;
+        totalProcessed += batchTotal;
+        const remaining = data?.remaining || 0;
+
+        // Refresh lists after each batch
+        await Promise.all([fetchEmailTickets(), fetchPendingEmails()]);
+
+        if (remaining <= 0 || batchTotal === 0) {
+          // Done - show final summary
+          toast({
+            title: "Importação concluída",
+            description: data?.message || `${totalProcessed} emails processados no total.`,
+          });
+          break;
+        }
+
+        // Small delay between batches
+        await new Promise(r => setTimeout(r, 500));
       }
-      if (data?.error) {
-        toast({ title: "Erro", description: data.error, variant: "destructive" });
-      }
-      await Promise.all([fetchEmailTickets(), fetchPendingEmails()]);
     } catch (err) {
       console.error("Poll error:", err);
+      toast({ title: "Erro", description: (err as Error).message, variant: "destructive" });
     }
+    setPollProgress("");
     setPolling(false);
   };
 
@@ -246,11 +276,11 @@ export default function EmailTickets() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => triggerPoll(false)} disabled={polling}>
             <RefreshCw className={`h-4 w-4 mr-2 ${polling ? "animate-spin" : ""}`} />
-            {polling ? "A verificar..." : "Novos Emails"}
+            {polling ? (pollProgress || "A verificar...") : "Novos Emails"}
           </Button>
           <Button variant="secondary" onClick={() => triggerPoll(true)} disabled={polling}>
             <Mail className="h-4 w-4 mr-2" />
-            Importar Recentes
+            {polling ? (pollProgress || "A importar...") : "Importar Todos"}
           </Button>
         </div>
       </div>
