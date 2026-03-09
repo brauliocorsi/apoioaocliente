@@ -73,7 +73,7 @@ function sanitizeForDisplay(html: string): string {
 
 export default function EmailTickets() {
   const [tickets, setTickets] = useState<EmailTicketRow[]>([]);
-  const [pendingEmails, setPendingEmails] = useState<PendingEmail[]>([]);
+  const [processedEmails, setProcessedEmails] = useState<ProcessedEmail[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [polling, setPolling] = useState(false);
