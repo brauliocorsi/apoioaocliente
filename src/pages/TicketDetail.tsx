@@ -131,6 +131,11 @@ export default function TicketDetail() {
     setTicket(t);
     setEvents(evts || []);
     setMessages(msgs || []);
+    // Check for email thread
+    if (t) {
+      const { data: et } = await supabase.from("email_threads").select("id").eq("ticket_id", id).limit(1).maybeSingle();
+      setHasEmailThread(!!(et || t.client_email));
+    }
     setTags((tTags || []).map((r: any) => r.tag_id));
     setClauses((tClauses || []).map((r: any) => r.clause_id));
     setAttachments((tAttachments || []).map((a: any) => ({
