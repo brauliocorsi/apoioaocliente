@@ -15,6 +15,31 @@ import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { formatDistanceToNow, format } from "date-fns";
 import { pt } from "date-fns/locale";
 
+
+// Decode quoted-printable artifacts that may remain in stored text
+function cleanEmailText(text: string): string {
+  if (!text) return text;
+  // Remove MIME headers that leaked into body
+  let cleaned = text.replace(/^BODY\[TEXT\].*?Content-Transfer-Encoding:\s*\S+\s*/is, "");
+  cleaned = cleaned.replace(/Content-Type:\s*[^\r\n]+[\r\n]*/gi, "");
+  cleaned = cleaned.replace(/Content-Transfer-Encoding:\s*[^\r\n]+[\r\n]*/gi, "");
+  // Decode =XX quoted-printable sequences
+  cleaned = cleaned.replace(/=\r?\n/g, "");
+  cleaned = cleaned.replace(/=([0-9A-Fa-f]{2})/g, (_match: string, hex: string) => {
+    return String.fromCharCode(parseInt(hex, 16));
+  });
+  // Try UTF-8 decode
+  try {
+    const bytes = new Uint8Array([...cleaned].map(c => c.charCodeAt(0)));
+    cleaned = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch { /* keep as-is */ }
+  // Remove MIME boundary artifacts
+  cleaned = cleaned.replace(/--[0-9a-f]{20,}--?/g, "");
+  // Clean excess whitespace
+  cleaned = cleaned.replace(/\s+/g, " ").trim();
+  return cleaned;
+}
+
 export default function EmailTicketDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
