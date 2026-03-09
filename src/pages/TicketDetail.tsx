@@ -857,38 +857,74 @@ export default function TicketDetail() {
 
           {/* Internal Timeline */}
           <Card>
-            <CardHeader><CardTitle className="text-sm">Timeline (Notas Internas)</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-sm">Timeline (Notas Internas & Emails)</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-          {events.map((ev) => {
-                const evSender = ev.user_id ? senderProfiles[ev.user_id] : null;
-                const evInitials = evSender?.full_name
-                  ? evSender.full_name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()
-                  : "?";
-                return (
-                  <div key={ev.id} className="flex gap-3 text-sm">
-                    <Avatar className="h-6 w-6 shrink-0 mt-0.5">
-                      <AvatarImage src={evSender?.avatar_url || undefined} />
-                      <AvatarFallback className="text-[9px] font-semibold bg-muted text-muted-foreground">
-                        {evInitials}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
+          {(() => {
+            // Merge events + messages into unified timeline
+            const timelineItems = [
+              ...events.map((ev) => ({ ...ev, _type: 'event' as const })),
+              ...messages.map((msg) => ({
+                id: msg.id,
+                created_at: msg.created_at,
+                content: msg.content,
+                user_id: msg.sender_id,
+                event_type: msg.sender_type === 'client' ? 'email_in' : 'email_out',
+                _type: 'message' as const,
+                sender_type: msg.sender_type,
+              })),
+            ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+            return timelineItems.map((ev) => {
+              const evSender = ev.user_id ? senderProfiles[ev.user_id] : null;
+              const evInitials = evSender?.full_name
+                ? evSender.full_name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()
+                : "?";
+              const isEmail = ev._type === 'message';
+              const isInbound = isEmail && ev.sender_type === 'client';
+
+              return (
+                <div key={ev.id} className={`flex gap-3 text-sm ${isEmail ? 'pl-1' : ''}`}>
+                  <Avatar className={`h-6 w-6 shrink-0 mt-0.5 ${isEmail ? (isInbound ? 'ring-1 ring-blue-400' : 'ring-1 ring-primary') : ''}`}>
+                    <AvatarImage src={evSender?.avatar_url || undefined} />
+                    <AvatarFallback className={`text-[9px] font-semibold ${
+                      isInbound ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                      isEmail ? 'bg-primary/20 text-primary' :
+                      'bg-muted text-muted-foreground'
+                    }`}>
+                      {isEmail ? (isInbound ? '📩' : '📤') : evInitials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
                       {evSender?.full_name && (
                         <p className="text-xs font-medium text-foreground">{evSender.full_name}</p>
                       )}
+                      {isEmail && (
+                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 ${isInbound ? 'border-blue-300 text-blue-600 dark:border-blue-700 dark:text-blue-400' : 'border-primary/30 text-primary'}`}>
+                          {isInbound ? 'Email recebido' : 'Email enviado'}
+                        </Badge>
+                      )}
+                    </div>
+                    {isEmail ? (
+                      <p className="text-xs text-muted-foreground truncate max-w-[400px]">
+                        {(ev.content || '').replace(/<[^>]+>/g, '').substring(0, 100)}
+                      </p>
+                    ) : (
                       <p dangerouslySetInnerHTML={{
                         __html: (ev.content || "").replace(
                           /@([\w\s]+?)(?=\s@|\s*$|[.,!?])/g,
                           '<span class="font-semibold text-primary">@$1</span>'
                         )
                       }} />
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(ev.created_at).toLocaleString("pt-PT")}
-                      </p>
-                    </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(ev.created_at).toLocaleString("pt-PT", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </p>
                   </div>
-                );
-              })}
+                </div>
+              );
+            });
+          })()}
               <div className="pt-2 border-t space-y-2">
                 <div className="flex items-center gap-2">
                   <MacroSelector ticket={ticket} onSelect={(content) => setNote(content)} />
