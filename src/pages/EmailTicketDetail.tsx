@@ -50,19 +50,35 @@ function cleanEmailText(text: string): string {
   return cleaned;
 }
 
+function isEmptyContent(text: string): boolean {
+  if (!text) return true;
+  const stripped = text.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").replace(/\s+/g, "").trim();
+  return stripped.length === 0;
+}
+
 function EmailBody({ content }: { content: string }) {
-  if (!content) return null;
+  if (!content || isEmptyContent(content)) {
+    return (
+      <p className="text-sm italic text-muted-foreground">
+        (Mensagem sem conteúdo de texto)
+      </p>
+    );
+  }
 
   if (isHtmlContent(content)) {
-    // Clean up email cruft: remove quoted replies, signatures, excessive whitespace
     let cleaned = sanitizeForDisplay(content);
-    // Remove common email client quote markers
     cleaned = cleaned.replace(/<blockquote[^>]*>[\s\S]*?<\/blockquote>/gi, "");
-    // Remove "On ... wrote:" patterns
     cleaned = cleaned.replace(/(<br\s*\/?>|\n)\s*Em\s+.*?escreveu:[\s\S]*$/i, "");
     cleaned = cleaned.replace(/(<br\s*\/?>|\n)\s*On\s+.*?wrote:[\s\S]*$/i, "");
-    // Remove excessive <br> sequences
     cleaned = cleaned.replace(/(<br\s*\/?>[\s]*){3,}/gi, "<br><br>");
+
+    if (isEmptyContent(cleaned)) {
+      return (
+        <p className="text-sm italic text-muted-foreground">
+          (Mensagem sem conteúdo de texto)
+        </p>
+      );
+    }
 
     return (
       <div
@@ -76,7 +92,6 @@ function EmailBody({ content }: { content: string }) {
   }
 
   const cleaned = cleanEmailText(content);
-  // Remove quoted replies in plain text (lines starting with >)
   const lines = cleaned.split("\n");
   const filtered = [];
   for (const line of lines) {
@@ -86,7 +101,16 @@ function EmailBody({ content }: { content: string }) {
     filtered.push(line);
   }
 
-  return <p className="text-sm whitespace-pre-wrap leading-relaxed">{filtered.join("\n").trim()}</p>;
+  const result = filtered.join("\n").trim();
+  if (!result) {
+    return (
+      <p className="text-sm italic text-muted-foreground">
+        (Mensagem sem conteúdo de texto)
+      </p>
+    );
+  }
+
+  return <p className="text-sm whitespace-pre-wrap leading-relaxed">{result}</p>;
 }
 
 function getFileIcon(fileType: string) {
