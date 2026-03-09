@@ -781,6 +781,90 @@ Deno.serve(async (req) => {
 
       const description = pe.body_html || pe.body_text || "(email sem conteúdo)";
 
+      // ── Check if there's already an OPEN ticket with an email thread for this sender ──
+      let ticketId: string | null = null;
+      const { data: existingThread } = await adminClient
+        .from("email_threads")
+        .select("ticket_id")
+        .eq("email_address", pe.from_address.toLowerCase())
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (existingThread) {
+        const { data: existingTicket } = await adminClient
+          .from("tickets")
+          .select("id, status")
+          .eq("id", existingThread.ticket_id)
+          .single();
+
+        if (existingTicket) {
+          const { data: statusData } = await adminClient
+            .from("ticket_statuses")
+            .select("is_closed")
+            .eq("id", existingTicket.status)
+            .single();
+
+          if (!statusData?.is_closed) {
+            ticketId = existingTicket.id;
+          }
+        }
+      }
+
+      if (ticketId) {
+        // ── Append message to existing ticket instead of creating a duplicate ──
+        await adminClient.from("ticket_messages").insert({
+          ticket_id: ticketId,
+          sender_id: "00000000-0000-0000-0000-000000000000",
+          sender_type: "client",
+          content: description,
+        });
+
+        await adminClient.from("email_threads")
+          .update({ last_message_id: pe.message_id })
+          .eq("ticket_id", ticketId);
+
+        // Move attachments to existing ticket
+        const attMeta = (pe.attachments_meta as any[]) || [];
+        for (const att of attMeta) {
+          try {
+            const { data: fileData } = await adminClient.storage.from("email-assets").download(att.path);
+            if (fileData) {
+              const bytes = new Uint8Array(await fileData.arrayBuffer());
+              await uploadAttachment(adminClient, ticketId, {
+                filename: att.filename, contentType: att.contentType, data: bytes,
+              }, agentId);
+            }
+            await adminClient.storage.from("email-assets").remove([att.path]);
+          } catch (err) {
+            console.error(`Move attachment error: ${(err as Error).message}`);
+          }
+        }
+
+        // Mark as approved, linking to existing ticket
+        await adminClient.from("pending_emails").update({
+          status: "approved",
+          reviewed_by: agentId,
+          reviewed_at: new Date().toISOString(),
+          ticket_id: ticketId,
+        }).eq("id", pendingId);
+
+        // Auto-reject remaining duplicates from same sender
+        await adminClient.from("pending_emails").update({
+          status: "rejected",
+          reviewed_by: agentId,
+          reviewed_at: new Date().toISOString(),
+          rejection_reason: "Duplicado — mensagem adicionada ao ticket existente",
+        }).eq("from_address", pe.from_address)
+          .eq("status", "pending")
+          .neq("id", pendingId);
+
+        return new Response(JSON.stringify({ success: true, message: "Mensagem adicionada ao ticket existente", ticket_id: ticketId }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // ── No existing open ticket — create a new one ──
       const { data: newTicket, error } = await adminClient.from("tickets").insert({
         client_name: pe.from_name || pe.from_address,
         client_email: pe.from_address,
@@ -811,12 +895,9 @@ Deno.serve(async (req) => {
           if (fileData) {
             const bytes = new Uint8Array(await fileData.arrayBuffer());
             await uploadAttachment(adminClient, newTicket.id, {
-              filename: att.filename,
-              contentType: att.contentType,
-              data: bytes,
+              filename: att.filename, contentType: att.contentType, data: bytes,
             }, agentId);
           }
-          // Clean up temp file
           await adminClient.storage.from("email-assets").remove([att.path]);
         } catch (err) {
           console.error(`Move attachment error: ${(err as Error).message}`);
@@ -831,14 +912,13 @@ Deno.serve(async (req) => {
         ticket_id: newTicket.id,
       }).eq("id", pendingId);
 
-      // Also auto-reject other duplicate pending emails from same address+subject
+      // Also auto-reject other duplicate pending emails from same address (any subject)
       await adminClient.from("pending_emails").update({
         status: "rejected",
         reviewed_by: agentId,
         reviewed_at: new Date().toISOString(),
         rejection_reason: "Duplicado — ticket já criado",
       }).eq("from_address", pe.from_address)
-        .eq("subject", pe.subject)
         .eq("status", "pending")
         .neq("id", pendingId);
 
