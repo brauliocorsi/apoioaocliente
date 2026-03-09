@@ -44,6 +44,19 @@ type PendingEmail = {
   attachments_meta: any;
 };
 
+type ProcessedEmail = {
+  id: string;
+  from_address: string;
+  from_name: string | null;
+  subject: string;
+  status: string;
+  rejection_reason: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  ticket_id: string | null;
+};
+
 function isHtmlContent(text: string): boolean {
   if (!text) return false;
   return /<\w+[^>]*>/.test(text) && (text.includes("</") || text.includes("/>"));
