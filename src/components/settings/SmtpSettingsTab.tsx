@@ -51,6 +51,11 @@ const defaultImap: ImapConfig = {
   imap_enabled: "false",
 };
 
+const defaultResend: ResendConfig = {
+  resend_enabled: "false",
+  resend_from_email: "noreply@upmoveis.pt",
+};
+
 export default function SmtpSettingsTab() {
   const [smtp, setSmtp] = useState<SmtpConfig>(defaultSmtp);
   const [imap, setImap] = useState<ImapConfig>(defaultImap);
