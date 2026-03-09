@@ -366,11 +366,13 @@ Deno.serve(async (req) => {
     let testOnly = false;
     let fetchRecent = false;
     let maxEmails = 5;
+    let agentId: string | undefined;
     try {
       const body = await req.json();
       testOnly = body?.test_only === true;
       fetchRecent = body?.fetch_recent === true;
       if (body?.max_emails) maxEmails = Math.min(Number(body.max_emails), 10);
+      if (body?.agent_id) agentId = body.agent_id;
     } catch { /* no body */ }
 
     // Test-only: quick connection check
