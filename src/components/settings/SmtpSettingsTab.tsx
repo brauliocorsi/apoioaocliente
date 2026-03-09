@@ -199,6 +199,19 @@ export default function SmtpSettingsTab() {
     toast({ title: checked ? "Notificação de mudança de estado activada" : "Notificação de mudança de estado desactivada" });
   };
 
+  const handleSaveResend = async () => {
+    setSavingResend(true);
+    try {
+      const updates = Object.entries(resend).map(([key, value]) =>
+        supabase.from("system_settings").upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" })
+      );
+      await Promise.all(updates);
+      toast({ title: resend.resend_enabled === "true" ? "Resend ativado com sucesso" : "Resend desativado" });
+    } catch {
+      toast({ title: "Erro ao guardar", variant: "destructive" });
+    }
+    setSavingResend(false);
+  };
   return (
     <div className="space-y-6 max-w-2xl">
       {/* Email Notifications */}
