@@ -28,6 +28,11 @@ interface ImapConfig {
   imap_enabled: string;
 }
 
+interface ResendConfig {
+  resend_enabled: string;
+  resend_from_email: string;
+}
+
 const defaultSmtp: SmtpConfig = {
   smtp_host: "",
   smtp_port: "465",
@@ -46,7 +51,14 @@ const defaultImap: ImapConfig = {
   imap_enabled: "false",
 };
 
+const defaultResend: ResendConfig = {
+  resend_enabled: "false",
+  resend_from_email: "noreply@upmoveis.pt",
+};
+
 export default function SmtpSettingsTab() {
+  const [resend, setResend] = useState<ResendConfig>(defaultResend);
+  const [savingResend, setSavingResend] = useState(false);
   const [smtp, setSmtp] = useState<SmtpConfig>(defaultSmtp);
   const [imap, setImap] = useState<ImapConfig>(defaultImap);
   const [notifyStatusChange, setNotifyStatusChange] = useState(false);
@@ -68,7 +80,7 @@ export default function SmtpSettingsTab() {
 
   const loadConfig = async () => {
     setLoading(true);
-    const allKeys = [...Object.keys(defaultSmtp), ...Object.keys(defaultImap), "notify_status_change_email"];
+    const allKeys = [...Object.keys(defaultSmtp), ...Object.keys(defaultImap), ...Object.keys(defaultResend), "notify_status_change_email"];
     const { data, error } = await supabase
       .from("system_settings")
       .select("key, value")
@@ -77,6 +89,7 @@ export default function SmtpSettingsTab() {
     if (!error && data) {
       const loadedSmtp = { ...defaultSmtp };
       const loadedImap = { ...defaultImap };
+      const loadedResend = { ...defaultResend };
       data.forEach((row: { key: string; value: string }) => {
         if (row.key in loadedSmtp) {
           (loadedSmtp as Record<string, string>)[row.key] = row.value;
@@ -84,12 +97,16 @@ export default function SmtpSettingsTab() {
         if (row.key in loadedImap) {
           (loadedImap as Record<string, string>)[row.key] = row.value;
         }
+        if (row.key in loadedResend) {
+          (loadedResend as Record<string, string>)[row.key] = row.value;
+        }
         if (row.key === "notify_status_change_email") {
           setNotifyStatusChange(row.value === "true");
         }
       });
       setSmtp(loadedSmtp);
       setImap(loadedImap);
+      setResend(loadedResend);
     }
     setLoading(false);
   };
@@ -182,6 +199,19 @@ export default function SmtpSettingsTab() {
     toast({ title: checked ? "Notificação de mudança de estado activada" : "Notificação de mudança de estado desactivada" });
   };
 
+  const handleSaveResend = async () => {
+    setSavingResend(true);
+    try {
+      const updates = Object.entries(resend).map(([key, value]) =>
+        supabase.from("system_settings").upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" })
+      );
+      await Promise.all(updates);
+      toast({ title: resend.resend_enabled === "true" ? "Resend ativado com sucesso" : "Resend desativado" });
+    } catch {
+      toast({ title: "Erro ao guardar", variant: "destructive" });
+    }
+    setSavingResend(false);
+  };
   return (
     <div className="space-y-6 max-w-2xl">
       {/* Email Notifications */}
@@ -207,7 +237,55 @@ export default function SmtpSettingsTab() {
         </CardContent>
       </Card>
 
-      {/* SMTP Section */}
+      {/* Resend (Opcional) */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Send className="h-4 w-4" />
+                Resend (Opcional)
+              </CardTitle>
+              <CardDescription>Ativar o envio de emails pela API do Resend em vez do SMTP direto. Melhora a entregabilidade.</CardDescription>
+            </div>
+            {resend.resend_enabled === "true" ? (
+              <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Ativo</Badge>
+            ) : (
+              <Badge variant="secondary">Inativo</Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
+            <div>
+              <p className="text-sm font-medium">Enviar emails via Resend</p>
+              <p className="text-xs text-muted-foreground">Quando ativo, todos os emails saem pela API do Resend (requer API Key configurada)</p>
+            </div>
+            <Switch
+              checked={resend.resend_enabled === "true"}
+              onCheckedChange={(checked) => setResend((c) => ({ ...c, resend_enabled: checked ? "true" : "false" }))}
+            />
+          </div>
+          {resend.resend_enabled === "true" && (
+            <div className="space-y-2">
+              <Label htmlFor="resend_from_email">Email Remetente (Resend)</Label>
+              <Input
+                id="resend_from_email"
+                type="email"
+                placeholder="noreply@upmoveis.pt"
+                value={resend.resend_from_email}
+                onChange={(e) => setResend((c) => ({ ...c, resend_from_email: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">Deve ser um email verificado no Resend (domínio configurado no painel Resend)</p>
+            </div>
+          )}
+          <Button onClick={handleSaveResend} disabled={savingResend} size="sm">
+            {savingResend ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+            Guardar Resend
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">

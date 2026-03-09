@@ -13,11 +13,11 @@ function generatePassword(length = 12): string {
   return Array.from(array, (b) => chars[b % chars.length]).join("");
 }
 
-async function getSmtpConfig(adminClient: ReturnType<typeof createClient>) {
+async function getEmailConfig(adminClient: ReturnType<typeof createClient>) {
   const { data } = await adminClient
     .from("system_settings")
     .select("key, value")
-    .in("key", ["smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from_name", "smtp_from_email"]);
+    .in("key", ["smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from_name", "smtp_from_email", "resend_enabled", "resend_from_email"]);
 
   const cfg: Record<string, string> = {};
   data?.forEach((s: { key: string; value: string }) => { cfg[s.key] = s.value; });
@@ -38,31 +38,42 @@ function stripHtmlToText(html: string): string {
     .trim();
 }
 
+async function sendViaResend(from: string, to: string, subject: string, text: string) {
+  const apiKey = Deno.env.get("RESEND_API_KEY");
+  if (!apiKey) throw new Error("RESEND_API_KEY não configurada");
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to: [to], subject, text }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Resend error (${res.status}): ${body}`);
+  }
+}
+
 async function sendEmail(cfg: Record<string, string>, to: string, subject: string, html: string) {
-  const port = Number(cfg.smtp_port) || 465;
-  const client = new SMTPClient({
-    connection: {
-      hostname: cfg.smtp_host,
-      port,
-      tls: port === 465,
-      auth: {
-        username: cfg.smtp_user,
-        password: cfg.smtp_pass,
+  const useResend = cfg.resend_enabled === "true";
+  const plainText = stripHtmlToText(html);
+
+  if (useResend) {
+    const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.resend_from_email || cfg.smtp_from_email || "noreply@upmoveis.pt"}>`;
+    await sendViaResend(fromAddr, to, subject, plainText);
+  } else {
+    const port = Number(cfg.smtp_port) || 465;
+    const client = new SMTPClient({
+      connection: {
+        hostname: cfg.smtp_host,
+        port,
+        tls: port === 465,
+        auth: { username: cfg.smtp_user, password: cfg.smtp_pass },
       },
-    },
-  });
+    });
 
-  const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.smtp_from_email || cfg.smtp_user}>`;
-
-  await client.send({
-    from: fromAddr,
-    to,
-    subject,
-    content: stripHtmlToText(html),
-    html,
-  });
-
-  await client.close();
+    const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.smtp_from_email || cfg.smtp_user}>`;
+    await client.send({ from: fromAddr, to, subject, content: plainText, html: plainText });
+    await client.close();
+  }
 }
 
 Deno.serve(async (req) => {
@@ -82,7 +93,6 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Verify caller is agent/supervisor
     const callerClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -96,7 +106,6 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Check caller is agent
     const { data: roleData } = await adminClient
       .from("user_roles")
       .select("role")
@@ -119,7 +128,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check if client already exists
     const { data: existingUsers } = await adminClient.auth.admin.listUsers();
     const existingUser = existingUsers?.users?.find((u) => u.email === email);
 
@@ -127,12 +135,7 @@ Deno.serve(async (req) => {
     let password: string | null = null;
 
     if (existingUser) {
-      const { data: existingClient } = await adminClient
-        .from("client_users")
-        .select("id")
-        .eq("id", existingUser.id)
-        .single();
-
+      const { data: existingClient } = await adminClient.from("client_users").select("id").eq("id", existingUser.id).single();
       if (existingClient) {
         userId = existingUser.id;
         if (resend_welcome) {
@@ -141,60 +144,37 @@ Deno.serve(async (req) => {
         }
       } else {
         userId = existingUser.id;
-        await adminClient.from("client_users").insert({
-          id: userId,
-          email,
-          full_name,
-          phone: phone || null,
-        });
-        await adminClient.from("user_roles").insert({
-          user_id: userId,
-          role: "client",
-        });
+        await adminClient.from("client_users").insert({ id: userId, email, full_name, phone: phone || null });
+        await adminClient.from("user_roles").insert({ user_id: userId, role: "client" });
       }
     } else {
       password = generatePassword();
       const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: { full_name },
+        email, password, email_confirm: true, user_metadata: { full_name },
       });
-
       if (createError) {
         return new Response(JSON.stringify({ error: createError.message }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-
       userId = newUser.user!.id;
-
       await adminClient.from("user_roles").update({ role: "client" }).eq("user_id", userId);
-      await adminClient.from("client_users").insert({
-        id: userId,
-        email,
-        full_name,
-        phone: phone || null,
-      });
+      await adminClient.from("client_users").insert({ id: userId, email, full_name, phone: phone || null });
     }
 
-    // Link ticket to client if provided
     if (ticket_id) {
       await adminClient.from("tickets").update({ client_user_id: userId }).eq("id", ticket_id);
     }
 
-    // Send welcome email with credentials if new account
     if (password) {
-      const { data: template } = await adminClient
-        .from("email_templates")
-        .select("subject, body_html")
-        .eq("id", "welcome")
-        .single();
-
+      const { data: template } = await adminClient.from("email_templates").select("subject, body_html").eq("id", "welcome").single();
       if (template) {
-        const smtpCfg = await getSmtpConfig(adminClient);
-        if (smtpCfg.smtp_host && smtpCfg.smtp_user && smtpCfg.smtp_pass) {
+        const emailCfg = await getEmailConfig(adminClient);
+        const useResend = emailCfg.resend_enabled === "true";
+        const hasSmtp = emailCfg.smtp_host && emailCfg.smtp_user && emailCfg.smtp_pass;
+
+        if (useResend || hasSmtp) {
           const portalUrl = req.headers.get("origin") || "https://portal.exemplo.com";
           const subject = template.subject.replace("{nome_cliente}", full_name);
           const body = template.body_html
@@ -204,30 +184,19 @@ Deno.serve(async (req) => {
             .replace(/{portal_url}/g, `${portalUrl}/portal/login`);
 
           try {
-            await sendEmail(smtpCfg, email, subject, body);
-            console.log("Welcome email sent via SMTP to", email);
+            await sendEmail(emailCfg, email, subject, body);
+            console.log(`Welcome email sent via ${useResend ? "Resend" : "SMTP"} to`, email);
             await adminClient.from("email_logs").insert({
-              recipient: email,
-              subject,
-              status: "sent",
-              source: "create-client-account",
-              ticket_id: ticket_id || null,
-              template_id: "welcome",
+              recipient: email, subject, status: "sent", source: "create-client-account", ticket_id: ticket_id || null, template_id: "welcome",
             });
           } catch (emailErr) {
-            console.error("SMTP send error:", (emailErr as Error).message);
+            console.error("Email send error:", (emailErr as Error).message);
             await adminClient.from("email_logs").insert({
-              recipient: email,
-              subject,
-              status: "failed",
-              error_message: (emailErr as Error).message,
-              source: "create-client-account",
-              ticket_id: ticket_id || null,
-              template_id: "welcome",
+              recipient: email, subject, status: "failed", error_message: (emailErr as Error).message, source: "create-client-account", ticket_id: ticket_id || null, template_id: "welcome",
             });
           }
         } else {
-          console.warn("SMTP not configured, skipping welcome email");
+          console.warn("Neither SMTP nor Resend configured, skipping welcome email");
         }
       }
     }
