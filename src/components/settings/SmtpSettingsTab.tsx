@@ -28,6 +28,11 @@ interface ImapConfig {
   imap_enabled: string;
 }
 
+interface ResendConfig {
+  resend_enabled: string;
+  resend_from_email: string;
+}
+
 const defaultSmtp: SmtpConfig = {
   smtp_host: "",
   smtp_port: "465",
