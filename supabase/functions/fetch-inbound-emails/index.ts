@@ -223,10 +223,8 @@ function extractEmail(from: string): string {
   return match ? match[1] : from.replace(/[<>]/g, "").trim();
 }
 
-function decodeQuotedPrintable(str: string): string {
-  // Remove soft line breaks
+function decodeQuotedPrintable(str: string, charset = "utf-8"): string {
   const input = str.replace(/=\r?\n/g, "");
-  // Collect bytes: ASCII chars as-is, =XX as byte values
   const byteChunks: number[] = [];
   let i = 0;
   while (i < input.length) {
@@ -239,17 +237,45 @@ function decodeQuotedPrintable(str: string): string {
     }
   }
   try {
-    return new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(byteChunks));
+    // Map common charset names to TextDecoder labels
+    const decoderCharset = normalizeCharset(charset);
+    return new TextDecoder(decoderCharset, { fatal: false }).decode(new Uint8Array(byteChunks));
   } catch {
-    return input.replace(/=([0-9A-Fa-f]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+    // Fallback: try latin1 then raw
+    try {
+      return new TextDecoder("iso-8859-1", { fatal: false }).decode(new Uint8Array(byteChunks));
+    } catch {
+      return input.replace(/=([0-9A-Fa-f]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
+    }
   }
 }
 
-function decodeBase64(str: string): string {
+function normalizeCharset(charset: string): string {
+  const c = charset.toLowerCase().replace(/[^a-z0-9-]/g, "");
+  const map: Record<string, string> = {
+    "iso88591": "iso-8859-1",
+    "iso885915": "iso-8859-15",
+    "latin1": "iso-8859-1",
+    "windows1252": "windows-1252",
+    "cp1252": "windows-1252",
+    "utf8": "utf-8",
+    "usascii": "utf-8",
+    "ascii": "utf-8",
+  };
+  return map[c] || charset;
+}
+
+function extractCharset(contentTypeHeader: string): string {
+  const match = contentTypeHeader.match(/charset="?([^"\s;]+)"?/i);
+  return match ? match[1].trim() : "utf-8";
+}
+
+function decodeBase64(str: string, charset = "utf-8"): string {
   try {
     const cleaned = str.replace(/\r?\n/g, "").trim();
     const bytes = Uint8Array.from(atob(cleaned), c => c.charCodeAt(0));
-    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    const decoderCharset = normalizeCharset(charset);
+    return new TextDecoder(decoderCharset, { fatal: false }).decode(bytes);
   } catch {
     return str;
   }
