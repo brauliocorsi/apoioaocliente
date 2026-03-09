@@ -20,3 +20,9 @@ verify_jwt = false
 
 [functions.reset-client-password]
 verify_jwt = false
+
+[functions.fetch-inbound-emails]
+verify_jwt = false
+
+[functions.reply-email-ticket]
+verify_jwt = false
