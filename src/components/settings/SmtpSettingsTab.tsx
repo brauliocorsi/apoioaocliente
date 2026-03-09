@@ -68,7 +68,7 @@ export default function SmtpSettingsTab() {
 
   const loadConfig = async () => {
     setLoading(true);
-    const allKeys = [...Object.keys(defaultSmtp), ...Object.keys(defaultImap)];
+    const allKeys = [...Object.keys(defaultSmtp), ...Object.keys(defaultImap), "notify_status_change_email"];
     const { data, error } = await supabase
       .from("system_settings")
       .select("key, value")
@@ -83,6 +83,9 @@ export default function SmtpSettingsTab() {
         }
         if (row.key in loadedImap) {
           (loadedImap as Record<string, string>)[row.key] = row.value;
+        }
+        if (row.key === "notify_status_change_email") {
+          setNotifyStatusChange(row.value === "true");
         }
       });
       setSmtp(loadedSmtp);
