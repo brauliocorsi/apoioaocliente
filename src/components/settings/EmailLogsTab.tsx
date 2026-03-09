@@ -38,6 +38,7 @@ export default function EmailLogsTab() {
   const [logs, setLogs] = useState<EmailLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
+  const [activeMethod, setActiveMethod] = useState<"smtp" | "resend" | null>(null);
 
   const loadLogs = async () => {
     setLoading(true);
@@ -52,6 +53,9 @@ export default function EmailLogsTab() {
 
   useEffect(() => {
     loadLogs();
+    supabase.from("system_settings").select("key, value").eq("key", "resend_enabled").maybeSingle().then(({ data }) => {
+      setActiveMethod(data?.value === "true" ? "resend" : "smtp");
+    });
   }, []);
 
   const sourceLabel = (s: string) => {
