@@ -752,17 +752,22 @@ export default function TicketDetail() {
                 <p className="text-sm text-muted-foreground text-center py-4">Sem mensagens do cliente</p>
               ) : (
                 <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                  {messages.map((msg) => {
+                  {messages.map((msg, idx) => {
                     const sender = senderProfiles[msg.sender_id];
                     const senderName = sender?.full_name || (msg.sender_type === "agent" ? "Agente" : "Cliente");
                     const senderInitials = senderName.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase();
                     const isAgent = msg.sender_type === "agent";
+                    const isLastClientMsg = !isAgent && idx === [...messages].reverse().findIndex((m) => m.sender_type === "client") ? false : 
+                      !isAgent && messages.length - 1 - [...messages].reverse().findIndex((m) => m.sender_type === "client") === idx;
 
                     return (
                       <div
                         key={msg.id}
-                        className={`group flex gap-2 ${isAgent ? "flex-row-reverse" : "flex-row"}`}
+                        className={`group flex gap-2 ${isAgent ? "flex-row-reverse" : "flex-row"} ${isLastClientMsg ? "relative" : ""}`}
                       >
+                        {isLastClientMsg && (
+                          <div className="absolute -left-2 top-0 bottom-0 w-1 rounded-full bg-blue-500 animate-pulse" />
+                        )}
                         <Avatar className="h-7 w-7 shrink-0 mt-1">
                           <AvatarImage src={sender?.avatar_url || undefined} />
                           <AvatarFallback className={`text-[9px] font-semibold ${isAgent ? "bg-primary/20 text-primary" : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"}`}>
@@ -774,12 +779,21 @@ export default function TicketDetail() {
                             className={`rounded-lg px-4 py-2 text-sm ${
                               isAgent
                                 ? "bg-primary text-primary-foreground"
-                                : "bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-200"
+                                : isLastClientMsg
+                                  ? "bg-blue-200 text-blue-900 dark:bg-blue-800/50 dark:text-blue-100 ring-2 ring-blue-400/50"
+                                  : "bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-200"
                             }`}
                           >
-                            <p className="text-xs font-medium mb-1">
-                              {senderName}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-medium mb-1">
+                                {senderName}
+                              </p>
+                              {isLastClientMsg && (
+                                <Badge className="text-[9px] h-4 px-1.5 mb-1 bg-blue-500 text-white border-0">
+                                  Última
+                                </Badge>
+                              )}
+                            </div>
                             <RichContent content={msg.content} />
                             <p className="text-xs mt-1 opacity-70">
                               {new Date(msg.created_at).toLocaleString("pt-PT")}
