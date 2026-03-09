@@ -222,7 +222,6 @@ export default function EmailLogsTab() {
                             </Tooltip>
                           )}
                         </TableCell>
-                        </TableCell>
                         <TableCell>
                           {log.status === "sent" || log.status === "received" ? (
                             <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
