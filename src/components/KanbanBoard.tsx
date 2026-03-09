@@ -158,7 +158,7 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile
   );
 }
 
-function DraggableTicket({ ticket, categoryNames, callCount, agentProfile, unreadCount, ticketTags, allTags }: { ticket: TicketRow; categoryNames?: Record<string, string>; callCount?: number; agentProfile?: { full_name: string; avatar_url: string | null }; unreadCount?: number; ticketTags?: string[]; allTags?: { id: string; name: string; color: string | null }[] }) {
+function DraggableTicket({ ticket, categoryNames, callCount, agentProfile, unreadCount, emailUnreadCount, ticketTags, allTags }: { ticket: TicketRow; categoryNames?: Record<string, string>; callCount?: number; agentProfile?: { full_name: string; avatar_url: string | null }; unreadCount?: number; emailUnreadCount?: number; ticketTags?: string[]; allTags?: { id: string; name: string; color: string | null }[] }) {
   const navigate = useNavigate();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: ticket.id,
