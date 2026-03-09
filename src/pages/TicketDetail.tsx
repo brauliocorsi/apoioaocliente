@@ -920,7 +920,7 @@ export default function TicketDetail() {
                                 </Badge>
                               )}
                             </div>
-                            <RichContent content={msg.content} />
+                            <RichContent content={msg.content} onViewFull={() => setFullViewContent(msg.content)} />
                             <p className="text-xs mt-1 opacity-70">
                               {new Date(msg.created_at).toLocaleString("pt-PT")}
                             </p>
