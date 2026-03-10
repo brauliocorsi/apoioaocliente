@@ -922,20 +922,20 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
         pending++;
         await imap.markAsSeen(seqNum);
-        processed++;
+        newEmailProcessed = true;
         // Break after processing 1 new (non-skipped) email to stay within CPU limits
         break;
       } catch (err) {
         console.error(`Email ${seqNum} error: ${(err as Error).message}`);
-        processed++;
+        newEmailProcessed = true;
         break; // Also break on error to avoid CPU timeout
       }
     }
 
     await imap.logout();
 
-    const totalChecked = skipped + processed;
-    const remaining = emailIds.length - totalChecked;
+    const totalChecked = skipped + (newEmailProcessed ? 1 : 0);
+    const remaining = hasMore ? (totalEmails - nextOffset) : 0;
     const parts = [];
     if (pending > 0) parts.push(`${pending} para revisao`);
     if (updated > 0) parts.push(`${updated} atualizados`);
@@ -944,7 +944,12 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
     if (parts.length === 0) parts.push("0 novos emails");
     const message = parts.join(", ") + (remaining > 0 ? `. Restam ${remaining}.` : "");
 
-    return { success: true, message, created, pending, updated, blocked, skipped, total: totalChecked, remaining };
+    return { 
+      success: true, message, created, pending, updated, blocked, skipped, 
+      total: totalChecked, remaining, 
+      next_offset: hasMore ? nextOffset : null,
+      new_email_processed: newEmailProcessed,
+    };
   } catch (err) {
     try { await imap.logout(); } catch (_e) { /* */ }
     throw err;
