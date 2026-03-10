@@ -1385,6 +1385,7 @@ Deno.serve(async (req) => {
     let pendingId: string | undefined;
     let offset: number | undefined;
     let searchDays: number | undefined;
+    let ticketIdBody: string | undefined;
     try {
       const body = await req.json();
       testOnly = body?.test_only === true;
@@ -1395,6 +1396,7 @@ Deno.serve(async (req) => {
       pendingId = body?.pending_id;
       if (body?.offset !== undefined) offset = Number(body.offset);
       if (body?.search_days) searchDays = Math.min(Number(body.search_days), 30);
+      if (body?.ticket_id) ticketIdBody = body.ticket_id;
     } catch (_e) { /* no body */ }
 
     // Test-only: quick connection check
@@ -1704,7 +1706,7 @@ Deno.serve(async (req) => {
       const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-      const ticketIdParam = (await req.clone().json()).ticket_id as string | undefined;
+      const ticketIdParam = ticketIdBody;
       if (!ticketIdParam) {
         return new Response(JSON.stringify({ success: false, message: "ticket_id obrigatório" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
