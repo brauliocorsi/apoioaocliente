@@ -24,12 +24,15 @@ class MiniImap {
   }
 
   private nextTag() { return `T${++this.tagN}`; }
+  getNextTag() { return this.nextTag(); }
 
   private async write(s: string) {
     const w = this.conn.writable.getWriter();
     await w.write(this.encoder.encode(s));
     w.releaseLock();
   }
+  async writeCmd(s: string) { await this.write(s); }
+  async readTagged(tag: string): Promise<string> { return await this.cmd2(tag); }
 
   private async readLine(): Promise<string> {
     let s = "";
@@ -115,36 +118,84 @@ class MiniImap {
     await this.cmd(`SELECT "${folder}"`);
   }
 
-  // Fetch entire MIME part as raw bytes using UID FETCH
-  async uidFetchFull(uid: number, partNum: string): Promise<Uint8Array> {
-    const tag = this.nextTag();
-    const cmd = `UID FETCH ${uid} BODY[${partNum}]`;
-    await this.write(`${tag} ${cmd}\r\n`);
+  // Fetch MIME part as raw bytes — tries UID FETCH first, falls back to SEARCH + FETCH
+  async fetchPartByUid(uid: number, partNum: string): Promise<Uint8Array> {
+    // First, find the sequence number for this UID
+    const searchTag = this.nextTag();
+    await this.write(`${searchTag} UID SEARCH ${uid}\r\n`);
+    const searchRes = await this.cmd2(searchTag);
+    console.log(`UID SEARCH result: ${searchRes.substring(0, 200)}`);
+    
+    const searchMatch = searchRes.match(/\* SEARCH\s+(\d+)/);
+    if (!searchMatch) {
+      console.error(`UID ${uid} not found in mailbox`);
+      return new Uint8Array(0);
+    }
+    const seqNum = parseInt(searchMatch[1]);
+    console.log(`UID ${uid} → seq ${seqNum}`);
 
+    // Now fetch using sequence number (more reliable across servers)
+    return await this.fetchPartBySeq(seqNum, partNum);
+  }
+
+  // Fetch MIME part by sequence number
+  async fetchPartBySeq(seqNum: number, partNum: string): Promise<Uint8Array> {
+    const tag = this.nextTag();
+    await this.write(`${tag} FETCH ${seqNum} BODY[${partNum}]\r\n`);
+
+    // Read the initial response to find the literal size {N}
+    // Accumulate only enough to find the marker
     let header = "";
+    const headerChunks: Uint8Array[] = [];
+    let headerTotalLen = 0;
     const start = Date.now();
+
     while (Date.now() - start < 15000) {
       const chunk = await this.readChunk();
       if (!chunk) break;
-      header += this.decoder.decode(chunk);
+      headerChunks.push(chunk);
+      headerTotalLen += chunk.length;
+
+      // Only decode and check the first 512 bytes for the literal marker
+      if (header.length < 512) {
+        header += this.decoder.decode(chunk);
+        if (header.length > 512) header = header.substring(0, 512);
+      }
+
       const m = header.match(/\{(\d+)\}\r?\n/);
       if (m) {
         const litSize = parseInt(m[1]);
-        const afterPos = header.indexOf(m[0]) + m[0].length;
-        const already = new Uint8Array([...header.substring(afterPos)].map(c => c.charCodeAt(0)));
+        console.log(`Found literal: ${litSize} bytes`);
+
+        // Calculate how many bytes of literal data we already have
+        // Re-decode just the header portion to find exact byte boundary
+        const fullHeaderBytes = new Uint8Array(headerTotalLen);
+        let off = 0;
+        for (const c of headerChunks) { fullHeaderBytes.set(c, off); off += c.length; }
+        
+        const fullHeaderStr = this.decoder.decode(fullHeaderBytes.subarray(0, Math.min(headerTotalLen, 512)));
+        const markerStr = m[0];
+        const markerIdx = fullHeaderStr.indexOf(markerStr);
+        const markerEndStr = fullHeaderStr.substring(0, markerIdx + markerStr.length);
+        const markerEndBytes = new TextEncoder().encode(markerEndStr).length;
+
+        const alreadyHave = headerTotalLen - markerEndBytes;
+        const remaining = litSize - alreadyHave;
 
         let literalBytes: Uint8Array;
-        if (already.length >= litSize) {
-          literalBytes = already.slice(0, litSize);
-          if (already.length > litSize) this.buf = already.slice(litSize);
+        if (remaining <= 0) {
+          literalBytes = fullHeaderBytes.slice(markerEndBytes, markerEndBytes + litSize);
+          if (alreadyHave > litSize) {
+            this.buf = fullHeaderBytes.slice(markerEndBytes + litSize);
+          }
         } else {
-          const rest = await this.readBytes(litSize - already.length);
-          literalBytes = new Uint8Array(already.length + rest.length);
-          literalBytes.set(already, 0);
-          literalBytes.set(rest, already.length);
+          const rest = await this.readBytes(remaining);
+          literalBytes = new Uint8Array(litSize);
+          literalBytes.set(fullHeaderBytes.subarray(markerEndBytes), 0);
+          literalBytes.set(rest, alreadyHave);
         }
 
-        // Drain trailing response
+        // Drain trailing tag response
         let trail = "";
         const drainStart = Date.now();
         while (Date.now() - drainStart < 5000) {
@@ -159,14 +210,33 @@ class MiniImap {
         }
         return literalBytes;
       }
+
+      // Check for error/no-data responses
       if (header.includes(`${tag} NO`) || header.includes(`${tag} BAD`)) {
+        console.error(`IMAP error: ${header.substring(0, 200)}`);
         return new Uint8Array(0);
       }
       if (header.includes(`${tag} OK`) && !header.includes("{")) {
+        console.error(`IMAP OK but no literal: ${header.substring(0, 200)}`);
         return new Uint8Array(0);
       }
     }
+    console.error(`Timeout waiting for IMAP response. Header so far: ${header.substring(0, 200)}`);
     return new Uint8Array(0);
+  }
+
+  // Simple command that returns tagged response
+  private async cmd2(tag: string): Promise<string> {
+    let result = "";
+    const start = Date.now();
+    while (Date.now() - start < 10000) {
+      const tail = result.length > 300 ? result.substring(result.length - 300) : result;
+      if (tail.includes(`${tag} OK`) || tail.includes(`${tag} NO`) || tail.includes(`${tag} BAD`)) return result;
+      const chunk = await this.readChunk();
+      if (!chunk) break;
+      result += this.decoder.decode(chunk);
+    }
+    return result;
   }
 
   async logout() {
@@ -196,10 +266,10 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { uid, part_num, ticket_id, filename, content_type, encoding } = body;
+    const { part_num, ticket_id, filename, content_type, encoding, client_email } = body;
 
-    if (!uid || !part_num || !ticket_id || !filename) {
-      return new Response(JSON.stringify({ success: false, message: "Missing params (uid, part_num, ticket_id, filename required)" }), {
+    if (!part_num || !ticket_id || !filename || !client_email) {
+      return new Response(JSON.stringify({ success: false, message: "Missing params" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -214,7 +284,6 @@ Deno.serve(async (req) => {
       .eq("ticket_id", ticket_id)
       .eq("file_name", filename);
     if (count && count > 0) {
-      console.log(`Attachment ${filename} already exists for ticket ${ticket_id}, skipping`);
       return new Response(JSON.stringify({ success: true, skipped: true, message: "Already exists" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -235,7 +304,7 @@ Deno.serve(async (req) => {
     const port = Number(cfg.imap_port) || 993;
     const imap = new MiniImap();
 
-    console.log(`Fetching: uid=${uid} part=${part_num} file=${filename} encoding=${encoding}`);
+    console.log(`Fetching: email=${client_email} part=${part_num} file=${filename}`);
 
     const ok = await imap.connect(cfg.imap_host, port);
     if (!ok) throw new Error("IMAP connect failed");
@@ -243,8 +312,29 @@ Deno.serve(async (req) => {
     if (!loggedIn) throw new Error("IMAP login failed");
     await imap.select(cfg.imap_folder || "INBOX");
 
-    // Fetch entire MIME part at once
-    const rawBytes = await imap.uidFetchFull(Number(uid), part_num);
+    // Search for messages from this client email to get fresh sequence numbers
+    const searchTag2 = imap.getNextTag();
+    await imap.writeCmd(`${searchTag2} SEARCH FROM "${client_email}"\r\n`);
+    const searchRes = await imap.readTagged(searchTag2);
+    const searchMatch = searchRes.match(/\* SEARCH([\d\s]*)/);
+    const seqNums = (searchMatch && searchMatch[1].trim())
+      ? searchMatch[1].trim().split(/\s+/).map(Number).filter(n => !isNaN(n))
+      : [];
+
+    console.log(`Found ${seqNums.length} emails from ${client_email}`);
+
+    // Try each message to find the one with this attachment
+    let rawBytes = new Uint8Array(0);
+    for (const seqNum of seqNums) {
+      try {
+        rawBytes = await imap.fetchPartBySeq(seqNum, part_num);
+        if (rawBytes.length > 0) {
+          console.log(`Found attachment in seq ${seqNum}: ${rawBytes.length} bytes`);
+          break;
+        }
+      } catch (_e) { /* try next */ }
+    }
+
     console.log(`Raw IMAP data: ${rawBytes.length} bytes`);
 
     await imap.logout();
