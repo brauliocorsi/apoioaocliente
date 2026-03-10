@@ -253,6 +253,22 @@ export default function EmailTicketDetail() {
     window.open(data.publicUrl, "_blank");
   };
 
+  const refetchEmails = async () => {
+    if (!id || !user || refetching) return;
+    setRefetching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-inbound-emails", {
+        body: { action: "refetch_ticket", ticket_id: id, agent_id: user.id },
+      });
+      if (error) throw error;
+      if (data?.success === false) throw new Error(data.message);
+      toast({ title: "Re-importação concluída", description: data?.message || "Emails verificados" });
+      fetchData();
+    } catch (err) {
+      toast({ title: "Erro na re-importação", description: (err as Error).message, variant: "destructive" });
+    }
+    setRefetching(false);
+  };
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!ticket) return <div className="text-center py-20 text-muted-foreground">Ticket não encontrado</div>;
 
