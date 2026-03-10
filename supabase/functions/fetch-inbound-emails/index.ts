@@ -684,7 +684,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
     const offset = params.offset || 0;
     
     // Only process a window of 5 emails per call to stay within CPU limits
-    const BATCH_SIZE = 5;
+    const BATCH_SIZE = 2;
     const batchIds = emailIds.slice(offset, offset + BATCH_SIZE);
     const nextOffset = offset + BATCH_SIZE;
     const hasMore = nextOffset < totalEmails;

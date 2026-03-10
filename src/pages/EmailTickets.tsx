@@ -205,7 +205,7 @@ export default function EmailTickets() {
           break;
         }
 
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 500));
       }
     } catch (err) {
       console.error("Poll error:", err);
