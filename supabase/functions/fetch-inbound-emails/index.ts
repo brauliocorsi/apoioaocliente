@@ -136,6 +136,41 @@ class ImapClient {
     return match[1].trim().split(/\s+/).map(Number).filter(function(n) { return !isNaN(n); });
   }
 
+  // Lightweight: fetch only headers (From, Subject, Message-ID, Date) without body
+  async fetchHeaders(seqNum: number): Promise<{
+    from: string;
+    subject: string;
+    messageId: string;
+    date: string | null;
+  }> {
+    const response = await this.command(`FETCH ${seqNum} BODY[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID DATE)]`);
+    let from = "";
+    let subject = "";
+    let messageId = "";
+    let date: string | null = null;
+
+    const fromMatch = response.match(/^From:\s*(.+?)$/im);
+    if (fromMatch) from = fromMatch[1].trim();
+
+    subject = extractHeader(response, "Subject");
+    subject = decodeHeaderValue(subject);
+
+    const msgIdMatch = response.match(/^Message-ID:\s*(.+?)$/im);
+    if (msgIdMatch) messageId = msgIdMatch[1].trim();
+
+    const dateMatch = response.match(/^Date:\s*(.+?)$/im);
+    if (dateMatch) {
+      try {
+        const parsed = new Date(dateMatch[1].trim());
+        if (!isNaN(parsed.getTime())) {
+          date = parsed.toISOString();
+        }
+      } catch (_e) { /* keep null */ }
+    }
+
+    return { from, subject: subject || "Sem assunto", messageId, date };
+  }
+
   async fetchMessage(seqNum: number): Promise<{
     from: string;
     subject: string;
