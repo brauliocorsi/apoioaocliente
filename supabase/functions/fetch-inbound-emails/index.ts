@@ -186,53 +186,20 @@ class ImapClient {
     attachments: { filename: string; contentType: string; data: Uint8Array }[];
   }> {
     const response = await this.command(`FETCH ${seqNum} BODY[]`);
+    return parseFetchedMessageResponse(response, false);
+  }
 
-    // Strip IMAP FETCH wrapper: "* N FETCH (BODY[] {size}\r\n" prefix
-    let rawMessage = response;
-    const fetchStart = rawMessage.match(/\* \d+ FETCH \(BODY\[\] \{\d+\}\r?\n/);
-    if (fetchStart) {
-      rawMessage = rawMessage.substring((fetchStart.index || 0) + fetchStart[0].length);
-    }
-    // Strip trailing IMAP tag response
-    rawMessage = rawMessage.replace(/\)\r?\n\s*A\d{4}\s+OK.*$/s, "").trim();
-
-    let from = "";
-    let subject = "";
-    let messageId = "";
-    let date: string | null = null;
-
-    const fromMatch = rawMessage.match(/^From:\s*(.+?)$/im);
-    if (fromMatch) from = fromMatch[1].trim();
-
-    // Handle multi-line folded Subject headers
-    subject = extractHeader(rawMessage, "Subject");
-    subject = decodeHeaderValue(subject);
-
-    const msgIdMatch = rawMessage.match(/^Message-ID:\s*(.+?)$/im);
-    if (msgIdMatch) messageId = msgIdMatch[1].trim();
-
-    // Extract the Date header for exact email timestamp
-    const dateMatch = rawMessage.match(/^Date:\s*(.+?)$/im);
-    if (dateMatch) {
-      try {
-        const parsed = new Date(dateMatch[1].trim());
-        if (!isNaN(parsed.getTime())) {
-          date = parsed.toISOString();
-        }
-      } catch (_e) { /* keep null */ }
-    }
-
-    const parsed = parseMimeMessage(rawMessage);
-
-    return {
-      from,
-      subject: subject || "Sem assunto",
-      bodyText: parsed.bodyText,
-      bodyHtml: parsed.bodyHtml,
-      messageId,
-      date,
-      attachments: parsed.attachments,
-    };
+  async fetchMessagePartial(seqNum: number, maxBytes = 900000): Promise<{
+    from: string;
+    subject: string;
+    bodyText: string;
+    bodyHtml: string;
+    messageId: string;
+    date: string | null;
+    attachments: { filename: string; contentType: string; data: Uint8Array }[];
+  }> {
+    const response = await this.command(`FETCH ${seqNum} BODY[]<0.${maxBytes}>`);
+    return parseFetchedMessageResponse(response, true);
   }
 
   async markAsSeen(seqNum: number): Promise<void> {
