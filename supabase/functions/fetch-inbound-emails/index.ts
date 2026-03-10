@@ -179,7 +179,7 @@ class ImapClient {
         if (!isNaN(parsed.getTime())) {
           date = parsed.toISOString();
         }
-      } catch { /* keep null */ }
+      } catch (_e) { /* keep null */ }
     }
 
     const parsed = parseMimeMessage(rawMessage);
