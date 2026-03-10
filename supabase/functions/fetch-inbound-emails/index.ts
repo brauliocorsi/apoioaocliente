@@ -2003,7 +2003,7 @@ Deno.serve(async (req) => {
       let messagesAdded = 0;
       let contentUpdated = false;
       let attachmentPartsFound = 0;
-      const attachmentJobs: { seqNum: number; parts: AttachmentPart[] }[] = [];
+      const attachmentJobs: { uid: number; seqNum: number; parts: AttachmentPart[] }[] = [];
 
       try {
         const greeting = await imap.connect(imapCfg.imap_host, port);
