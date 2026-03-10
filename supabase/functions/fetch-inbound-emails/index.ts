@@ -878,9 +878,9 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         }
 
         // This email is NOT a duplicate - now fetch body (partial for large emails to avoid worker CPU limits)
-        const PARTIAL_FETCH_THRESHOLD = 5 * 1024 * 1024; // 5MB — most emails with attachments are under this
+        const PARTIAL_FETCH_THRESHOLD = 1800 * 1024; // Keep low for text parsing
         const msg = (headers.size && headers.size > PARTIAL_FETCH_THRESHOLD)
-          ? await imap.fetchMessagePartial(seqNum, 5 * 1024 * 1024)
+          ? await imap.fetchMessagePartial(seqNum, 900000)
           : await imap.fetchMessage(seqNum);
         const clientName = extractName(msg.from);
 
