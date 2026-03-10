@@ -399,7 +399,18 @@ function decodeBase64ToBytes(str: string, maxBytes?: number): Uint8Array {
         return new Uint8Array(0);
       }
     }
-    return Uint8Array.from(atob(cleaned), c => c.charCodeAt(0));
+    // Chunked decoding to avoid Maximum call stack size exceeded
+    const binaryStr = atob(cleaned);
+    const len = binaryStr.length;
+    const bytes = new Uint8Array(len);
+    const CHUNK = 8192;
+    for (let offset = 0; offset < len; offset += CHUNK) {
+      const end = Math.min(offset + CHUNK, len);
+      for (let i = offset; i < end; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+    }
+    return bytes;
   } catch (_e) {
     return new Uint8Array(0);
   }
