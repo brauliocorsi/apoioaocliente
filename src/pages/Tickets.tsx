@@ -5,7 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Search, Loader2, List, LayoutGrid, AlertTriangle, Clock, CheckCircle, Timer, Phone, Mail, MailCheck } from "lucide-react";
+import { Plus, Search, Loader2, List, LayoutGrid, AlertTriangle, Clock, CheckCircle, Timer, Phone, Mail, MailCheck, Paperclip, Image, Video } from "lucide-react";
+
+export type AttachmentInfo = {
+  count: number;
+  hasImages: boolean;
+  hasVideos: boolean;
+};
 import { useNavigate } from "react-router-dom";
 import KanbanBoard from "@/components/KanbanBoard";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
