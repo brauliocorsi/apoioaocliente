@@ -944,8 +944,13 @@ function parseBodyStructureAttachments(bs: string, prefix = ""): AttachmentPart[
   // Extract the BODYSTRUCTURE content between the outer FETCH parens
   let struct = bs;
   if (!prefix) {
-    const bsMatch = bs.match(/BODYSTRUCTURE\s+(\(.*\))\s*\)\s*\n/s);
-    if (!bsMatch) return results;
+    // Try multiple patterns — IMAP servers format this differently
+    const bsMatch = bs.match(/BODYSTRUCTURE\s+(\(.*\))\s*\)\s*$/ms)
+      || bs.match(/BODYSTRUCTURE\s+(\(.*\))/s);
+    if (!bsMatch) {
+      console.log(`BODYSTRUCTURE regex failed on: ${bs.substring(0, 300)}`);
+      return results;
+    }
     struct = bsMatch[1];
   }
   
