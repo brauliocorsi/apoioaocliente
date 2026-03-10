@@ -257,8 +257,18 @@ function parseFetchedMessageResponse(response: string, forceFastParser = false):
   const LARGE_RAW_PARSE_THRESHOLD = 1500 * 1024;
   const FAST_PARSE_SCAN_LIMIT = 900 * 1024;
   const shouldFastParse = forceFastParser || rawMessage.length > LARGE_RAW_PARSE_THRESHOLD;
-  const parseInput = shouldFastParse ? rawMessage.substring(0, FAST_PARSE_SCAN_LIMIT) : rawMessage;
-  const parsed = shouldFastParse ? parseMimeMessageFast(parseInput) : parseMimeMessage(parseInput);
+
+  let parsed = shouldFastParse
+    ? parseMimeMessageFast(rawMessage.substring(0, FAST_PARSE_SCAN_LIMIT))
+    : parseMimeMessage(rawMessage);
+
+  if (shouldFastParse && !hasReadableEmailContent(parsed) && rawMessage.length > FAST_PARSE_SCAN_LIMIT) {
+    const tailStart = Math.max(0, rawMessage.length - FAST_PARSE_SCAN_LIMIT);
+    const tailParsed = parseMimeMessageFast(rawMessage.substring(tailStart));
+    if (hasReadableEmailContent(tailParsed)) {
+      parsed = tailParsed;
+    }
+  }
 
   return {
     from,
