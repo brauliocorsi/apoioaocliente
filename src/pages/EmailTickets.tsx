@@ -180,12 +180,8 @@ export default function EmailTickets() {
           await Promise.all([fetchEmailTickets(), fetchPendingEmails(), fetchProcessedEmails()]);
         }
 
-        // If a new email was processed within this batch, re-run same offset
-        // (because we broke out of the loop early after 1 new email)
-        if (data?.new_email_processed) {
-          // Don't advance offset - there may be more in this batch
-          // But do count it
-        } else if (data?.next_offset !== null && data?.next_offset !== undefined) {
+        // Always advance offset using next_offset from the backend
+        if (data?.next_offset !== null && data?.next_offset !== undefined) {
           currentOffset = data.next_offset;
         } else {
           // No more emails

@@ -676,32 +676,62 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
       const allIds = await imap.searchAll();
       emailIds = allIds.slice(-params.maxEmails);
     } else {
-      // Single search: all emails from last 24h (includes read and unread)
+      // All emails from last 24h (includes read and unread)
       emailIds = await imap.searchSince(1);
     }
 
+    // ── NEWEST FIRST: reverse so most recent emails are at offset 0 ──
+    emailIds.reverse();
+
     const totalEmails = emailIds.length;
     const offset = params.offset || 0;
-    
-    // Only process 1 email header per call to stay within CPU limits
-    const BATCH_SIZE = 1;
-    const batchIds = emailIds.slice(offset, offset + BATCH_SIZE);
-    const nextOffset = offset + BATCH_SIZE;
-    const hasMore = nextOffset < totalEmails;
 
-    console.log(`Batch: offset=${offset}, checking ${batchIds.length} of ${totalEmails} total emails`);
+    if (offset >= totalEmails) {
+      await imap.logout();
+      return {
+        success: true, message: "Todos os emails verificados", created: 0, pending: 0,
+        updated: 0, blocked: 0, skipped: 0, total: 0, remaining: 0,
+        next_offset: null, new_email_processed: false,
+      };
+    }
 
+    // ── PRE-LOAD known fingerprints for in-memory dedup (single DB query) ──
+    const knownFingerprints = new Set<string>();
+    try {
+      const since48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      const { data: threads } = await adminClient
+        .from("email_threads")
+        .select("last_message_id")
+        .gte("created_at", since48h);
+      if (threads) threads.forEach((t: any) => { if (t.last_message_id) knownFingerprints.add(t.last_message_id); });
+
+      const { data: pendingMsgs } = await adminClient
+        .from("pending_emails")
+        .select("message_id")
+        .gte("created_at", since48h);
+      if (pendingMsgs) pendingMsgs.forEach((p: any) => { if (p.message_id) knownFingerprints.add(p.message_id); });
+    } catch (_e) { /* proceed without pre-loaded set */ }
+
+    console.log(`Batch: offset=${offset}, total=${totalEmails}, known_fps=${knownFingerprints.size}`);
+
+    // ── BATCH: check up to 10 headers if they're all duplicates, but only fetch 1 full body ──
+    const MAX_HEADER_CHECKS = 10;
+    let headersChecked = 0;
     let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
     let newEmailProcessed = false;
 
-    for (const seqNum of batchIds) {
+    const remainingIds = emailIds.slice(offset);
+
+    for (const seqNum of remainingIds) {
+      if (headersChecked >= MAX_HEADER_CHECKS) break;
+      headersChecked++;
+
       try {
         // Lightweight: fetch only headers (no body download)
         const headers = await imap.fetchHeaders(seqNum);
         const clientEmail = extractEmail(headers.from);
 
         if (!clientEmail) {
-          await imap.markAsSeen(seqNum);
           skipped++;
           continue;
         }
@@ -709,25 +739,10 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         // Generate fingerprint from headers only
         const emailFingerprint = headers.messageId?.trim() || await generateFingerprint(clientEmail, headers.subject, "");
 
-        // Quick dedup check using fingerprint (DB queries only - cheap)
-        if (emailFingerprint) {
-          const { data: dupThread } = await adminClient
-            .from("email_threads")
-            .select("id")
-            .eq("last_message_id", emailFingerprint)
-            .limit(1);
-
-          const { data: dupPending } = await adminClient
-            .from("pending_emails")
-            .select("id")
-            .eq("message_id", emailFingerprint)
-            .limit(1);
-
-          if ((dupThread && dupThread.length > 0) || (dupPending && dupPending.length > 0)) {
-            skipped++;
-            await imap.markAsSeen(seqNum);
-            continue;
-          }
+        // ── IN-MEMORY dedup check (instant, no DB round-trip) ──
+        if (emailFingerprint && knownFingerprints.has(emailFingerprint)) {
+          skipped++;
+          continue;
         }
 
         // This email is NOT a duplicate - now fetch the full message body
@@ -737,7 +752,6 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         // Check blocklist
         const blockCheck = await isBlocked(adminClient, clientEmail, msg.subject);
         if (blockCheck.blocked) {
-          // Store as blocked in pending for audit
           await adminClient.from("pending_emails").insert({
             from_address: clientEmail.toLowerCase(),
             from_name: clientName,
@@ -750,7 +764,8 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           });
           blocked++;
           await imap.markAsSeen(seqNum);
-          continue;
+          newEmailProcessed = true;
+          break;
         }
 
         // Check if we have an existing open thread OR ticket by client_email
@@ -784,7 +799,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           }
         }
 
-        // Fallback: check tickets table directly by client_email (covers manually created tickets)
+        // Fallback: check tickets table directly by client_email
         if (!ticketId) {
           const { data: openTickets } = await adminClient
             .from("tickets")
@@ -817,7 +832,6 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
               : stripQuotedText(fullBody).substring(0, 5000);
             const body = strippedBody;
 
-            // Check for duplicate message content in this ticket (compare stripped text)
             const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
             const contentSnippet = stripHtml(body).substring(0, 200).trim().toLowerCase();
             const { data: existingMsgs } = await adminClient
@@ -835,10 +849,10 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             if (isDuplicateContent) {
               skipped++;
               await imap.markAsSeen(seqNum);
-              continue;
+              newEmailProcessed = true;
+              break;
             }
 
-            // Save original content only if stripping actually removed something
             const hasQuotedContent = stripHtml(fullBody).length !== stripHtml(strippedBody).length;
 
             const msgInsert: any = {
@@ -852,13 +866,11 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
             await adminClient.from("ticket_messages").insert(msgInsert);
 
-            // Create or update email thread
             if (threadExists && existingThread) {
               await adminClient.from("email_threads")
                 .update({ last_message_id: emailFingerprint })
                 .eq("ticket_id", existingThread.ticket_id);
             } else {
-              // Create thread for ticket found via client_email fallback
               await adminClient.from("email_threads").insert({
                 ticket_id: ticketId!,
                 email_address: clientEmail.toLowerCase(),
@@ -866,7 +878,6 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
               });
             }
 
-            // Upload attachments to existing ticket
             if (msg.attachments.length > 0) {
               for (const att of msg.attachments) {
                 try {
@@ -879,10 +890,11 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
             updated++;
             await imap.markAsSeen(seqNum);
-            continue;
+            newEmailProcessed = true;
+            break;
         }
 
-        // New email from unknown/closed thread → goes to pending review queue
+        // New email from unknown/closed thread → pending review queue
         const pendingInsert: any = {
           from_address: clientEmail.toLowerCase(),
           from_name: clientName,
@@ -896,7 +908,6 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
         const { data: pendingEmail } = await adminClient.from("pending_emails").insert(pendingInsert).select("id").single();
 
-        // Store attachments meta for pending email
         if (pendingEmail && msg.attachments.length > 0) {
           const attMeta = [];
           for (const att of msg.attachments) {
@@ -917,18 +928,19 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         pending++;
         await imap.markAsSeen(seqNum);
         newEmailProcessed = true;
-        // Break after processing 1 new (non-skipped) email to stay within CPU limits
-        break;
+        break; // Only 1 new email per call
       } catch (err) {
         console.error(`Email ${seqNum} error: ${(err as Error).message}`);
         newEmailProcessed = true;
-        break; // Also break on error to avoid CPU timeout
+        break;
       }
     }
 
     await imap.logout();
 
-    const totalChecked = skipped + (newEmailProcessed ? 1 : 0);
+    const nextOffset = offset + headersChecked;
+    const hasMore = nextOffset < totalEmails;
+    const totalChecked = headersChecked;
     const remaining = hasMore ? (totalEmails - nextOffset) : 0;
     const parts = [];
     if (pending > 0) parts.push(`${pending} para revisao`);

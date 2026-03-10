@@ -1,101 +1,124 @@
 
+# Motor de Regras Completo — Novas Regras, Macros e Etiquetas Alinhadas com o Contrato
 
-## Problem Analysis
+## Diagnóstico do Estado Actual
 
-From the edge function logs and analytics:
-- Every call shows `offset=0, checking 1 of 37 total emails` -- this means each call processes the oldest email first
-- The oldest emails are always duplicates (already imported), so the system spends all its time re-checking old emails before reaching the new ones
-- Each call takes ~7 seconds (IMAP TLS + login + search + header fetch + DB check), so checking all 37 emails would take ~4.5 minutes
-- If any call hits WORKER_LIMIT, the frontend loop breaks and stops importing
+O sistema tem uma estrutura sólida mas **incompleta**: existem 8 categorias, 33 subcategorias, 22 etiquetas, 18 macros e apenas 7 regras do Motor. O contrato tem 11 secções com dezenas de situações de suporte, das quais muitas ainda **não têm regra, macro ou etiqueta correspondente**.
 
-## Root Cause
+Lacunas identificadas:
+- Categorias A (Entrega), G (Exposição), H (Manutenção) **não têm nenhuma regra** no Motor
+- Categoria B (Reclamação) só tem regra de tempo mas **não cobre danos, faltas, produto diferente**
+- Categoria C (Garantia) só tem 1 regra de exclusão mas **não cobre abertura normal nem assistência técnica paga**
+- Etiquetas em falta para: ausência do cliente, entrega em kit, produto sem embalagem, reembolso em curso, colchão/higiene, etc.
+- Macros em falta para: ausência no dia de entrega, produto diferente do pedido, falta de peças, entrega em kit, garantia com visita técnica, colchão/higiene, cancelamento E2/E3
 
-The emails are processed oldest-first. Since most old emails are already imported (duplicates), the system wastes time skipping them before ever reaching the new emails from today.
+---
 
-## Plan
+## O Que Vai Ser Criado
 
-### 1. Process newest emails first (Edge Function)
-Reverse the `emailIds` array after the IMAP search so the most recent emails are at offset=0. This means new
+### 1. Novas Etiquetas (tags)
 
+Serão adicionadas etiquetas organizadas nos grupos existentes para cobrir os casos em falta:
 
-<lov-tool-use id="thinking-4feefd1a-1a5f-4fca-87ec-0821b272be7d" name="lov-think" data="Let me continue with the plan from where it was cut off." duration="0.562881">
-</lov-tool-use>
-<lov-plan>
+**Grupo `entrega`** (novo grupo):
+- `ausencia_cliente` — Cliente ausente no dia de entrega
+- `reagendamento` — Entrega reagendada
+- `entrega_kit` — Entrega sem montagem (kit)
+- `entrega_parcial` — Apenas parte da encomenda entregue
+- `meios_especiais` — Grua/escadas externas necessárias
+- `termo_responsabilidade` — Termo assinado pelo cliente
 
-## Problem Analysis
+**Grupo `devolucao`** (novo grupo):
+- `sem_embalagem` — Produto sem embalagem original
+- `fora_prazo_devolucao` — Pedido após os 15 dias
+- `reembolso_em_curso` — Devolução aprovada, aguarda reembolso
+- `custo_recolha_cliente` — Custos de recolha imputados ao cliente
 
-From the edge function logs and analytics:
-- Every call shows `offset=0, checking 1 of 37 total emails` -- the offset never advances
-- Each call takes ~7 seconds (IMAP TLS + login + search + header fetch + DB checks)
-- Emails are processed oldest-first, so all time is spent re-checking old duplicates before reaching today's new emails
-- The frontend loop likely breaks on WORKER_LIMIT errors before ever reaching new emails
+**Grupo `pagamento`** (novo grupo):
+- `pagamento_entrega` — Pagamento na entrega (tag já pode existir)
+- `tpa_solicitado` — Terminal de pagamento solicitado
+- `transferencia_antecipada` — Transferência antecipada confirmada
+- `sequra_informado` — seQura explicado ao cliente
 
-## Root Cause
+**Grupo `garantia`** (novo grupo):
+- `garantia_valida` — Dentro dos 3 anos, defeito de fabrico
+- `garantia_excluida` — Fora da cobertura
+- `visita_tecnica` — Visita técnica agendada
+- `colchao_higiene` — Produto de higiene (colchão/almofada)
 
-Two issues:
-1. **Oldest-first order**: New emails are at the end of the list (offset 36 of 37), so they're never reached
-2. **Offset stuck at 0**: Looking at the frontend loop logic (lines 183-196), when a duplicate is skipped (no `new_email_processed` and `next_offset` is returned), the offset should advance. But from the logs, it's always 0. The issue is that the function returns `next_offset: 1` for a skipped duplicate, but the frontend logic at line 185 checks `data?.new_email_processed` first -- if the email was skipped (not a "new email processed"), it correctly goes to the else branch at line 188 and sets `currentOffset = data.next_offset`. This should work... unless the function is hitting WORKER_LIMIT (546 error) and the frontend treats that as an error and breaks the loop, restarting from offset 0 each time the user clicks.
+**Nota:** Etiquetas `acesso_dificil`, `48h_ok`, `48h_fora` serão adicionadas ao sistema se ainda não existirem (as regras R1-R7 referenciam-nas mas não estão na tabela de tags).
 
-Actually, re-reading the logs more carefully: we only see `offset=0` entries, meaning the function successfully returns at offset=0 (status 200, execution_time ~7s), the frontend gets the response with `next_offset: 1`, but then either the next call at offset=1 fails with WORKER_LIMIT (not logged because it crashes), or the frontend loop has a bug.
+---
 
-## Plan
+### 2. Novas Macros
 
-### 1. Reverse email order -- newest first
-In `processEmails()` (line 680), after `searchSince(1)`, reverse the array so newest emails come first. New emails will be at offset 0.
+Serão criadas 12 macros novas para cobrir os cenários em falta:
 
-```typescript
-emailIds = await imap.searchSince(1);
-emailIds.reverse(); // Newest first
-```
+| ID | Categoria | Título | Baseada em |
+|---|---|---|---|
+| M19 | entrega | Ausência do cliente — nova taxa | V-g (via V-g real: re-entrega) — clausula V-g via contrato |
+| M20 | entrega | Entrega em kit — montagem não incluída | V-f, VI-b |
+| M21 | entrega | Meios especiais não incluídos | III-a |
+| M22 | reclamacao | Dano visível na entrega (registo) | V-e, V-f |
+| M23 | reclamacao | Falta de peças (registo formal) | V-e |
+| M24 | reclamacao | Produto diferente do pedido | V-e |
+| M25 | garantia | Garantia válida — abertura formal | VI-a |
+| M26 | garantia | Visita técnica com custos (não coberta) | VI-d |
+| M27 | devolucao | Devolução recusada — sem embalagem | IX-a, VII-a |
+| M28 | devolucao | Devolução recusada — fora de prazo | VII-a |
+| M29 | garantia | Colchão/higiene — devolução recusada | VII-d |
+| M30 | geral | Cancelamento personalizado — após 72h | I-d, E2 |
 
-### 2. Skip dedup check for first email quickly -- pre-check via DB before IMAP
-Add a "pre-scan" approach: before connecting to IMAP, query the DB for all known fingerprints/message_ids from the last 24h. Pass this set to the processing loop so dedup checks are instant (no DB round-trip per email).
+---
 
-In `processEmails()`:
-- Before IMAP connect, fetch all `last_message_id` from `email_threads` and all `message_id` from `pending_emails` created in last 48h
-- Store in a `Set<string>`
-- During the loop, check fingerprint against this set instead of making 2 DB queries per email
+### 3. Novas Regras do Motor (10 regras)
 
-This eliminates 2 DB round-trips per email, saving significant time per call.
+| ID | Nome | Condição | Cláusulas | Tags | Macro |
+|---|---|---|---|---|---|
+| R8 | Ausência do cliente na entrega | subcategoria = A3 | V-g (nova), IV-b | ausencia_cliente | M19 |
+| R9 | Entrega em kit — aviso montagem | subcategoria = A7 | VI-b, V-f | entrega_kit | M20 |
+| R10 | Meios especiais (grua/escadas) | subcategoria = A4 + field: needs_special_access | III-a, V-d | meios_especiais | M21 |
+| R11 | Dano na entrega — registo obrigatório | subcategoria = B1 | V-e, V-f | dano_transporte, aguarda_fotos | M22 |
+| R12 | Falta de peças | subcategoria = B2 | V-e | falta_pecas, aguarda_fotos | M23 |
+| R13 | Produto diferente do pedido | subcategoria = B3 | V-e | produto_diferente, aguarda_fotos | M24 |
+| R14 | Garantia válida — defeito fabrico | subcategoria = C1 | VI-a | defeito_fabrico_suspeito, aguarda_fotos | M25 |
+| R15 | Garantia — visita técnica com custo | subcategoria = C4 | VI-d | aguarda_tecnico, visita_tecnica | M26 |
+| R16 | Devolução sem embalagem original | categoria = D + field: has_original_packaging = false | IX-a, VII-a | sem_embalagem | M27 |
+| R17 | Colchão/higiene — devolução condicionada | categoria = D + tag: higiene_colchao | VII-d | colchao_higiene | M29 |
 
-### 3. Batch skip multiple duplicates per call
-With the DB pre-loaded set, skipping duplicates is now just a Set lookup (microseconds). Increase effective throughput by allowing up to **10 header checks** per call when they're all duplicates, but still limit to 1 full body download per call.
+**Total após implementação:** 17 regras activas no Motor.
 
-```typescript
-const MAX_HEADER_CHECKS = 10; // Can check up to 10 headers if all are dupes
-let headersChecked = 0;
+---
 
-for (const seqNum of remainingIds) {
-  if (headersChecked >= MAX_HEADER_CHECKS) break;
-  headersChecked++;
-  
-  const headers = await imap.fetchHeaders(seqNum);
-  const fingerprint = headers.messageId || await generateFingerprint(...);
-  
-  if (knownFingerprints.has(fingerprint)) {
-    skipped++;
-    continue; // No IMAP markAsSeen, no DB query -- instant
-  }
-  
-  // New email found -- fetch full body (expensive)
-  const msg = await imap.fetchMessage(seqNum);
-  // ... process ...
-  break; // Only 1 new email per call
-}
-```
+## Execução Técnica
 
-### 4. Fix offset advancement
-Update the return value to properly indicate how many were checked so the frontend advances correctly:
-- Return `next_offset = offset + headersChecked` (not just +1)
+### Operações na base de dados (sem alteração de schema):
 
-### Technical Changes
+**A — INSERT de novas etiquetas** na tabela `tags`:
+Grupos novos: `entrega`, `devolucao`, `pagamento`, `garantia`
+Etiquetas que as regras R1–R7 referenciam mas ainda não existem: `acesso_dificil`, `48h_ok`, `48h_fora`, `tpa_solicitado`, `pagamento_entrega`, `transferencia_antecipada`
 
-**File: `supabase/functions/fetch-inbound-emails/index.ts`**
-- Line 680: Add `.reverse()` after searchSince
-- Lines 636-695: Pre-load known fingerprints from DB before IMAP connection
-- Lines 697-926: Replace single-email loop with multi-header-check loop using in-memory dedup
-- Adjust `next_offset` calculation
+**B — INSERT de novas macros** na tabela `macros` (M19 a M30):
+Conteúdo redigido em português formal, com referência às cláusulas do contrato e variáveis como `{nome_cliente}`, `{n_encomenda}`, `{clausulas}`
 
-**File: `src/pages/EmailTickets.tsx`**
-- No changes needed -- the frontend loop logic already handles `next_offset` correctly
+**C — INSERT de novas regras** na tabela `decision_rules` (R8 a R17):
+Usando os tipos de condição existentes: `subcategory`, `field_bool`, `tag_exists`
+
+**D — UPDATE das cláusulas** na tabela `clauses`:
+Substituir os `description` actuais (resumos curtos) pelo texto integral do contrato em todas as 44 cláusulas
+
+---
+
+## Cobertura Final por Categoria
+
+| Categoria | Regras Cobertas |
+|---|---|
+| A — Entrega e Montagem | R6 (acesso), R8 (ausência), R9 (kit), R10 (meios especiais) |
+| B — Reclamação pós-entrega | R1a/R1b (48h), R11 (dano), R12 (falta peças), R13 (produto diferente) |
+| C — Garantia | R7 (exclusões), R14 (defeito válido), R15 (visita técnica) |
+| D — Devolução/Troca | R2 (montado), R3 (personalizado), R16 (sem embalagem), R17 (colchão) |
+| E — Personalizado/Cancelamento | R3 (já cobre) + M30 (macro nova) |
+| F — Pagamentos | R4 (multibanco), R5 (transferência) |
+| G — Exposição | Cobertura via cláusulas VIII nas macros M15 |
+| H — Uso e Manutenção | R7 (via tag humidade/impacto) |
 
