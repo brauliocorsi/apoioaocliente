@@ -1840,65 +1840,31 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Phase 2: Background — download and upload attachments one by one
-      if (attachmentJobs.length > 0) {
-        const bgTask = async () => {
-          const bgImap = new ImapClient();
-          try {
-            const greeting = await bgImap.connect(imapCfg.imap_host, port);
-            if (!greeting.includes("OK")) throw new Error("BG IMAP connect failed");
-            if (port === 143) { try { await bgImap.startTls(imapCfg.imap_host); } catch (_e) { /* */ } }
-            const loginRes = await bgImap.login(imapCfg.imap_user, imapCfg.imap_pass);
-            if (!loginRes.includes("OK")) throw new Error("BG IMAP login failed");
-            await bgImap.select(imapCfg.imap_folder);
-
-            let totalUploaded = 0;
-            for (const job of attachmentJobs) {
-              for (const part of job.parts) {
-                try {
-                  const rawPart = await bgImap.fetchMimePart(job.seqNum, part.partNum);
-                  let data: Uint8Array;
-                  if (part.encoding === "base64") {
-                    data = decodeBase64ToBytes(rawPart, 5 * 1024 * 1024);
-                  } else {
-                    data = new TextEncoder().encode(rawPart);
-                  }
-                  if (data.length > 0 && data.length <= 5 * 1024 * 1024) {
-                    await uploadAttachment(adminClient, ticketIdParam, {
-                      filename: part.filename,
-                      contentType: part.contentType,
-                      data,
-                    }, agentId);
-                    totalUploaded++;
-                    console.log(`BG: uploaded ${part.filename} (${data.length} bytes)`);
-                  }
-                } catch (err) {
-                  console.error(`BG part ${part.partNum} error: ${(err as Error).message}`);
-                }
-              }
-            }
-            await bgImap.logout();
-            console.log(`BG: finished, uploaded ${totalUploaded} attachments for ticket ${ticketIdParam}`);
-          } catch (err) {
-            console.error(`BG refetch error: ${(err as Error).message}`);
-            try { await bgImap.logout(); } catch (_e) { /* */ }
-          }
-        };
-
-        // Use EdgeRuntime.waitUntil to run in background after response
-        (globalThis as any).EdgeRuntime?.waitUntil?.(bgTask());
+      // Return attachment jobs info so frontend can call download_single_attachment per part
+      const attachmentJobsForClient: { seqNum: number; partNum: string; filename: string; contentType: string; encoding: string }[] = [];
+      for (const job of attachmentJobs) {
+        for (const part of job.parts) {
+          attachmentJobsForClient.push({
+            seqNum: job.seqNum,
+            partNum: part.partNum,
+            filename: part.filename,
+            contentType: part.contentType,
+            encoding: part.encoding,
+          });
+        }
       }
 
       const parts = [];
       if (contentUpdated) parts.push("conteúdo atualizado");
       if (messagesAdded > 0) parts.push(`${messagesAdded} mensagem(ns) adicionada(s)`);
-      if (attachmentPartsFound > 0) parts.push(`${attachmentPartsFound} anexo(s) a importar em segundo plano`);
+      if (attachmentPartsFound > 0) parts.push(`${attachmentPartsFound} anexo(s) a importar`);
       if (parts.length === 0) parts.push("Nenhum conteúdo novo encontrado");
 
       return new Response(JSON.stringify({
         success: true,
         message: parts.join(", "),
         attachments_background: attachmentPartsFound,
+        attachment_jobs: attachmentJobsForClient,
         content_updated: contentUpdated,
         messages_added: messagesAdded,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
