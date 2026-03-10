@@ -791,9 +791,20 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             if (msg.date) msgInsert.created_at = msg.date;
 
             await adminClient.from("ticket_messages").insert(msgInsert);
-            await adminClient.from("email_threads")
-              .update({ last_message_id: emailFingerprint })
-              .eq("ticket_id", existingThread.ticket_id);
+
+            // Create or update email thread
+            if (threadExists && existingThread) {
+              await adminClient.from("email_threads")
+                .update({ last_message_id: emailFingerprint })
+                .eq("ticket_id", existingThread.ticket_id);
+            } else {
+              // Create thread for ticket found via client_email fallback
+              await adminClient.from("email_threads").insert({
+                ticket_id: ticketId!,
+                email_address: clientEmail.toLowerCase(),
+                last_message_id: emailFingerprint,
+              });
+            }
 
             // Upload attachments to existing ticket
             if (msg.attachments.length > 0) {
