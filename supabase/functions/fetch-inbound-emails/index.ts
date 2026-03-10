@@ -128,12 +128,12 @@ class ImapClient {
   async searchSince(daysAgo: number): Promise<number[]> {
     const d = new Date();
     d.setDate(d.getDate() - daysAgo);
-    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const dateStr = `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear()}`;
-    const response = await this.command(`SEARCH SINCE ${dateStr}`);
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const dateStr = d.getDate() + "-" + monthNames[d.getMonth()] + "-" + d.getFullYear();
+    const response = await this.command("SEARCH SINCE " + dateStr);
     const match = response.match(/\* SEARCH([\d\s]*)/);
     if (!match || !match[1].trim()) return [];
-    return match[1].trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
+    return match[1].trim().split(/\s+/).map(Number).filter(function(n) { return !isNaN(n); });
   }
 
   async fetchMessage(seqNum: number): Promise<{
