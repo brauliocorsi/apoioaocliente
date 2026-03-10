@@ -288,7 +288,7 @@ function decodeBase64(str: string, charset = "utf-8"): string {
     const bytes = Uint8Array.from(atob(cleaned), c => c.charCodeAt(0));
     const decoderCharset = normalizeCharset(charset);
     return new TextDecoder(decoderCharset, { fatal: false }).decode(bytes);
-  } catch {
+  } catch (_e) {
     return str;
   }
 }
