@@ -394,7 +394,7 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
         try {
           const bytes = new Uint8Array([...partBody].map(c => c.charCodeAt(0)));
           partBody = new TextDecoder(normalizeCharset(charset), { fatal: false }).decode(bytes);
-        } catch { /* keep as-is */ }
+        } catch (_e) { /* keep as-is */ }
       }
 
       if (contentType.includes("text/plain") && !result.bodyText) {
