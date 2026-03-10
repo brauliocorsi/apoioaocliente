@@ -240,6 +240,7 @@ export default function EmailTicketDetail() {
   if (!ticket) return <div className="text-center py-20 text-muted-foreground">Ticket não encontrado</div>;
 
   return (
+    <>
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
