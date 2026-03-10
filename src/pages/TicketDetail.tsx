@@ -507,15 +507,13 @@ export default function TicketDetail() {
 
       if (emailThread || ticket?.client_email) {
         try {
-          // Collect uploaded file paths for email attachments
-          const uploadedPaths = attachments
-            .filter((a: any) => {
-              const attTime = new Date(a.created_at).getTime();
-              const now = Date.now();
-              return now - attTime < 60000; // files uploaded in the last minute
-            })
-            .map((a: any) => a.file_path);
           const { error: emailError } = await supabase.functions.invoke("reply-email-ticket", {
+            body: { 
+              ticket_id: id, 
+              content: originalReply || content,
+              attachment_paths: uploadedFilePaths.length > 0 ? uploadedFilePaths : undefined,
+            },
+          });
             body: { 
               ticket_id: id, 
               content: originalReply || content,
