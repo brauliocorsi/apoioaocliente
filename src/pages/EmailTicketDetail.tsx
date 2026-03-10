@@ -264,7 +264,7 @@ export default function EmailTicketDetail() {
     while (!done) {
       const { data: chunkData, error: chunkErr } = await supabase.functions.invoke("download-attachment", {
         body: {
-          seq_num: job.seqNum,
+          uid: job.uid,
           part_num: job.partNum,
           offset,
           chunk_size: CHUNK_SIZE,
