@@ -1338,6 +1338,7 @@ Deno.serve(async (req) => {
       action = body?.action;
       pendingId = body?.pending_id;
       if (body?.offset !== undefined) offset = Number(body.offset);
+      if (body?.search_days) searchDays = Math.min(Number(body.search_days), 30);
     } catch (_e) { /* no body */ }
 
     // Test-only: quick connection check
