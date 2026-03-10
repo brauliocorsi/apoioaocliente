@@ -1003,9 +1003,18 @@ Deno.serve(async (req) => {
           content: description,
         });
 
-        await adminClient.from("email_threads")
-          .update({ last_message_id: pe.message_id })
-          .eq("ticket_id", ticketId);
+        // Create or update email thread
+        if (existingThread) {
+          await adminClient.from("email_threads")
+            .update({ last_message_id: pe.message_id })
+            .eq("ticket_id", ticketId);
+        } else {
+          await adminClient.from("email_threads").insert({
+            ticket_id: ticketId,
+            email_address: pe.from_address.toLowerCase(),
+            last_message_id: pe.message_id,
+          });
+        }
 
         // Move attachments to existing ticket
         const attMeta = (pe.attachments_meta as any[]) || [];
