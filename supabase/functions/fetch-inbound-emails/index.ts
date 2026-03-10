@@ -948,7 +948,7 @@ Deno.serve(async (req) => {
         .eq("email_address", pe.from_address.toLowerCase())
         .order("created_at", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (existingThread) {
         const { data: existingTicket } = await adminClient
@@ -966,6 +966,30 @@ Deno.serve(async (req) => {
 
           if (!statusData?.is_closed) {
             ticketId = existingTicket.id;
+          }
+        }
+      }
+
+      // Fallback: check tickets table directly by client_email
+      if (!ticketId) {
+        const { data: openTickets } = await adminClient
+          .from("tickets")
+          .select("id, status")
+          .eq("client_email", pe.from_address.toLowerCase())
+          .order("created_at", { ascending: false })
+          .limit(5);
+
+        if (openTickets) {
+          for (const t of openTickets) {
+            const { data: sd } = await adminClient
+              .from("ticket_statuses")
+              .select("is_closed")
+              .eq("id", t.status)
+              .single();
+            if (!sd?.is_closed) {
+              ticketId = t.id;
+              break;
+            }
           }
         }
       }
