@@ -532,6 +532,12 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
   return result;
 }
 
+function hasReadableEmailContent(parsed: MimeParsed): boolean {
+  const plain = (parsed.bodyText || "").replace(/\s+/g, " ").trim();
+  const htmlAsText = (parsed.bodyHtml || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return plain.length > 20 || htmlAsText.length > 20;
+}
+
 function parseMimeMessageFast(raw: string): MimeParsed {
   const limitedRaw = raw.substring(0, 900 * 1024);
   const parsed = parseMimeMessage(limitedRaw);
@@ -541,7 +547,7 @@ function parseMimeMessageFast(raw: string): MimeParsed {
   if (parsed.bodyText.length > 150000) parsed.bodyText = parsed.bodyText.substring(0, 150000);
   if (parsed.bodyHtml.length > 250000) parsed.bodyHtml = parsed.bodyHtml.substring(0, 250000);
 
-  if (!parsed.bodyText && !parsed.bodyHtml) {
+  if (!hasReadableEmailContent(parsed)) {
     parsed.bodyText = limitedRaw
       .split(/\r?\n/)
       .filter((line) => {
@@ -553,6 +559,7 @@ function parseMimeMessageFast(raw: string): MimeParsed {
       })
       .join("\n")
       .substring(0, 100000);
+    parsed.bodyHtml = "";
   }
 
   return parsed;
