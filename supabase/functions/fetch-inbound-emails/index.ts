@@ -688,35 +688,33 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
     }
 
     let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
-    // Process only 1 email per invocation to stay within CPU limits
-    // The frontend loop will keep calling until remaining == 0
-    const batch = emailIds.slice(0, 1);
+    let processed = 0;
 
-    for (const seqNum of batch) {
+    // Phase 1: Quick header-only scan to find non-duplicate emails
+    // Phase 2: Full fetch only for emails that pass dedup
+    for (const seqNum of emailIds) {
       try {
-        const msg = await imap.fetchMessage(seqNum);
-        const clientEmail = extractEmail(msg.from);
-        const clientName = extractName(msg.from);
+        // Lightweight: fetch only headers (no body download)
+        const headers = await imap.fetchHeaders(seqNum);
+        const clientEmail = extractEmail(headers.from);
 
         if (!clientEmail) {
           await imap.markAsSeen(seqNum);
+          skipped++;
           continue;
         }
 
-        // Generate a unique identifier for dedup
-        const bodySnippet = msg.bodyText || msg.bodyHtml || "";
-        const emailFingerprint = msg.messageId?.trim() || await generateFingerprint(clientEmail, msg.subject, bodySnippet);
+        // Generate fingerprint from headers only
+        const emailFingerprint = headers.messageId?.trim() || await generateFingerprint(clientEmail, headers.subject, "");
 
-        // Duplicate check: search email_threads, pending_emails, AND ticket descriptions
+        // Quick dedup check using fingerprint (DB queries only - cheap)
         if (emailFingerprint) {
-          // Check email_threads (any last_message_id match)
           const { data: dupThread } = await adminClient
             .from("email_threads")
             .select("id")
             .eq("last_message_id", emailFingerprint)
             .limit(1);
 
-          // Check pending_emails (message_id or fingerprint)
           const { data: dupPending } = await adminClient
             .from("pending_emails")
             .select("id")
@@ -729,6 +727,10 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             continue;
           }
         }
+
+        // This email is NOT a duplicate - now fetch the full message body
+        const msg = await imap.fetchMessage(seqNum);
+        const clientName = extractName(msg.from);
 
         // Check blocklist
         const blockCheck = await isBlocked(adminClient, clientEmail, msg.subject);
