@@ -1023,29 +1023,23 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
                 console.log(`Ticket ${backfillTicketId} has ${count} attachments`);
 
                 if (count === 0) {
-                  console.log(`Fetching full message for attachment backfill...`);
+                  console.log(`Fetching attachments via BODYSTRUCTURE (lightweight)...`);
                   try {
-                    const fullMsg = (headers.size && headers.size > 5 * 1024 * 1024)
-                      ? await imap.fetchMessagePartial(seqNum, 900000)
-                      : await imap.fetchMessage(seqNum);
+                    // BODYSTRUCTURE first — lightweight, no full email download
+                    let uploaded = await fetchAttachmentsParts(imap, adminClient, seqNum, backfillTicketId, createdBy!);
                     
-                    console.log(`Parsed ${fullMsg.attachments.length} attachment(s) from MIME body`);
-                    
-                    let uploaded = 0;
-                    if (fullMsg.attachments.length > 0) {
-                      for (const att of fullMsg.attachments) {
-                        console.log(`Attachment: ${att.filename} (${att.data.length} bytes, ${att.contentType})`);
-                        if (att.data.length > 0 && att.data.length <= 5 * 1024 * 1024) {
-                          await uploadAttachment(adminClient, backfillTicketId, att, createdBy!);
-                          uploaded++;
+                    // Fallback to full message only for small emails (< 2MB)
+                    if (uploaded === 0 && headers.size && headers.size < 2 * 1024 * 1024) {
+                      console.log(`BODYSTRUCTURE found nothing — trying full fetch (${headers.size} bytes)`);
+                      const fullMsg = await imap.fetchMessage(seqNum);
+                      if (fullMsg.attachments.length > 0) {
+                        for (const att of fullMsg.attachments) {
+                          if (att.data.length > 0 && att.data.length <= 5 * 1024 * 1024) {
+                            await uploadAttachment(adminClient, backfillTicketId, att, createdBy!);
+                            uploaded++;
+                          }
                         }
                       }
-                    }
-                    
-                    // Fallback to BODYSTRUCTURE if no attachments found in parsed body
-                    if (uploaded === 0) {
-                      console.log(`No attachments from MIME — trying BODYSTRUCTURE fallback`);
-                      uploaded = await fetchAttachmentsParts(imap, adminClient, seqNum, backfillTicketId, createdBy!);
                     }
                     
                     if (uploaded > 0) {
@@ -1054,10 +1048,11 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
                       console.log(`No attachments found for ticket ${backfillTicketId}`);
                     }
                     newEmailProcessed = true;
-                    backfillDone = true; // Only 1 backfill per batch
-                  } catch (fetchErr) {
-                    console.error(`Full fetch for backfill error: ${(fetchErr as Error).message}`);
                     backfillDone = true;
+                  } catch (fetchErr) {
+                    console.error(`Backfill fetch error: ${(fetchErr as Error).message}`);
+                    backfillDone = true;
+                  }
                   }
                 }
               }
