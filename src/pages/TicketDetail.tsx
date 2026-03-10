@@ -904,14 +904,14 @@ export default function TicketDetail() {
                             {senderInitials}
                           </AvatarFallback>
                         </Avatar>
-                        <div className={`ma85w-[70%] space-y-1`}>
+                        <div className={`max-w-[85%] space-y-1`}>
                           <div
                             className={`rounded-lg px-4 py-2 text-sm ${
                               isAgent
-                                ? "bg-primary text-primary-foreground"
+                                ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100 border border-emerald-200 dark:border-emerald-800/50"
                                 : isLastClientMsg
-                                  ? "bg-blue-200 text-blue-900 dark:bg-blue-800/50 dark:text-blue-100 ring-2 ring-blue-400/50"
-                                  : "bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-200"
+                                  ? "bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100 border border-blue-300 dark:border-blue-700/50 ring-2 ring-blue-400/50"
+                                  : "bg-blue-50 text-blue-900 dark:bg-blue-900/30 dark:text-blue-200 border border-blue-200 dark:border-blue-800/40"
                             }`}
                           >
                             <div className="flex items-center gap-2">
