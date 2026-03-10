@@ -297,7 +297,7 @@ function decodeBase64ToBytes(str: string): Uint8Array {
   try {
     const cleaned = str.replace(/\r?\n/g, "").trim();
     return Uint8Array.from(atob(cleaned), c => c.charCodeAt(0));
-  } catch {
+  } catch (_e) {
     return new Uint8Array(0);
   }
 }
