@@ -92,7 +92,7 @@ class ImapClient {
         const { value, done } = await Promise.race([readPromise, timeoutPromise]);
         if (done || !value) break;
         result += this.decoder.decode(value);
-      } catch { break; }
+      } catch (_e) { break; }
     }
     return result;
   }
