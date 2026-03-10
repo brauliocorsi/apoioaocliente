@@ -1706,8 +1706,7 @@ Deno.serve(async (req) => {
       const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-      // ticket_id was already parsed from the body at line ~1389
-      const ticketIdParam = (req as any).__parsedBody?.ticket_id as string | undefined;
+      const ticketIdParam = ticketIdBody;
       if (!ticketIdParam) {
         return new Response(JSON.stringify({ success: false, message: "ticket_id obrigatório" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
