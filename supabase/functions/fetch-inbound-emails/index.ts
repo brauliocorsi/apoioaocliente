@@ -426,7 +426,7 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
       try {
         const bytes = new Uint8Array([...body].map(c => c.charCodeAt(0)));
         body = new TextDecoder(normalizeCharset(singleCharset), { fatal: false }).decode(bytes);
-      } catch { /* keep as-is */ }
+      } catch (_e) { /* keep as-is */ }
     }
 
     const contentTypeMatch = headerSection.match(/Content-Type:\s*([^;\r\n]+)/i);
