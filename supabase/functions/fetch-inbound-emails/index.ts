@@ -416,11 +416,18 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
       if (isAttachment && filename) {
         let attachData: Uint8Array;
         if (transferEncoding === "base64") {
-          attachData = decodeBase64ToBytes(partBody);
+          const estimatedBytes = Math.floor((partBody.replace(/\r?\n/g, "").trim().length * 3) / 4);
+          if (estimatedBytes > 5 * 1024 * 1024) {
+            continue;
+          }
+          attachData = decodeBase64ToBytes(partBody, 5 * 1024 * 1024);
         } else {
+          if (partBody.length > 5 * 1024 * 1024) {
+            continue;
+          }
           attachData = new TextEncoder().encode(partBody);
         }
-        if (attachData.length <= 5 * 1024 * 1024) {
+        if (attachData.length > 0 && attachData.length <= 5 * 1024 * 1024) {
           result.attachments.push({ filename, contentType: fullContentType.split(";")[0].trim(), data: attachData });
         }
         continue;
