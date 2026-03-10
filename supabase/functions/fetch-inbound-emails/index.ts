@@ -136,12 +136,13 @@ class ImapClient {
     return match[1].trim().split(/\s+/).map(Number).filter(function(n) { return !isNaN(n); });
   }
 
-  // Lightweight: fetch only headers (From, Subject, Message-ID, Date) without body
+  // Lightweight: fetch only headers + RFC822 size (no body)
   async fetchHeaders(seqNum: number): Promise<{
     from: string;
     subject: string;
     messageId: string;
     date: string | null;
+    size: number | null;
   }> {
     const response = await this.command(`FETCH ${seqNum} BODY[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID DATE)]`);
     let from = "";
