@@ -118,63 +118,62 @@ class MiniImap {
   // Fetch entire MIME part as raw bytes using UID FETCH
   async uidFetchFull(uid: number, partNum: string): Promise<Uint8Array> {
     const tag = this.nextTag();
-    const cmd = `UID FETCH ${uid} BODY[${partNum}]`;
-    await this.write(`${tag} ${cmd}\r\n`);
+    await this.write(`${tag} UID FETCH ${uid} BODY[${partNum}]\r\n`);
 
-    // Phase 1: Read ONLY the header line to find {SIZE}\r\n
-    // Accumulate raw bytes, only decode enough to find the literal marker
-    const headerChunks: Uint8Array[] = [];
-    let headerLen = 0;
-    let literalSize = -1;
-    let literalStartOffset = 0; // byte offset where literal data begins
+    // Read chunks until we find the literal size marker {N}\r\n
+    // Keep accumulated data as raw bytes to avoid CPU-heavy string ops
+    const rawChunks: Uint8Array[] = [];
+    let totalLen = 0;
     const start = Date.now();
 
     while (Date.now() - start < 15000) {
       const chunk = await this.readChunk();
       if (!chunk) break;
-      headerChunks.push(chunk);
-      headerLen += chunk.length;
+      rawChunks.push(chunk);
+      totalLen += chunk.length;
 
-      // Only decode last portion to check for literal marker (avoid decoding entire buffer)
-      // The {SIZE}\r\n pattern is small, so checking the last 100 bytes suffices
-      const checkSize = Math.min(headerLen, 200);
-      const tail = new Uint8Array(checkSize);
-      let pos = checkSize;
-      for (let i = headerChunks.length - 1; i >= 0 && pos > 0; i--) {
-        const c = headerChunks[i];
-        const take = Math.min(c.length, pos);
-        tail.set(c.subarray(c.length - take), pos - take);
-        pos -= take;
+      // Only decode the first 512 bytes to find {SIZE}\r\n (it's always in the first line)
+      const checkLen = Math.min(totalLen, 512);
+      const checkBuf = new Uint8Array(checkLen);
+      let off = 0;
+      for (const c of rawChunks) {
+        const take = Math.min(c.length, checkLen - off);
+        if (take <= 0) break;
+        checkBuf.set(c.subarray(0, take), off);
+        off += take;
       }
-      const tailStr = this.decoder.decode(tail);
-      const m = tailStr.match(/\{(\d+)\}\r?\n/);
+      const headerStr = this.decoder.decode(checkBuf);
+      const m = headerStr.match(/\{(\d+)\}\r?\n/);
+
       if (m) {
-        literalSize = parseInt(m[1]);
-        // Find the exact byte position of the end of {SIZE}\r\n in full buffer
-        const fullHeader = new Uint8Array(headerLen);
-        let off = 0;
-        for (const c of headerChunks) { fullHeader.set(c, off); off += c.length; }
-        const fullStr = this.decoder.decode(fullHeader);
-        const matchIdx = fullStr.indexOf(m[0]);
-        literalStartOffset = new TextEncoder().encode(fullStr.substring(0, matchIdx + m[0].length)).length;
-        
-        // Extract bytes already read that belong to the literal
-        const alreadyRead = fullHeader.subarray(literalStartOffset);
-        
+        const litSize = parseInt(m[1]);
+        // Find byte offset where literal data starts
+        const markerEnd = headerStr.indexOf(m[0]) + m[0].length;
+        const markerEndBytes = new TextEncoder().encode(headerStr.substring(0, markerEnd)).length;
+
+        // Merge all raw chunks into one buffer
+        const allData = new Uint8Array(totalLen);
+        let pos = 0;
+        for (const c of rawChunks) { allData.set(c, pos); pos += c.length; }
+
+        // Extract literal bytes already received
+        const alreadyHave = totalLen - markerEndBytes;
+        const remaining = litSize - alreadyHave;
+
         let literalBytes: Uint8Array;
-        if (alreadyRead.length >= literalSize) {
-          literalBytes = alreadyRead.slice(0, literalSize);
-          if (alreadyRead.length > literalSize) {
-            this.buf = alreadyRead.slice(literalSize);
+        if (remaining <= 0) {
+          literalBytes = allData.slice(markerEndBytes, markerEndBytes + litSize);
+          if (alreadyHave > litSize) {
+            this.buf = allData.slice(markerEndBytes + litSize);
           }
         } else {
-          const rest = await this.readBytes(literalSize - alreadyRead.length);
-          literalBytes = new Uint8Array(alreadyRead.length + rest.length);
-          literalBytes.set(alreadyRead, 0);
-          literalBytes.set(rest, alreadyRead.length);
+          const rest = await this.readBytes(remaining);
+          literalBytes = new Uint8Array(litSize);
+          literalBytes.set(allData.subarray(markerEndBytes), 0);
+          literalBytes.set(rest, alreadyHave);
         }
 
-        // Drain trailing response
+        // Drain trailing tag response
         let trail = "";
         const drainStart = Date.now();
         while (Date.now() - drainStart < 5000) {
@@ -190,12 +189,11 @@ class MiniImap {
         return literalBytes;
       }
 
-      // Check for error responses (only need to check small tail)
-      if (tailStr.includes(`${tag} NO`) || tailStr.includes(`${tag} BAD`)) {
-        return new Uint8Array(0);
-      }
-      if (tailStr.includes(`${tag} OK`) && !tailStr.includes("{")) {
-        return new Uint8Array(0);
+      // Check for error/OK without literal
+      if (checkLen >= 20) {
+        const s = this.decoder.decode(checkBuf);
+        if (s.includes(`${tag} NO`) || s.includes(`${tag} BAD`)) return new Uint8Array(0);
+        if (s.includes(`${tag} OK`) && !s.includes("{")) return new Uint8Array(0);
       }
     }
     return new Uint8Array(0);
