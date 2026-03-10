@@ -484,6 +484,20 @@ export default function EmailTickets() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
+                          {attachmentInfoMap[t.id] && (
+                            <span className="inline-flex items-center gap-0.5 text-muted-foreground">
+                              {attachmentInfoMap[t.id].hasImages ? <Image className="h-3.5 w-3.5 text-blue-500" /> :
+                               attachmentInfoMap[t.id].hasVideos ? <Video className="h-3.5 w-3.5 text-purple-500" /> :
+                               <Paperclip className="h-3.5 w-3.5" />}
+                              <span className="text-xs">{attachmentInfoMap[t.id].count}</span>
+                            </span>
+                          )}
+                          {!attachmentInfoMap[t.id] && (
+                            <span className="inline-flex items-center gap-0.5 text-muted-foreground/40">
+                              <Paperclip className="h-3.5 w-3.5" />
+                              <span className="text-xs">0</span>
+                            </span>
+                          )}
                           <PriorityFlag priority={t.priority} />
                           <Badge variant="secondary">{statusLabels[t.status] || t.status}</Badge>
                           <ArrowRight className="h-4 w-4 text-muted-foreground/0 group-hover:text-muted-foreground/60 transition-colors" />
