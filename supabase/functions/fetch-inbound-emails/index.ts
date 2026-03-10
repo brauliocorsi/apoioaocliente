@@ -92,7 +92,7 @@ class ImapClient {
         const { value, done } = await Promise.race([readPromise, timeoutPromise]);
         if (done || !value) break;
         result += this.decoder.decode(value);
-      } catch { break; }
+      } catch (_e) { break; }
     }
     return result;
   }
@@ -128,12 +128,12 @@ class ImapClient {
   async searchSince(daysAgo: number): Promise<number[]> {
     const d = new Date();
     d.setDate(d.getDate() - daysAgo);
-    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const dateStr = `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear()}`;
-    const response = await this.command(`SEARCH SINCE ${dateStr}`);
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const dateStr = d.getDate() + "-" + monthNames[d.getMonth()] + "-" + d.getFullYear();
+    const response = await this.command("SEARCH SINCE " + dateStr);
     const match = response.match(/\* SEARCH([\d\s]*)/);
     if (!match || !match[1].trim()) return [];
-    return match[1].trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
+    return match[1].trim().split(/\s+/).map(Number).filter(function(n) { return !isNaN(n); });
   }
 
   async fetchMessage(seqNum: number): Promise<{
@@ -179,7 +179,7 @@ class ImapClient {
         if (!isNaN(parsed.getTime())) {
           date = parsed.toISOString();
         }
-      } catch { /* keep null */ }
+      } catch (_e) { /* keep null */ }
     }
 
     const parsed = parseMimeMessage(rawMessage);
@@ -200,8 +200,8 @@ class ImapClient {
   }
 
   async logout(): Promise<void> {
-    try { await this.command("LOGOUT"); } catch { /* ignore */ }
-    try { this.conn.close(); } catch { /* ignore */ }
+    try { await this.command("LOGOUT"); } catch (_e) { /* ignore */ }
+    try { this.conn.close(); } catch (_e2) { /* ignore */ }
   }
 }
 
@@ -252,11 +252,11 @@ function decodeQuotedPrintable(str: string, charset = "utf-8"): string {
     // Map common charset names to TextDecoder labels
     const decoderCharset = normalizeCharset(charset);
     return new TextDecoder(decoderCharset, { fatal: false }).decode(new Uint8Array(byteChunks));
-  } catch {
+  } catch (_e) {
     // Fallback: try latin1 then raw
     try {
       return new TextDecoder("iso-8859-1", { fatal: false }).decode(new Uint8Array(byteChunks));
-    } catch {
+    } catch (_e2) {
       return input.replace(/=([0-9A-Fa-f]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
     }
   }
@@ -288,7 +288,7 @@ function decodeBase64(str: string, charset = "utf-8"): string {
     const bytes = Uint8Array.from(atob(cleaned), c => c.charCodeAt(0));
     const decoderCharset = normalizeCharset(charset);
     return new TextDecoder(decoderCharset, { fatal: false }).decode(bytes);
-  } catch {
+  } catch (_e) {
     return str;
   }
 }
@@ -297,7 +297,7 @@ function decodeBase64ToBytes(str: string): Uint8Array {
   try {
     const cleaned = str.replace(/\r?\n/g, "").trim();
     return Uint8Array.from(atob(cleaned), c => c.charCodeAt(0));
-  } catch {
+  } catch (_e) {
     return new Uint8Array(0);
   }
 }
@@ -394,7 +394,7 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
         try {
           const bytes = new Uint8Array([...partBody].map(c => c.charCodeAt(0)));
           partBody = new TextDecoder(normalizeCharset(charset), { fatal: false }).decode(bytes);
-        } catch { /* keep as-is */ }
+        } catch (_e) { /* keep as-is */ }
       }
 
       if (contentType.includes("text/plain") && !result.bodyText) {
@@ -426,7 +426,7 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
       try {
         const bytes = new Uint8Array([...body].map(c => c.charCodeAt(0)));
         body = new TextDecoder(normalizeCharset(singleCharset), { fatal: false }).decode(bytes);
-      } catch { /* keep as-is */ }
+      } catch (_e) { /* keep as-is */ }
     }
 
     const contentTypeMatch = headerSection.match(/Content-Type:\s*([^;\r\n]+)/i);
@@ -843,7 +843,6 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             updated++;
             await imap.markAsSeen(seqNum);
             continue;
-          }
         }
 
         // New email from unknown/closed thread → goes to pending review queue
@@ -894,13 +893,14 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
     if (blocked > 0) parts.push(`${blocked} bloqueados`);
     if (skipped > 0) parts.push(`${skipped} duplicados`);
     if (parts.length === 0) parts.push("0 novos emails");
-    const message = parts.join(", ") + (remaining > 0 ? `. Restam ${remaining} — clique novamente.` : "");
+    const message = parts.join(", ") + (remaining > 0 ? ". Restam " + remaining + " - clique novamente." : "");
 
     return { success: true, message, created, pending, updated, blocked, skipped, total: batch.length, remaining };
   } catch (err) {
-    try { await imap.logout(); } catch { /* */ }
+    try { await imap.logout(); } catch (_e) { /* */ }
     throw err;
   }
+  // end processEmails
 }
 
 Deno.serve(async (req) => {
@@ -923,7 +923,7 @@ Deno.serve(async (req) => {
       if (body?.agent_id) agentId = body.agent_id;
       action = body?.action;
       pendingId = body?.pending_id;
-    } catch { /* no body */ }
+    } catch (_e) { /* no body */ }
 
     // Test-only: quick connection check
     if (testOnly) {
@@ -939,7 +939,7 @@ Deno.serve(async (req) => {
       const imap = new ImapClient();
       const port = Number(imapCfg.imap_port) || 993;
       const greeting = await imap.connect(imapCfg.imap_host, port);
-      if (port === 143) { try { await imap.startTls(imapCfg.imap_host); } catch { /* */ } }
+      if (port === 143) { try { await imap.startTls(imapCfg.imap_host); } catch (_e) { /* */ } }
       const loginRes = await imap.login(imapCfg.imap_user, imapCfg.imap_pass);
       await imap.logout();
       const ok = greeting.includes("OK") && loginRes.includes("OK");
