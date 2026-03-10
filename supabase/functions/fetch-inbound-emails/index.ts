@@ -1698,6 +1698,160 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ── Refetch: re-import emails+attachments for a specific ticket by client email ──
+    if (action === "refetch_ticket" && agentId) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+      const ticketIdParam = (await req.clone().json()).ticket_id as string | undefined;
+      if (!ticketIdParam) {
+        return new Response(JSON.stringify({ success: false, message: "ticket_id obrigatório" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Get ticket info
+      const { data: ticket } = await adminClient.from("tickets").select("id, client_email, client_name, description").eq("id", ticketIdParam).single();
+      if (!ticket || !ticket.client_email) {
+        return new Response(JSON.stringify({ success: false, message: "Ticket não encontrado ou sem email de cliente" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const imapCfg = await getImapConfig(adminClient);
+      if (!imapCfg) {
+        return new Response(JSON.stringify({ success: false, message: "IMAP não configurado" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const imap = new ImapClient();
+      const port = Number(imapCfg.imap_port) || 993;
+
+      try {
+        const greeting = await imap.connect(imapCfg.imap_host, port);
+        if (!greeting.includes("OK")) throw new Error("Servidor IMAP não respondeu");
+        if (port === 143) { try { await imap.startTls(imapCfg.imap_host); } catch (_e) { /* */ } }
+        const loginRes = await imap.login(imapCfg.imap_user, imapCfg.imap_pass);
+        if (!loginRes.includes("OK")) throw new Error("Falha na autenticação IMAP");
+        await imap.select(imapCfg.imap_folder);
+
+        // Search for emails FROM this client (last 30 days)
+        const clientEmail = ticket.client_email.toLowerCase();
+        const searchRes = await imap.command(`SEARCH FROM "${clientEmail}"`);
+        const searchMatch = searchRes.match(/\* SEARCH([\d\s]*)/);
+        const emailIds = (searchMatch && searchMatch[1].trim())
+          ? searchMatch[1].trim().split(/\s+/).map(Number).filter(n => !isNaN(n))
+          : [];
+
+        console.log(`Refetch: found ${emailIds.length} emails from ${clientEmail}`);
+
+        let attachmentsImported = 0;
+        let contentUpdated = false;
+        let messagesAdded = 0;
+
+        // Get existing messages to avoid duplicates
+        const { data: existingMsgs } = await adminClient
+          .from("ticket_messages")
+          .select("content")
+          .eq("ticket_id", ticketIdParam)
+          .eq("sender_type", "client");
+        const existingSnippets = new Set(
+          (existingMsgs || []).map((m: any) => m.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().substring(0, 200).toLowerCase())
+        );
+
+        for (const seqNum of emailIds) {
+          try {
+            // Fetch full message
+            const headers = await imap.fetchHeaders(seqNum);
+            const senderEmail = extractEmail(headers.from);
+            if (senderEmail.toLowerCase() !== clientEmail) continue;
+
+            // Always try BODYSTRUCTURE for attachments first (lightweight)
+            const bsUploaded = await fetchAttachmentsParts(imap, adminClient, seqNum, ticketIdParam, agentId);
+            attachmentsImported += bsUploaded;
+
+            // Now fetch full message for content
+            const msg = (headers.size && headers.size > 1800 * 1024)
+              ? await imap.fetchMessagePartial(seqNum)
+              : await imap.fetchMessage(seqNum);
+
+            // Upload any attachments from body parsing too
+            for (const att of msg.attachments) {
+              if (att.data.length > 0 && att.data.length <= 5 * 1024 * 1024) {
+                await uploadAttachment(adminClient, ticketIdParam, att, agentId);
+                attachmentsImported++;
+              }
+            }
+
+            // Check if ticket description is empty/placeholder and update it
+            const hasContent = msg.bodyHtml || msg.bodyText;
+            if (hasContent && (!ticket.description || ticket.description.includes("Conteúdo completo indisponível") || ticket.description === "(email sem conteúdo)")) {
+              const descContent = msg.bodyHtml
+                ? sanitizeHtml(msg.bodyHtml).substring(0, 20000)
+                : (msg.bodyText || "").substring(0, 10000);
+              if (descContent.replace(/<[^>]+>/g, "").trim().length > 10) {
+                await adminClient.from("tickets").update({ description: descContent }).eq("id", ticketIdParam);
+                contentUpdated = true;
+                ticket.description = descContent; // prevent further updates
+              }
+            }
+
+            // Add as message if not duplicate
+            const bodyForMsg = msg.bodyHtml
+              ? stripQuotedHtml(sanitizeHtml(msg.bodyHtml).substring(0, 10000))
+              : stripQuotedText((msg.bodyText || "").substring(0, 5000));
+            const snippet = bodyForMsg.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().substring(0, 200).toLowerCase();
+
+            if (snippet.length > 10 && !existingSnippets.has(snippet)) {
+              const fullBody = msg.bodyHtml
+                ? sanitizeHtml(msg.bodyHtml).substring(0, 10000)
+                : (msg.bodyText || "").substring(0, 5000);
+              const hasQuoted = fullBody.replace(/<[^>]+>/g, "").trim().length !== bodyForMsg.replace(/<[^>]+>/g, "").trim().length;
+
+              const msgInsert: any = {
+                ticket_id: ticketIdParam,
+                sender_id: "00000000-0000-0000-0000-000000000000",
+                sender_type: "client",
+                content: bodyForMsg,
+                ...(hasQuoted ? { original_content: fullBody } : {}),
+              };
+              if (msg.date) msgInsert.created_at = msg.date;
+
+              await adminClient.from("ticket_messages").insert(msgInsert);
+              existingSnippets.add(snippet);
+              messagesAdded++;
+            }
+          } catch (err) {
+            console.error(`Refetch email ${seqNum} error: ${(err as Error).message}`);
+          }
+        }
+
+        await imap.logout();
+
+        const parts = [];
+        if (attachmentsImported > 0) parts.push(`${attachmentsImported} anexo(s) importado(s)`);
+        if (contentUpdated) parts.push("conteúdo atualizado");
+        if (messagesAdded > 0) parts.push(`${messagesAdded} mensagem(ns) adicionada(s)`);
+        if (parts.length === 0) parts.push("Nenhum conteúdo novo encontrado");
+
+        return new Response(JSON.stringify({
+          success: true,
+          message: parts.join(", "),
+          emails_found: emailIds.length,
+          attachments_imported: attachmentsImported,
+          content_updated: contentUpdated,
+          messages_added: messagesAdded,
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      } catch (err) {
+        try { await imap.logout(); } catch (_e) { /* */ }
+        return new Response(JSON.stringify({ success: false, message: (err as Error).message }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Process emails - 1 at a time, frontend loop handles iteration
     const result = await processEmails({ fetchRecent, maxEmails, agentId, offset, searchDays });
     return new Response(JSON.stringify(result), {
