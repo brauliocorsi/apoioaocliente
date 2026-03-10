@@ -364,6 +364,19 @@ export default function Tickets() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {attachmentInfoMap[t.id] && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-0.5 text-muted-foreground">
+                              {attachmentInfoMap[t.id].hasImages ? <Image className="h-3.5 w-3.5 text-blue-500" /> :
+                               attachmentInfoMap[t.id].hasVideos ? <Video className="h-3.5 w-3.5 text-purple-500" /> :
+                               <Paperclip className="h-3.5 w-3.5" />}
+                              <span className="text-xs">{attachmentInfoMap[t.id].count}</span>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs">{attachmentInfoMap[t.id].count} anexo(s){attachmentInfoMap[t.id].hasImages ? " · fotos" : ""}{attachmentInfoMap[t.id].hasVideos ? " · vídeos" : ""}</p></TooltipContent>
+                        </Tooltip>
+                      )}
                       {callCounts[t.id] > 0 && (
                         <Tooltip>
                           <TooltipTrigger asChild>
