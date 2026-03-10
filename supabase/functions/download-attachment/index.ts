@@ -263,10 +263,10 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { uid, part_num, ticket_id, filename, content_type, encoding } = body;
+    const { part_num, ticket_id, filename, content_type, encoding, client_email } = body;
 
-    if (!uid || !part_num || !ticket_id || !filename) {
-      return new Response(JSON.stringify({ success: false, message: "Missing params (uid, part_num, ticket_id, filename required)" }), {
+    if (!part_num || !ticket_id || !filename || !client_email) {
+      return new Response(JSON.stringify({ success: false, message: "Missing params" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -281,7 +281,6 @@ Deno.serve(async (req) => {
       .eq("ticket_id", ticket_id)
       .eq("file_name", filename);
     if (count && count > 0) {
-      console.log(`Attachment ${filename} already exists for ticket ${ticket_id}, skipping`);
       return new Response(JSON.stringify({ success: true, skipped: true, message: "Already exists" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -302,7 +301,7 @@ Deno.serve(async (req) => {
     const port = Number(cfg.imap_port) || 993;
     const imap = new MiniImap();
 
-    console.log(`Fetching: uid=${uid} part=${part_num} file=${filename} encoding=${encoding}`);
+    console.log(`Fetching: email=${client_email} part=${part_num} file=${filename}`);
 
     const ok = await imap.connect(cfg.imap_host, port);
     if (!ok) throw new Error("IMAP connect failed");
@@ -310,8 +309,29 @@ Deno.serve(async (req) => {
     if (!loggedIn) throw new Error("IMAP login failed");
     await imap.select(cfg.imap_folder || "INBOX");
 
-    // Fetch entire MIME part at once
-    const rawBytes = await imap.fetchPartByUid(Number(uid), part_num);
+    // Search for messages from this client email to get fresh sequence numbers
+    const searchTag2 = imap.getNextTag();
+    await imap.writeCmd(`${searchTag2} SEARCH FROM "${client_email}"\r\n`);
+    const searchRes = await imap.readTagged(searchTag2);
+    const searchMatch = searchRes.match(/\* SEARCH([\d\s]*)/);
+    const seqNums = (searchMatch && searchMatch[1].trim())
+      ? searchMatch[1].trim().split(/\s+/).map(Number).filter(n => !isNaN(n))
+      : [];
+
+    console.log(`Found ${seqNums.length} emails from ${client_email}`);
+
+    // Try each message to find the one with this attachment
+    let rawBytes = new Uint8Array(0);
+    for (const seqNum of seqNums) {
+      try {
+        rawBytes = await imap.fetchPartBySeq(seqNum, part_num);
+        if (rawBytes.length > 0) {
+          console.log(`Found attachment in seq ${seqNum}: ${rawBytes.length} bytes`);
+          break;
+        }
+      } catch (_e) { /* try next */ }
+    }
+
     console.log(`Raw IMAP data: ${rawBytes.length} bytes`);
 
     await imap.logout();
