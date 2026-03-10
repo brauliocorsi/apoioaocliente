@@ -719,9 +719,10 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
           if (ticket && !statusData?.is_closed) {
             ticketId = ticket.id;
-            const body = msg.bodyHtml
-              ? sanitizeHtml(msg.bodyHtml).substring(0, 10000)
-              : (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
+            const rawBody = msg.bodyHtml
+              ? stripQuotedHtml(sanitizeHtml(msg.bodyHtml)).substring(0, 10000)
+              : stripQuotedText(msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
+            const body = rawBody;
 
             // Check for duplicate message content in this ticket (compare stripped text)
             const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
