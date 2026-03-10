@@ -45,6 +45,7 @@ class ImapClient {
   // Use latin1 to preserve raw byte values — charset-aware decoding happens later in MIME parser
   private decoder = new TextDecoder("latin1");
   private tagCounter = 0;
+  private buffer = new Uint8Array(0); // leftover bytes from previous reads
 
   async connect(host: string, port: number): Promise<string> {
     if (port === 993) {
@@ -79,7 +80,9 @@ class ImapClient {
     let result = "";
     const start = Date.now();
     while (Date.now() - start < 15000) {
-      const lines = result.split("\r\n");
+      // Only check the last few lines for the tag (optimization for large responses)
+      const lastChunk = result.length > 500 ? result.substring(result.length - 500) : result;
+      const lines = lastChunk.split("\r\n");
       for (const line of lines) {
         if (tag === "*" && line.startsWith("* OK")) return result;
         if (line.startsWith(`${tag} `)) return result;
@@ -88,6 +91,75 @@ class ImapClient {
         const readPromise = this.reader.read();
         const timeoutPromise = new Promise<{ value: undefined; done: true }>((resolve) =>
           setTimeout(() => resolve({ value: undefined, done: true }), 5000)
+        );
+        const { value, done } = await Promise.race([readPromise, timeoutPromise]);
+        if (done || !value) break;
+        result += this.decoder.decode(value);
+      } catch (_e) { break; }
+    }
+    return result;
+  }
+
+  // Read exactly N raw bytes from the connection (for IMAP literals)
+  private async readExactBytes(needed: number): Promise<Uint8Array> {
+    const chunks: Uint8Array[] = [];
+    let collected = 0;
+
+    // Use any leftover buffer first
+    if (this.buffer.length > 0) {
+      if (this.buffer.length >= needed) {
+        const result = this.buffer.slice(0, needed);
+        this.buffer = this.buffer.slice(needed);
+        return result;
+      }
+      chunks.push(this.buffer);
+      collected += this.buffer.length;
+      this.buffer = new Uint8Array(0);
+    }
+
+    const start = Date.now();
+    while (collected < needed && Date.now() - start < 30000) {
+      try {
+        const readPromise = this.reader.read();
+        const timeoutPromise = new Promise<{ value: undefined; done: true }>((resolve) =>
+          setTimeout(() => resolve({ value: undefined, done: true }), 10000)
+        );
+        const { value, done } = await Promise.race([readPromise, timeoutPromise]);
+        if (done || !value) break;
+        
+        const remaining = needed - collected;
+        if (value.length > remaining) {
+          chunks.push(value.slice(0, remaining));
+          this.buffer = value.slice(remaining); // save leftovers
+          collected += remaining;
+        } else {
+          chunks.push(value);
+          collected += value.length;
+        }
+      } catch (_e) { break; }
+    }
+
+    // Merge chunks
+    const result = new Uint8Array(collected);
+    let offset = 0;
+    for (const chunk of chunks) {
+      result.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return result;
+  }
+
+  // Read until we see the tag completion line (for post-literal trailing data)
+  private async readUntilTag(tag: string): Promise<string> {
+    let result = this.decoder.decode(this.buffer);
+    this.buffer = new Uint8Array(0);
+    const start = Date.now();
+    while (Date.now() - start < 5000) {
+      if (result.includes(`${tag} `)) return result;
+      try {
+        const readPromise = this.reader.read();
+        const timeoutPromise = new Promise<{ value: undefined; done: true }>((resolve) =>
+          setTimeout(() => resolve({ value: undefined, done: true }), 3000)
         );
         const { value, done } = await Promise.race([readPromise, timeoutPromise]);
         if (done || !value) break;
