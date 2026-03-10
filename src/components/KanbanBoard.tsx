@@ -168,7 +168,7 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile
   );
 }
 
-function DraggableTicket({ ticket, categoryNames, callCount, agentProfile, unreadCount, emailUnreadCount, ticketTags, allTags }: { ticket: TicketRow; categoryNames?: Record<string, string>; callCount?: number; agentProfile?: { full_name: string; avatar_url: string | null }; unreadCount?: number; emailUnreadCount?: number; ticketTags?: string[]; allTags?: { id: string; name: string; color: string | null }[] }) {
+function DraggableTicket({ ticket, categoryNames, callCount, agentProfile, unreadCount, emailUnreadCount, ticketTags, allTags, agentReplied }: { ticket: TicketRow; categoryNames?: Record<string, string>; callCount?: number; agentProfile?: { full_name: string; avatar_url: string | null }; unreadCount?: number; emailUnreadCount?: number; ticketTags?: string[]; allTags?: { id: string; name: string; color: string | null }[]; agentReplied?: boolean }) {
   const navigate = useNavigate();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: ticket.id,
@@ -183,7 +183,7 @@ function DraggableTicket({ ticket, categoryNames, callCount, agentProfile, unrea
       className={`cursor-grab active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}
       onClick={() => navigate(`/tickets/${ticket.id}`)}
     >
-      <TicketCard ticket={ticket} categoryNames={categoryNames} callCount={callCount} agentProfile={agentProfile} unreadCount={unreadCount} emailUnreadCount={emailUnreadCount} ticketTags={ticketTags} allTags={allTags} />
+      <TicketCard ticket={ticket} categoryNames={categoryNames} callCount={callCount} agentProfile={agentProfile} unreadCount={unreadCount} emailUnreadCount={emailUnreadCount} ticketTags={ticketTags} allTags={allTags} agentReplied={agentReplied} />
     </div>
   );
 }
