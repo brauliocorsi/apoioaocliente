@@ -113,7 +113,9 @@ Deno.serve(async (req) => {
     }
 
     const subject = `Re: [Ticket #${ticket.ticket_number}] ${ticket.subject || ""}`;
-    const plainText = `Olá ${ticket.client_name || "Cliente"},\n\n${content}\n\n--\nUP Móveis - Apoio ao Cliente\nPara responder, basta responder a este email.`;
+    const clientDisplayName = ticket.client_name || "Cliente";
+    const plainText = `Olá ${clientDisplayName},\n\n${content}\n\n--\nUP Móveis\nApoio ao Cliente\napoioaocliente@upmoveis.pt\nwww.upmoveis.pt\n\nPara responder, basta responder a este email.`;
+    const htmlBody = buildEmailHtml(clientDisplayName, content);
 
     let deliveryStatus = "accepted";
     let deliveryDetails: string | null = null;
