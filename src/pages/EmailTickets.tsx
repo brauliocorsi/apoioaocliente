@@ -104,6 +104,23 @@ export default function EmailTickets() {
         .in("id", ticketIds)
         .order("updated_at", { ascending: false });
       setTickets((data as EmailTicketRow[]) || []);
+
+      // Fetch attachment info
+      if (data && data.length > 0) {
+        const tIds = data.map((t: any) => t.id);
+        const { data: attData } = await supabase
+          .from("ticket_attachments")
+          .select("ticket_id, file_type")
+          .in("ticket_id", tIds);
+        const attMap: Record<string, { count: number; hasImages: boolean; hasVideos: boolean }> = {};
+        (attData || []).forEach((a: any) => {
+          if (!attMap[a.ticket_id]) attMap[a.ticket_id] = { count: 0, hasImages: false, hasVideos: false };
+          attMap[a.ticket_id].count++;
+          if (a.file_type?.startsWith("image/")) attMap[a.ticket_id].hasImages = true;
+          if (a.file_type?.startsWith("video/")) attMap[a.ticket_id].hasVideos = true;
+        });
+        setAttachmentInfoMap(attMap);
+      }
     }
   };
 
