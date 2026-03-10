@@ -2160,32 +2160,17 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Return attachment jobs info so frontend can call download-attachment per part (using UID for stability)
-      const attachmentJobsForClient: { uid: number; partNum: string; filename: string; contentType: string; encoding: string; size: number }[] = [];
-      for (const job of attachmentJobs) {
-        for (const part of job.parts) {
-          attachmentJobsForClient.push({
-            uid: job.uid,
-            partNum: part.partNum,
-            filename: part.filename,
-            contentType: part.contentType,
-            encoding: part.encoding,
-            size: part.size,
-          });
-        }
-      }
-
       const parts = [];
       if (contentUpdated) parts.push("conteúdo atualizado");
       if (messagesAdded > 0) parts.push(`${messagesAdded} mensagem(ns) adicionada(s)`);
-      if (attachmentPartsFound > 0) parts.push(`${attachmentPartsFound} anexo(s) a importar`);
+      if (attachmentsImported > 0) parts.push(`${attachmentsImported} anexo(s) importado(s)`);
+      else if (attachmentPartsFound > 0) parts.push(`${attachmentPartsFound} anexo(s) encontrado(s), já existentes`);
       if (parts.length === 0) parts.push("Nenhum conteúdo novo encontrado");
 
       return new Response(JSON.stringify({
         success: true,
         message: parts.join(", "),
-        attachments_background: attachmentPartsFound,
-        attachment_jobs: attachmentJobsForClient,
+        attachments_imported: attachmentsImported,
         content_updated: contentUpdated,
         messages_added: messagesAdded,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
