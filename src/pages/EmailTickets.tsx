@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Loader2, Mail, RefreshCw, ArrowRight, Check, X, Ban, Eye, Clock, Shield, RotateCw, History, FileCheck, FileX } from "lucide-react";
+import { Search, Loader2, Mail, RefreshCw, ArrowRight, Check, X, Ban, Eye, Clock, Shield, RotateCw, History, FileCheck, FileX, Paperclip, Image, Video } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
@@ -82,6 +82,7 @@ export default function EmailTickets() {
   const [selectedPending, setSelectedPending] = useState<PendingEmail | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [tab, setTab] = useState("pending");
+  const [attachmentInfoMap, setAttachmentInfoMap] = useState<Record<string, { count: number; hasImages: boolean; hasVideos: boolean }>>({});
   const navigate = useNavigate();
   const { statusLabels } = useTicketStatuses();
   const { toast } = useToast();
@@ -103,6 +104,23 @@ export default function EmailTickets() {
         .in("id", ticketIds)
         .order("updated_at", { ascending: false });
       setTickets((data as EmailTicketRow[]) || []);
+
+      // Fetch attachment info
+      if (data && data.length > 0) {
+        const tIds = data.map((t: any) => t.id);
+        const { data: attData } = await supabase
+          .from("ticket_attachments")
+          .select("ticket_id, file_type")
+          .in("ticket_id", tIds);
+        const attMap: Record<string, { count: number; hasImages: boolean; hasVideos: boolean }> = {};
+        (attData || []).forEach((a: any) => {
+          if (!attMap[a.ticket_id]) attMap[a.ticket_id] = { count: 0, hasImages: false, hasVideos: false };
+          attMap[a.ticket_id].count++;
+          if (a.file_type?.startsWith("image/")) attMap[a.ticket_id].hasImages = true;
+          if (a.file_type?.startsWith("video/")) attMap[a.ticket_id].hasVideos = true;
+        });
+        setAttachmentInfoMap(attMap);
+      }
     }
   };
 
@@ -466,6 +484,20 @@ export default function EmailTickets() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
+                          {attachmentInfoMap[t.id] && (
+                            <span className="inline-flex items-center gap-0.5 text-muted-foreground">
+                              {attachmentInfoMap[t.id].hasImages ? <Image className="h-3.5 w-3.5 text-blue-500" /> :
+                               attachmentInfoMap[t.id].hasVideos ? <Video className="h-3.5 w-3.5 text-purple-500" /> :
+                               <Paperclip className="h-3.5 w-3.5" />}
+                              <span className="text-xs">{attachmentInfoMap[t.id].count}</span>
+                            </span>
+                          )}
+                          {!attachmentInfoMap[t.id] && (
+                            <span className="inline-flex items-center gap-0.5 text-muted-foreground/40">
+                              <Paperclip className="h-3.5 w-3.5" />
+                              <span className="text-xs">0</span>
+                            </span>
+                          )}
                           <PriorityFlag priority={t.priority} />
                           <Badge variant="secondary">{statusLabels[t.status] || t.status}</Badge>
                           <ArrowRight className="h-4 w-4 text-muted-foreground/0 group-hover:text-muted-foreground/60 transition-colors" />

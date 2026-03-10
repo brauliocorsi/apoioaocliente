@@ -5,7 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Search, Loader2, List, LayoutGrid, AlertTriangle, Clock, CheckCircle, Timer, Phone, Mail, MailCheck } from "lucide-react";
+import { Plus, Search, Loader2, List, LayoutGrid, AlertTriangle, Clock, CheckCircle, Timer, Phone, Mail, MailCheck, Paperclip, Image, Video } from "lucide-react";
+
+export type AttachmentInfo = {
+  count: number;
+  hasImages: boolean;
+  hasVideos: boolean;
+};
 import { useNavigate } from "react-router-dom";
 import KanbanBoard from "@/components/KanbanBoard";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
@@ -87,6 +93,7 @@ export default function Tickets() {
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [emailUnreadCounts, setEmailUnreadCounts] = useState<Record<string, number>>({});
   const [agentRepliedMap, setAgentRepliedMap] = useState<Record<string, boolean>>({});
+  const [attachmentInfoMap, setAttachmentInfoMap] = useState<Record<string, AttachmentInfo>>({});
   const [fetchKey, setFetchKey] = useState(0);
   const navigate = useNavigate();
   const { statuses, statusLabels } = useTicketStatuses();
@@ -149,6 +156,24 @@ export default function Tickets() {
         tagsMap[tt.ticket_id].push(tt.tag_id);
       });
       setTicketTagsMap(tagsMap);
+
+      // Fetch attachment info per ticket
+      if (data && data.length > 0) {
+        const tIds = data.map((t: any) => t.id);
+        const { data: attData } = await supabase
+          .from("ticket_attachments")
+          .select("ticket_id, file_type")
+          .in("ticket_id", tIds);
+        const attMap: Record<string, AttachmentInfo> = {};
+        (attData || []).forEach((a: any) => {
+          if (!attMap[a.ticket_id]) attMap[a.ticket_id] = { count: 0, hasImages: false, hasVideos: false };
+          attMap[a.ticket_id].count++;
+          if (a.file_type?.startsWith("image/")) attMap[a.ticket_id].hasImages = true;
+          if (a.file_type?.startsWith("video/")) attMap[a.ticket_id].hasVideos = true;
+        });
+        setAttachmentInfoMap(attMap);
+      }
+
       setLoading(false);
 
       // Fetch unread message counts and agent-replied status
@@ -313,7 +338,7 @@ export default function Tickets() {
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : view === "kanban" ? (
-        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} callCounts={callCounts} agentProfiles={agentProfiles} unreadCounts={unreadCounts} emailUnreadCounts={emailUnreadCounts} ticketTagsMap={ticketTagsMap} allTags={allTags} agentRepliedMap={agentRepliedMap} />
+        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} callCounts={callCounts} agentProfiles={agentProfiles} unreadCounts={unreadCounts} emailUnreadCounts={emailUnreadCounts} ticketTagsMap={ticketTagsMap} allTags={allTags} agentRepliedMap={agentRepliedMap} attachmentInfoMap={attachmentInfoMap} />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -339,6 +364,19 @@ export default function Tickets() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {attachmentInfoMap[t.id] && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-0.5 text-muted-foreground">
+                              {attachmentInfoMap[t.id].hasImages ? <Image className="h-3.5 w-3.5 text-blue-500" /> :
+                               attachmentInfoMap[t.id].hasVideos ? <Video className="h-3.5 w-3.5 text-purple-500" /> :
+                               <Paperclip className="h-3.5 w-3.5" />}
+                              <span className="text-xs">{attachmentInfoMap[t.id].count}</span>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs">{attachmentInfoMap[t.id].count} anexo(s){attachmentInfoMap[t.id].hasImages ? " · fotos" : ""}{attachmentInfoMap[t.id].hasVideos ? " · vídeos" : ""}</p></TooltipContent>
+                        </Tooltip>
+                      )}
                       {callCounts[t.id] > 0 && (
                         <Tooltip>
                           <TooltipTrigger asChild>

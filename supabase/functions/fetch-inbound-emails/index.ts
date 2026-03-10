@@ -399,7 +399,18 @@ function decodeBase64ToBytes(str: string, maxBytes?: number): Uint8Array {
         return new Uint8Array(0);
       }
     }
-    return Uint8Array.from(atob(cleaned), c => c.charCodeAt(0));
+    // Chunked decoding to avoid Maximum call stack size exceeded
+    const binaryStr = atob(cleaned);
+    const len = binaryStr.length;
+    const bytes = new Uint8Array(len);
+    const CHUNK = 8192;
+    for (let offset = 0; offset < len; offset += CHUNK) {
+      const end = Math.min(offset + CHUNK, len);
+      for (let i = offset; i < end; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+    }
+    return bytes;
   } catch (_e) {
     return new Uint8Array(0);
   }
@@ -715,21 +726,22 @@ async function generateFingerprint(from: string, subject: string, bodySnippet: s
 // Parse BODYSTRUCTURE response to find attachment parts (part number, filename, content-type, size)
 interface AttachmentPart { partNum: string; filename: string; contentType: string; encoding: string; size: number; }
 
-function parseBodyStructureAttachments(bs: string): AttachmentPart[] {
+function parseBodyStructureAttachments(bs: string, prefix = ""): AttachmentPart[] {
   const results: AttachmentPart[] = [];
   
   // Extract the BODYSTRUCTURE content between the outer FETCH parens
-  const bsMatch = bs.match(/BODYSTRUCTURE\s+(\(.*\))\s*\)\s*\n/s);
-  if (!bsMatch) return results;
-  const struct = bsMatch[1];
+  let struct = bs;
+  if (!prefix) {
+    const bsMatch = bs.match(/BODYSTRUCTURE\s+(\(.*\))\s*\)\s*\n/s);
+    if (!bsMatch) return results;
+    struct = bsMatch[1];
+  }
   
   // Parse top-level parts by tracking parenthesis depth
-  // In multipart, each top-level ( ) group is a part numbered 1, 2, 3...
   const topParts: { content: string; index: number }[] = [];
   let depth = 0;
   let partStart = -1;
   
-  // Skip the outermost parens
   for (let i = 1; i < struct.length - 1; i++) {
     if (struct[i] === "(") {
       if (depth === 0) partStart = i;
@@ -742,10 +754,31 @@ function parseBodyStructureAttachments(bs: string): AttachmentPart[] {
     }
   }
   
-  // Check each top-level part for attachment indicators
   for (let idx = 0; idx < topParts.length; idx++) {
     const part = topParts[idx].content;
-    const partNum = String(idx + 1);
+    const partNum = prefix ? `${prefix}.${idx + 1}` : String(idx + 1);
+    
+    // Check if this part is itself a multipart (contains nested (...) groups at depth 1)
+    let innerDepth = 0;
+    let hasNestedParts = false;
+    for (let i = 1; i < part.length - 1; i++) {
+      if (part[i] === "(") {
+        if (innerDepth === 0) { hasNestedParts = true; break; }
+        innerDepth++;
+      } else if (part[i] === ")") {
+        innerDepth--;
+      }
+    }
+    
+    // Detect multipart container: starts with nested parens, has "mixed"/"alternative"/"related" etc
+    const isMultipart = hasNestedParts && /"\s*(?:mixed|alternative|related|signed|report)/i.test(part);
+    
+    if (isMultipart) {
+      // Recurse into nested multipart
+      const nested = parseBodyStructureAttachments(part, partNum);
+      results.push(...nested);
+      continue;
+    }
     
     // Look for filename in this part
     const nameMatch = part.match(/(?:"name"\s*"([^"]+)"|"filename"\s*"([^"]+)")/i);
@@ -829,6 +862,17 @@ async function uploadAttachment(
   attachment: { filename: string; contentType: string; data: Uint8Array },
   agentId: string,
 ): Promise<void> {
+  // Dedup: skip if same filename already exists for this ticket
+  const { count } = await adminClient
+    .from("ticket_attachments")
+    .select("id", { count: "exact", head: true })
+    .eq("ticket_id", ticketId)
+    .eq("file_name", attachment.filename);
+  if (count && count > 0) {
+    console.log(`Attachment '${attachment.filename}' already exists for ticket ${ticketId}, skipping`);
+    return;
+  }
+
   const safeName = attachment.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
   const filePath = `${ticketId}/${Date.now()}_${safeName}`;
 
@@ -963,7 +1007,8 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
     let headersChecked = 0;
     let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
     let newEmailProcessed = false;
-    let backfillDone = false; // Only backfill 1 email per batch to avoid timeouts
+    let backfillCount = 0; // Allow up to 3 backfills per batch
+    const MAX_BACKFILLS = 3;
 
     const remainingIds = emailIds.slice(offset);
 
@@ -986,11 +1031,11 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
         // ── IN-MEMORY dedup check (instant, no DB round-trip) ──
         if (emailFingerprint && knownFingerprints.has(emailFingerprint)) {
-          // Check if ticket is missing attachments — if so, fetch them now (max 1 per batch)
-          if (!backfillDone) {
+          // Check if ticket is missing attachments — if so, fetch them now (max 3 per batch)
+          if (backfillCount < MAX_BACKFILLS) {
             console.log(`Dup check: fp=${emailFingerprint.substring(0, 30)}... email=${clientEmail}`);
           }
-          if (!backfillDone) {
+          if (backfillCount < MAX_BACKFILLS) {
             try {
               // Find ticket via email_threads
               let backfillTicketId: string | null = null;
@@ -1063,10 +1108,10 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
                       console.log(`No attachments found for ticket ${backfillTicketId}`);
                     }
                     newEmailProcessed = true;
-                    backfillDone = true;
+                    backfillCount++;
                   } catch (fetchErr) {
                     console.error(`Backfill fetch error: ${(fetchErr as Error).message}`);
-                    backfillDone = true;
+                    backfillCount++;
                   }
                 }
               }
@@ -1246,10 +1291,9 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
                   console.error(`Attachment error: ${(err as Error).message}`);
                 }
               }
-            } else {
-              // No attachments from parsed body — try BODYSTRUCTURE for large/partial emails
-              await fetchAttachmentsParts(imap, adminClient, seqNum, ticketId, createdBy!);
             }
+            // Always try BODYSTRUCTURE to catch attachments missed by body parsing (partial fetches, nested MIME)
+            await fetchAttachmentsParts(imap, adminClient, seqNum, ticketId, createdBy!);
 
             updated++;
             await imap.markAsSeen(seqNum);
