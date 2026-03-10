@@ -355,6 +355,13 @@ class ImapClient {
     return await this.command(`FETCH ${seqNum} BODYSTRUCTURE`);
   }
 
+  // Fetch the UID for a given sequence number
+  async fetchUid(seqNum: number): Promise<number> {
+    const response = await this.command(`FETCH ${seqNum} (UID)`);
+    const match = response.match(/UID\s+(\d+)/);
+    return match ? parseInt(match[1]) : 0;
+  }
+
   async logout(): Promise<void> {
     try { await this.command("LOGOUT"); } catch (_e) { /* ignore */ }
     try { this.conn.close(); } catch (_e2) { /* ignore */ }
