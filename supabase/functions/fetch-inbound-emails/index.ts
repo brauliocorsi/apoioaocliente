@@ -719,10 +719,13 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
           if (ticket && !statusData?.is_closed) {
             ticketId = ticket.id;
-            const rawBody = msg.bodyHtml
-              ? stripQuotedHtml(sanitizeHtml(msg.bodyHtml)).substring(0, 10000)
-              : stripQuotedText(msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
-            const body = rawBody;
+            const fullBody = msg.bodyHtml
+              ? sanitizeHtml(msg.bodyHtml).substring(0, 10000)
+              : (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
+            const strippedBody = msg.bodyHtml
+              ? stripQuotedHtml(fullBody).substring(0, 10000)
+              : stripQuotedText(fullBody).substring(0, 5000);
+            const body = strippedBody;
 
             // Check for duplicate message content in this ticket (compare stripped text)
             const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -745,11 +748,15 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
               continue;
             }
 
+            // Save original content only if stripping actually removed something
+            const hasQuotedContent = stripHtml(fullBody).length !== stripHtml(strippedBody).length;
+
             const msgInsert: any = {
               ticket_id: ticketId,
               sender_id: "00000000-0000-0000-0000-000000000000",
               sender_type: "client",
               content: body,
+              ...(hasQuotedContent ? { original_content: fullBody } : {}),
             };
             if (msg.date) msgInsert.created_at = msg.date;
 
