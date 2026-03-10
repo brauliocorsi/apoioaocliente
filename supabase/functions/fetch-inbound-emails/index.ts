@@ -969,6 +969,7 @@ Deno.serve(async (req) => {
     let agentId: string | undefined;
     let action: string | undefined;
     let pendingId: string | undefined;
+    let offset: number | undefined;
     try {
       const body = await req.json();
       testOnly = body?.test_only === true;
@@ -977,6 +978,7 @@ Deno.serve(async (req) => {
       if (body?.agent_id) agentId = body.agent_id;
       action = body?.action;
       pendingId = body?.pending_id;
+      if (body?.offset !== undefined) offset = Number(body.offset);
     } catch (_e) { /* no body */ }
 
     // Test-only: quick connection check
