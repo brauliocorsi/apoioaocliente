@@ -287,23 +287,13 @@ export default function EmailTicketDetail() {
       toast({ title: "Re-importação concluída", description: data?.message || "Emails verificados" });
       fetchData();
 
-      // Download attachments sequentially via chunked fetch
+      // Download attachments server-side (edge function handles full fetch + upload)
       const jobs = data?.attachment_jobs || [];
       if (jobs.length > 0) {
         setBgAttachments(jobs.length);
         for (const job of jobs) {
           try {
-            // Check if already exists
-            const { count } = await supabase
-              .from("ticket_attachments")
-              .select("id", { count: "exact", head: true })
-              .eq("ticket_id", id!)
-              .eq("file_name", job.filename);
-            if (count && count > 0) {
-              setBgAttachments(prev => Math.max(0, prev - 1));
-              continue;
-            }
-            await downloadAttachmentChunked(job);
+            await downloadAttachmentServerSide(job);
             setBgAttachments(prev => Math.max(0, prev - 1));
           } catch (err) {
             console.error(`Attachment error for ${job.filename}: ${(err as Error).message}`);
