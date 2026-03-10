@@ -1167,17 +1167,56 @@ Deno.serve(async (req) => {
           ticket_id: ticketId,
         }).eq("id", pendingId);
 
-        // Auto-reject remaining duplicates from same sender
-        await adminClient.from("pending_emails").update({
-          status: "rejected",
-          reviewed_by: agentId,
-          reviewed_at: new Date().toISOString(),
-          rejection_reason: "Duplicado — mensagem adicionada ao ticket existente",
-        }).eq("from_address", pe.from_address)
+        // ── Merge ALL other pending emails from same sender into this ticket ──
+        const { data: otherPending } = await adminClient.from("pending_emails")
+          .select("*")
+          .eq("from_address", pe.from_address.toLowerCase())
           .eq("status", "pending")
-          .neq("id", pendingId);
+          .neq("id", pendingId)
+          .order("created_at", { ascending: true });
 
-        return new Response(JSON.stringify({ success: true, message: "Mensagem adicionada ao ticket existente", ticket_id: ticketId }), {
+        let mergedCount = 0;
+        if (otherPending && otherPending.length > 0) {
+          for (const op of otherPending) {
+            const opContent = op.body_html || op.body_text || "(email sem conteúdo)";
+            const msgInsert: any = {
+              ticket_id: ticketId,
+              sender_id: "00000000-0000-0000-0000-000000000000",
+              sender_type: "client",
+              content: opContent,
+            };
+            if (op.created_at) msgInsert.created_at = op.created_at;
+            await adminClient.from("ticket_messages").insert(msgInsert);
+
+            // Move attachments from this pending email too
+            const opAttMeta = (op.attachments_meta as any[]) || [];
+            for (const att of opAttMeta) {
+              try {
+                const { data: fileData } = await adminClient.storage.from("email-assets").download(att.path);
+                if (fileData) {
+                  const bytes = new Uint8Array(await fileData.arrayBuffer());
+                  await uploadAttachment(adminClient, ticketId!, { filename: att.filename, contentType: att.contentType, data: bytes }, agentId);
+                }
+                await adminClient.storage.from("email-assets").remove([att.path]);
+              } catch (err) { console.error(`Merge attachment error: ${(err as Error).message}`); }
+            }
+
+            await adminClient.from("pending_emails").update({
+              status: "approved",
+              reviewed_by: agentId,
+              reviewed_at: new Date().toISOString(),
+              ticket_id: ticketId,
+              rejection_reason: "Fundido com ticket existente",
+            }).eq("id", op.id);
+            mergedCount++;
+          }
+        }
+
+        const mergeMsg = mergedCount > 0
+          ? `Mensagem adicionada ao ticket existente (+ ${mergedCount} email${mergedCount > 1 ? "s" : ""} fundido${mergedCount > 1 ? "s" : ""})`
+          : "Mensagem adicionada ao ticket existente";
+
+        return new Response(JSON.stringify({ success: true, message: mergeMsg, ticket_id: ticketId }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
