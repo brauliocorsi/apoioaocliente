@@ -355,6 +355,13 @@ class ImapClient {
     return await this.command(`FETCH ${seqNum} BODYSTRUCTURE`);
   }
 
+  // Fetch the UID for a given sequence number
+  async fetchUid(seqNum: number): Promise<number> {
+    const response = await this.command(`FETCH ${seqNum} (UID)`);
+    const match = response.match(/UID\s+(\d+)/);
+    return match ? parseInt(match[1]) : 0;
+  }
+
   async logout(): Promise<void> {
     try { await this.command("LOGOUT"); } catch (_e) { /* ignore */ }
     try { this.conn.close(); } catch (_e2) { /* ignore */ }
@@ -1996,7 +2003,7 @@ Deno.serve(async (req) => {
       let messagesAdded = 0;
       let contentUpdated = false;
       let attachmentPartsFound = 0;
-      const attachmentJobs: { seqNum: number; parts: AttachmentPart[] }[] = [];
+      const attachmentJobs: { uid: number; seqNum: number; parts: AttachmentPart[] }[] = [];
 
       try {
         const greeting = await imap.connect(imapCfg.imap_host, port);
@@ -2034,7 +2041,8 @@ Deno.serve(async (req) => {
             const bs = await imap.fetchBodyStructure(seqNum);
             const parts = parseBodyStructureAttachments(bs);
             if (parts.length > 0) {
-              attachmentJobs.push({ seqNum, parts: parts.filter(p => p.size <= 5 * 1024 * 1024) });
+              const uid = await imap.fetchUid(seqNum);
+              attachmentJobs.push({ uid, seqNum, parts: parts.filter(p => p.size <= 5 * 1024 * 1024) });
               attachmentPartsFound += parts.length;
             }
 
@@ -2094,16 +2102,17 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Return attachment jobs info so frontend can call download_single_attachment per part
-      const attachmentJobsForClient: { seqNum: number; partNum: string; filename: string; contentType: string; encoding: string }[] = [];
+      // Return attachment jobs info so frontend can call download-attachment per part (using UID for stability)
+      const attachmentJobsForClient: { uid: number; partNum: string; filename: string; contentType: string; encoding: string; size: number }[] = [];
       for (const job of attachmentJobs) {
         for (const part of job.parts) {
           attachmentJobsForClient.push({
-            seqNum: job.seqNum,
+            uid: job.uid,
             partNum: part.partNum,
             filename: part.filename,
             contentType: part.contentType,
             encoding: part.encoding,
+            size: part.size,
           });
         }
       }

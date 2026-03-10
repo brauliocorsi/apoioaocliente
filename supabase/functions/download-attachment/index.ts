@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Minimal IMAP client - partial fetch support
+// Minimal IMAP client - UID-based partial fetch
 class MiniImap {
   private conn!: Deno.TlsConn | Deno.Conn;
   private reader!: ReadableStreamDefaultReader<Uint8Array>;
@@ -115,11 +115,10 @@ class MiniImap {
     await this.cmd(`SELECT "${folder}"`);
   }
 
-  // Partial fetch: BODY[part]<offset.size>
-  // Returns the raw base64 bytes for that chunk
-  async fetchPartial(seqNum: number, partNum: string, offset: number, size: number): Promise<Uint8Array> {
+  // UID-based partial fetch: UID FETCH uid BODY[part]<offset.size>
+  async uidFetchPartial(uid: number, partNum: string, offset: number, size: number): Promise<Uint8Array> {
     const tag = this.nextTag();
-    const cmd = `FETCH ${seqNum} BODY[${partNum}]<${offset}.${size}>`;
+    const cmd = `UID FETCH ${uid} BODY[${partNum}]<${offset}.${size}>`;
     await this.write(`${tag} ${cmd}\r\n`);
 
     let header = "";
@@ -160,6 +159,16 @@ class MiniImap {
         }
         return literalBytes;
       }
+      // Check for NO/BAD response (uid not found)
+      if (header.includes(`${tag} NO`) || header.includes(`${tag} BAD`)) {
+        console.error(`IMAP error: ${header.substring(header.lastIndexOf(tag))}`);
+        return new Uint8Array(0);
+      }
+      // Check for OK with no data (uid exists but part doesn't)
+      if (header.includes(`${tag} OK`) && !header.includes("{")) {
+        console.error("UID FETCH returned OK but no data");
+        return new Uint8Array(0);
+      }
     }
     return new Uint8Array(0);
   }
@@ -170,10 +179,9 @@ class MiniImap {
   }
 }
 
-// Convert Uint8Array to base64 string (for JSON response) - works in small chunks
+// Convert Uint8Array to base64 string for JSON response
 function uint8ToBase64(bytes: Uint8Array): string {
   let binary = "";
-  // Process in 8KB chunks to avoid stack overflow
   const chunkSize = 8192;
   for (let i = 0; i < bytes.length; i += chunkSize) {
     const slice = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
@@ -191,10 +199,10 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { seq_num, part_num, offset, chunk_size, total_size } = body;
+    const { uid, part_num, offset, chunk_size, total_size } = body;
 
-    if (!seq_num || !part_num || offset === undefined || !chunk_size) {
-      return new Response(JSON.stringify({ success: false, message: "Missing params" }), {
+    if (!uid || !part_num || offset === undefined || !chunk_size) {
+      return new Response(JSON.stringify({ success: false, message: "Missing params (uid, part_num, offset, chunk_size required)" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -224,21 +232,21 @@ Deno.serve(async (req) => {
     if (!loggedIn) throw new Error("IMAP login failed");
     await imap.select(cfg.imap_folder || "INBOX");
 
-    console.log(`Chunk: seq=${seq_num} part=${part_num} offset=${offset} size=${chunk_size}`);
-    const rawBytes = await imap.fetchPartial(Number(seq_num), part_num, Number(offset), Number(chunk_size));
+    console.log(`UID chunk: uid=${uid} part=${part_num} offset=${offset} size=${chunk_size}`);
+    const rawBytes = await imap.uidFetchPartial(Number(uid), part_num, Number(offset), Number(chunk_size));
     console.log(`Got ${rawBytes.length} bytes`);
 
     await imap.logout();
 
     // Return chunk as base64 in JSON
-    const b64 = uint8ToBase64(rawBytes);
+    const b64 = rawBytes.length > 0 ? uint8ToBase64(rawBytes) : "";
 
     return new Response(JSON.stringify({
       success: true,
       data: b64,
       bytes_read: rawBytes.length,
       offset: Number(offset),
-      done: rawBytes.length < Number(chunk_size) || (total_size && Number(offset) + rawBytes.length >= Number(total_size)),
+      done: rawBytes.length === 0 || rawBytes.length < Number(chunk_size) || (total_size && Number(offset) + rawBytes.length >= Number(total_size)),
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
