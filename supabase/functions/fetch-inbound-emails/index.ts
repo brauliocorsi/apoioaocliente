@@ -1394,8 +1394,10 @@ Deno.serve(async (req) => {
     let offset: number | undefined;
     let searchDays: number | undefined;
     let ticketIdBody: string | undefined;
+    let bodyParsed: any = {};
     try {
       const body = await req.json();
+      bodyParsed = body || {};
       testOnly = body?.test_only === true;
       fetchRecent = body?.fetch_recent === true;
       if (body?.max_emails) maxEmails = Math.min(Number(body.max_emails), 50);
@@ -1708,7 +1710,86 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Refetch: re-import emails+attachments for a specific ticket by client email ──
+    // ── Download a single attachment part (called by frontend per attachment) ──
+    if (action === "download_single_attachment" && agentId) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+      const { ticket_id: attTicketId, seq_num, part_num, filename, content_type, encoding } = ticketIdBody
+        ? { ticket_id: ticketIdBody, seq_num: bodyParsed.seq_num, part_num: bodyParsed.part_num, filename: bodyParsed.filename, content_type: bodyParsed.content_type, encoding: bodyParsed.encoding }
+        : { ticket_id: null, seq_num: null, part_num: null, filename: null, content_type: null, encoding: null };
+
+      if (!attTicketId || !seq_num || !part_num || !filename) {
+        return new Response(JSON.stringify({ success: false, message: "Parâmetros em falta" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Check if attachment already exists
+      const { data: existing } = await adminClient
+        .from("ticket_attachments")
+        .select("id")
+        .eq("ticket_id", attTicketId)
+        .eq("file_name", filename)
+        .limit(1);
+      if (existing && existing.length > 0) {
+        return new Response(JSON.stringify({ success: true, message: "Anexo já existe", skipped: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const imapCfg = await getImapConfig(adminClient);
+      if (!imapCfg) {
+        return new Response(JSON.stringify({ success: false, message: "IMAP não configurado" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const imap = new ImapClient();
+      const port = Number(imapCfg.imap_port) || 993;
+      try {
+        const greeting = await imap.connect(imapCfg.imap_host, port);
+        if (!greeting.includes("OK")) throw new Error("IMAP connect failed");
+        if (port === 143) { try { await imap.startTls(imapCfg.imap_host); } catch (_e) { /* */ } }
+        const loginRes = await imap.login(imapCfg.imap_user, imapCfg.imap_pass);
+        if (!loginRes.includes("OK")) throw new Error("IMAP login failed");
+        await imap.select(imapCfg.imap_folder);
+
+        const rawPart = await imap.fetchMimePart(Number(seq_num), part_num);
+        let data: Uint8Array;
+        if (encoding === "base64") {
+          data = decodeBase64ToBytes(rawPart, 5 * 1024 * 1024);
+        } else {
+          data = new TextEncoder().encode(rawPart);
+        }
+
+        await imap.logout();
+
+        if (data.length > 0 && data.length <= 5 * 1024 * 1024) {
+          await uploadAttachment(adminClient, attTicketId, {
+            filename,
+            contentType: content_type || "application/octet-stream",
+            data,
+          }, agentId);
+          console.log(`Single attachment uploaded: ${filename} (${data.length} bytes)`);
+          return new Response(JSON.stringify({ success: true, message: `Anexo ${filename} importado`, uploaded: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        } else {
+          return new Response(JSON.stringify({ success: false, message: `Anexo ${filename} demasiado grande ou vazio (${data.length} bytes)` }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } catch (err) {
+        try { await imap.logout(); } catch (_e) { /* */ }
+        console.error(`Single attachment error: ${(err as Error).message}`);
+        return new Response(JSON.stringify({ success: false, message: (err as Error).message }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     if (action === "refetch_ticket" && agentId) {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -1840,65 +1921,31 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Phase 2: Background — download and upload attachments one by one
-      if (attachmentJobs.length > 0) {
-        const bgTask = async () => {
-          const bgImap = new ImapClient();
-          try {
-            const greeting = await bgImap.connect(imapCfg.imap_host, port);
-            if (!greeting.includes("OK")) throw new Error("BG IMAP connect failed");
-            if (port === 143) { try { await bgImap.startTls(imapCfg.imap_host); } catch (_e) { /* */ } }
-            const loginRes = await bgImap.login(imapCfg.imap_user, imapCfg.imap_pass);
-            if (!loginRes.includes("OK")) throw new Error("BG IMAP login failed");
-            await bgImap.select(imapCfg.imap_folder);
-
-            let totalUploaded = 0;
-            for (const job of attachmentJobs) {
-              for (const part of job.parts) {
-                try {
-                  const rawPart = await bgImap.fetchMimePart(job.seqNum, part.partNum);
-                  let data: Uint8Array;
-                  if (part.encoding === "base64") {
-                    data = decodeBase64ToBytes(rawPart, 5 * 1024 * 1024);
-                  } else {
-                    data = new TextEncoder().encode(rawPart);
-                  }
-                  if (data.length > 0 && data.length <= 5 * 1024 * 1024) {
-                    await uploadAttachment(adminClient, ticketIdParam, {
-                      filename: part.filename,
-                      contentType: part.contentType,
-                      data,
-                    }, agentId);
-                    totalUploaded++;
-                    console.log(`BG: uploaded ${part.filename} (${data.length} bytes)`);
-                  }
-                } catch (err) {
-                  console.error(`BG part ${part.partNum} error: ${(err as Error).message}`);
-                }
-              }
-            }
-            await bgImap.logout();
-            console.log(`BG: finished, uploaded ${totalUploaded} attachments for ticket ${ticketIdParam}`);
-          } catch (err) {
-            console.error(`BG refetch error: ${(err as Error).message}`);
-            try { await bgImap.logout(); } catch (_e) { /* */ }
-          }
-        };
-
-        // Use EdgeRuntime.waitUntil to run in background after response
-        (globalThis as any).EdgeRuntime?.waitUntil?.(bgTask());
+      // Return attachment jobs info so frontend can call download_single_attachment per part
+      const attachmentJobsForClient: { seqNum: number; partNum: string; filename: string; contentType: string; encoding: string }[] = [];
+      for (const job of attachmentJobs) {
+        for (const part of job.parts) {
+          attachmentJobsForClient.push({
+            seqNum: job.seqNum,
+            partNum: part.partNum,
+            filename: part.filename,
+            contentType: part.contentType,
+            encoding: part.encoding,
+          });
+        }
       }
 
       const parts = [];
       if (contentUpdated) parts.push("conteúdo atualizado");
       if (messagesAdded > 0) parts.push(`${messagesAdded} mensagem(ns) adicionada(s)`);
-      if (attachmentPartsFound > 0) parts.push(`${attachmentPartsFound} anexo(s) a importar em segundo plano`);
+      if (attachmentPartsFound > 0) parts.push(`${attachmentPartsFound} anexo(s) a importar`);
       if (parts.length === 0) parts.push("Nenhum conteúdo novo encontrado");
 
       return new Response(JSON.stringify({
         success: true,
         message: parts.join(", "),
         attachments_background: attachmentPartsFound,
+        attachment_jobs: attachmentJobsForClient,
         content_updated: contentUpdated,
         messages_added: messagesAdded,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

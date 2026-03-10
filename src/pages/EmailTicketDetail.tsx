@@ -263,12 +263,37 @@ export default function EmailTicketDetail() {
       });
       if (error) throw error;
       if (data?.success === false) throw new Error(data.message);
-      const bgCount = data?.attachments_background || 0;
-      setBgAttachments(bgCount);
       toast({ title: "Re-importação concluída", description: data?.message || "Emails verificados" });
       fetchData();
-      if (bgCount > 0) {
-        setTimeout(() => { fetchData(); setBgAttachments(0); }, 15000);
+
+      // Download attachments one by one in separate function calls
+      const jobs = data?.attachment_jobs || [];
+      if (jobs.length > 0) {
+        setBgAttachments(jobs.length);
+        for (const job of jobs) {
+          try {
+            const { data: attData, error: attError } = await supabase.functions.invoke("fetch-inbound-emails", {
+              body: {
+                action: "download_single_attachment",
+                ticket_id: id,
+                agent_id: user.id,
+                seq_num: job.seqNum,
+                part_num: job.partNum,
+                filename: job.filename,
+                content_type: job.contentType,
+                encoding: job.encoding,
+              },
+            });
+            if (attError) console.error(`Attachment error: ${attError.message}`);
+            else if (attData?.uploaded) {
+              setBgAttachments(prev => Math.max(0, prev - 1));
+            }
+          } catch (err) {
+            console.error(`Attachment download error: ${(err as Error).message}`);
+          }
+        }
+        setBgAttachments(0);
+        fetchData();
       }
     } catch (err) {
       toast({ title: "Erro na re-importação", description: (err as Error).message, variant: "destructive" });
