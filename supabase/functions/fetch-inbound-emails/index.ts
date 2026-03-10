@@ -996,7 +996,8 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
     let headersChecked = 0;
     let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
     let newEmailProcessed = false;
-    let backfillDone = false; // Only backfill 1 email per batch to avoid timeouts
+    let backfillCount = 0; // Allow up to 3 backfills per batch
+    const MAX_BACKFILLS = 3;
 
     const remainingIds = emailIds.slice(offset);
 
