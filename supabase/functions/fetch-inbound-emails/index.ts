@@ -279,6 +279,7 @@ class ImapClient {
   }
 
   // Fetch individual MIME part by section number (e.g. "2", "1.2")
+  // Returns raw string (for small parts or backward compat)
   async fetchMimePart(seqNum: number, partNum: string): Promise<string> {
     const response = await this.command(`FETCH ${seqNum} BODY[${partNum}]`);
     // Strip IMAP wrapper to get raw part content
@@ -289,6 +290,64 @@ class ImapClient {
       return response.substring(start, start + len);
     }
     return response;
+  }
+
+  // Binary-efficient: fetch MIME part as raw bytes without string conversion
+  // Sends the FETCH command, reads the literal header to get size, then reads exact bytes
+  async fetchMimePartBinary(seqNum: number, partNum: string): Promise<Uint8Array> {
+    const tag = this.nextTag();
+    await this.write(`${tag} FETCH ${seqNum} BODY[${partNum}]\r\n`);
+    
+    // Read the initial response line with the literal size: * N FETCH (BODY[X] {SIZE}\r\n
+    let header = "";
+    if (this.buffer.length > 0) {
+      header = this.decoder.decode(this.buffer);
+      this.buffer = new Uint8Array(0);
+    }
+    const start = Date.now();
+    while (Date.now() - start < 10000) {
+      const literalMatch = header.match(/\{(\d+)\}\r?\n$/);
+      if (literalMatch) {
+        const literalSize = parseInt(literalMatch[1]);
+        // Calculate how many bytes of the literal are already in our header string
+        const afterLiteral = header.substring(header.indexOf(literalMatch[0]) + literalMatch[0].length);
+        const alreadyRead = new TextEncoder().encode(afterLiteral);
+        
+        // Read remaining literal bytes
+        const remaining = literalSize - alreadyRead.length;
+        let literalBytes: Uint8Array;
+        if (remaining <= 0) {
+          literalBytes = alreadyRead.slice(0, literalSize);
+          // Put excess back into buffer
+          if (alreadyRead.length > literalSize) {
+            this.buffer = alreadyRead.slice(literalSize);
+          }
+        } else {
+          const restBytes = await this.readExactBytes(remaining);
+          literalBytes = new Uint8Array(alreadyRead.length + restBytes.length);
+          literalBytes.set(alreadyRead, 0);
+          literalBytes.set(restBytes, alreadyRead.length);
+        }
+        
+        // Read trailing tag response
+        await this.readUntilTag(tag);
+        
+        return literalBytes;
+      }
+      
+      try {
+        const readPromise = this.reader.read();
+        const timeoutPromise = new Promise<{ value: undefined; done: true }>((resolve) =>
+          setTimeout(() => resolve({ value: undefined, done: true }), 5000)
+        );
+        const { value, done } = await Promise.race([readPromise, timeoutPromise]);
+        if (done || !value) break;
+        header += this.decoder.decode(value);
+      } catch (_e) { break; }
+    }
+    
+    // Fallback: return empty
+    return new Uint8Array(0);
   }
 
   // Fetch BODYSTRUCTURE to identify attachments without downloading them
