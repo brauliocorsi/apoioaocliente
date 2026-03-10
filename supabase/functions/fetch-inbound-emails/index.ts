@@ -1394,8 +1394,10 @@ Deno.serve(async (req) => {
     let offset: number | undefined;
     let searchDays: number | undefined;
     let ticketIdBody: string | undefined;
+    let bodyParsed: any = {};
     try {
       const body = await req.json();
+      bodyParsed = body || {};
       testOnly = body?.test_only === true;
       fetchRecent = body?.fetch_recent === true;
       if (body?.max_emails) maxEmails = Math.min(Number(body.max_emails), 50);
