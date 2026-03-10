@@ -843,7 +843,6 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             updated++;
             await imap.markAsSeen(seqNum);
             continue;
-          }
         }
 
         // New email from unknown/closed thread → goes to pending review queue
