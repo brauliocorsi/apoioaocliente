@@ -404,6 +404,14 @@ export default function EmailTicketDetail() {
                       isLastClientMsg ? "bg-blue-200 dark:bg-blue-800/50 ring-2 ring-blue-400/50" : "bg-muted"
                     }`}>
                       <EmailBody content={msg.content} />
+                      {(msg as any).original_content && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setOriginalViewContent((msg as any).original_content); }}
+                          className="text-[10px] mt-1 underline opacity-60 hover:opacity-100 transition-opacity"
+                        >
+                          Ver email original completo
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
