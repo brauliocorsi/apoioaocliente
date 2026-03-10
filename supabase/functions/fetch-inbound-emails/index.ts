@@ -857,7 +857,7 @@ async function storePendingAttachment(
   };
 }
 
-async function processEmails(params: { fetchRecent: boolean; maxEmails: number; agentId?: string; offset?: number }) {
+async function processEmails(params: { fetchRecent: boolean; maxEmails: number; agentId?: string; offset?: number; searchDays?: number }) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
