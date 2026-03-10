@@ -1,0 +1,1 @@
+ALTER TABLE public.ticket_messages ADD COLUMN original_content text;
