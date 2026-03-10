@@ -912,7 +912,7 @@ Deno.serve(async (req) => {
       const body = await req.json();
       testOnly = body?.test_only === true;
       fetchRecent = body?.fetch_recent === true;
-      if (body?.max_emails) maxEmails = Math.min(Number(body.max_emails), 10);
+      if (body?.max_emails) maxEmails = Math.min(Number(body.max_emails), 50);
       if (body?.agent_id) agentId = body.agent_id;
       action = body?.action;
       pendingId = body?.pending_id;
