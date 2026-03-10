@@ -151,14 +151,16 @@ export default function Tickets() {
       setTicketTagsMap(tagsMap);
       setLoading(false);
 
-      // Fetch unread message counts for agent
+      // Fetch unread message counts and agent-replied status
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (currentUser && data && data.length > 0) {
         const ticketIds = data.map((t: any) => t.id);
-        const [{ data: readStatuses }, { data: clientMsgs }, { data: emailThreads }] = await Promise.all([
+        const [{ data: readStatuses }, { data: clientMsgs }, { data: emailThreads }, { data: lastMsgs }] = await Promise.all([
           supabase.from("ticket_read_status").select("ticket_id, last_read_at").in("ticket_id", ticketIds),
           supabase.from("ticket_messages").select("ticket_id, created_at, sender_type").eq("sender_type", "client").in("ticket_id", ticketIds),
           supabase.from("email_threads").select("ticket_id").in("ticket_id", ticketIds),
+          // Fetch the most recent message per ticket to determine if agent replied last
+          supabase.from("ticket_messages").select("ticket_id, sender_type, created_at").in("ticket_id", ticketIds).order("created_at", { ascending: false }),
         ]);
         const readMap: Record<string, string> = {};
         (readStatuses || []).forEach((r: any) => { readMap[r.ticket_id] = r.last_read_at; });
@@ -176,6 +178,20 @@ export default function Tickets() {
         });
         setUnreadCounts(unread);
         setEmailUnreadCounts(emailUnread);
+
+        // Determine agent-replied: last message is from agent AND there are client messages in the thread
+        const replied: Record<string, boolean> = {};
+        const seenTickets = new Set<string>();
+        (lastMsgs || []).forEach((m: any) => {
+          if (!seenTickets.has(m.ticket_id)) {
+            seenTickets.add(m.ticket_id);
+            // Only mark as "replied" if the last message is from an agent AND ticket had client messages
+            if (m.sender_type === "agent" && emailTicketIds.has(m.ticket_id)) {
+              replied[m.ticket_id] = true;
+            }
+          }
+        });
+        setAgentRepliedMap(replied);
       }
     };
     fetch();
