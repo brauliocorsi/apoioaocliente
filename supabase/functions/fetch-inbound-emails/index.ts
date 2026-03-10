@@ -499,6 +499,7 @@ function decodeBase64BytesDirect(raw: Uint8Array, maxBytes?: number): Uint8Array
   return outIdx === out.length ? out : out.slice(0, outIdx);
 }
 
+function extractEmail(from: string): string {
   const match = from.match(/<(.+?)>/);
   return match ? match[1] : from.replace(/[<>]/g, "").trim();
 }
