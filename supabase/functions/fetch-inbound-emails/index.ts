@@ -2102,16 +2102,17 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Return attachment jobs info so frontend can call download_single_attachment per part
-      const attachmentJobsForClient: { seqNum: number; partNum: string; filename: string; contentType: string; encoding: string }[] = [];
+      // Return attachment jobs info so frontend can call download-attachment per part (using UID for stability)
+      const attachmentJobsForClient: { uid: number; partNum: string; filename: string; contentType: string; encoding: string; size: number }[] = [];
       for (const job of attachmentJobs) {
         for (const part of job.parts) {
           attachmentJobsForClient.push({
-            seqNum: job.seqNum,
+            uid: job.uid,
             partNum: part.partNum,
             filename: part.filename,
             contentType: part.contentType,
             encoding: part.encoding,
+            size: part.size,
           });
         }
       }
