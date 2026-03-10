@@ -862,6 +862,17 @@ async function uploadAttachment(
   attachment: { filename: string; contentType: string; data: Uint8Array },
   agentId: string,
 ): Promise<void> {
+  // Dedup: skip if same filename already exists for this ticket
+  const { count } = await adminClient
+    .from("ticket_attachments")
+    .select("id", { count: "exact", head: true })
+    .eq("ticket_id", ticketId)
+    .eq("file_name", attachment.filename);
+  if (count && count > 0) {
+    console.log(`Attachment '${attachment.filename}' already exists for ticket ${ticketId}, skipping`);
+    return;
+  }
+
   const safeName = attachment.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
   const filePath = `${ticketId}/${Date.now()}_${safeName}`;
 
