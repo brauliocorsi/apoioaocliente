@@ -934,7 +934,6 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             const strippedBody = hasReadableHtml ? htmlStripped : textStripped;
             const body = strippedBody;
 
-            const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
             const contentSnippet = stripHtml(body).substring(0, 200).trim().toLowerCase();
             const { data: existingMsgs } = await adminClient
               .from("ticket_messages")
