@@ -1708,7 +1708,86 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Refetch: re-import emails+attachments for a specific ticket by client email ──
+    // ── Download a single attachment part (called by frontend per attachment) ──
+    if (action === "download_single_attachment" && agentId) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+      const { ticket_id: attTicketId, seq_num, part_num, filename, content_type, encoding } = ticketIdBody
+        ? { ticket_id: ticketIdBody, seq_num: body.seq_num, part_num: body.part_num, filename: body.filename, content_type: body.content_type, encoding: body.encoding }
+        : { ticket_id: null, seq_num: null, part_num: null, filename: null, content_type: null, encoding: null };
+
+      if (!attTicketId || !seq_num || !part_num || !filename) {
+        return new Response(JSON.stringify({ success: false, message: "Parâmetros em falta" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Check if attachment already exists
+      const { data: existing } = await adminClient
+        .from("ticket_attachments")
+        .select("id")
+        .eq("ticket_id", attTicketId)
+        .eq("file_name", filename)
+        .limit(1);
+      if (existing && existing.length > 0) {
+        return new Response(JSON.stringify({ success: true, message: "Anexo já existe", skipped: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const imapCfg = await getImapConfig(adminClient);
+      if (!imapCfg) {
+        return new Response(JSON.stringify({ success: false, message: "IMAP não configurado" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const imap = new ImapClient();
+      const port = Number(imapCfg.imap_port) || 993;
+      try {
+        const greeting = await imap.connect(imapCfg.imap_host, port);
+        if (!greeting.includes("OK")) throw new Error("IMAP connect failed");
+        if (port === 143) { try { await imap.startTls(imapCfg.imap_host); } catch (_e) { /* */ } }
+        const loginRes = await imap.login(imapCfg.imap_user, imapCfg.imap_pass);
+        if (!loginRes.includes("OK")) throw new Error("IMAP login failed");
+        await imap.select(imapCfg.imap_folder);
+
+        const rawPart = await imap.fetchMimePart(Number(seq_num), part_num);
+        let data: Uint8Array;
+        if (encoding === "base64") {
+          data = decodeBase64ToBytes(rawPart, 5 * 1024 * 1024);
+        } else {
+          data = new TextEncoder().encode(rawPart);
+        }
+
+        await imap.logout();
+
+        if (data.length > 0 && data.length <= 5 * 1024 * 1024) {
+          await uploadAttachment(adminClient, attTicketId, {
+            filename,
+            contentType: content_type || "application/octet-stream",
+            data,
+          }, agentId);
+          console.log(`Single attachment uploaded: ${filename} (${data.length} bytes)`);
+          return new Response(JSON.stringify({ success: true, message: `Anexo ${filename} importado`, uploaded: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        } else {
+          return new Response(JSON.stringify({ success: false, message: `Anexo ${filename} demasiado grande ou vazio (${data.length} bytes)` }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } catch (err) {
+        try { await imap.logout(); } catch (_e) { /* */ }
+        console.error(`Single attachment error: ${(err as Error).message}`);
+        return new Response(JSON.stringify({ success: false, message: (err as Error).message }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     if (action === "refetch_ticket" && agentId) {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
