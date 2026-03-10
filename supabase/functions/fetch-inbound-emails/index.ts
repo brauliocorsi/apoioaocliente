@@ -45,6 +45,7 @@ class ImapClient {
   // Use latin1 to preserve raw byte values — charset-aware decoding happens later in MIME parser
   private decoder = new TextDecoder("latin1");
   private tagCounter = 0;
+  private buffer = new Uint8Array(0); // leftover bytes from previous reads
 
   async connect(host: string, port: number): Promise<string> {
     if (port === 993) {
@@ -79,7 +80,9 @@ class ImapClient {
     let result = "";
     const start = Date.now();
     while (Date.now() - start < 15000) {
-      const lines = result.split("\r\n");
+      // Only check the last few lines for the tag (optimization for large responses)
+      const lastChunk = result.length > 500 ? result.substring(result.length - 500) : result;
+      const lines = lastChunk.split("\r\n");
       for (const line of lines) {
         if (tag === "*" && line.startsWith("* OK")) return result;
         if (line.startsWith(`${tag} `)) return result;
@@ -88,6 +91,75 @@ class ImapClient {
         const readPromise = this.reader.read();
         const timeoutPromise = new Promise<{ value: undefined; done: true }>((resolve) =>
           setTimeout(() => resolve({ value: undefined, done: true }), 5000)
+        );
+        const { value, done } = await Promise.race([readPromise, timeoutPromise]);
+        if (done || !value) break;
+        result += this.decoder.decode(value);
+      } catch (_e) { break; }
+    }
+    return result;
+  }
+
+  // Read exactly N raw bytes from the connection (for IMAP literals)
+  private async readExactBytes(needed: number): Promise<Uint8Array> {
+    const chunks: Uint8Array[] = [];
+    let collected = 0;
+
+    // Use any leftover buffer first
+    if (this.buffer.length > 0) {
+      if (this.buffer.length >= needed) {
+        const result = this.buffer.slice(0, needed);
+        this.buffer = this.buffer.slice(needed);
+        return result;
+      }
+      chunks.push(this.buffer);
+      collected += this.buffer.length;
+      this.buffer = new Uint8Array(0);
+    }
+
+    const start = Date.now();
+    while (collected < needed && Date.now() - start < 30000) {
+      try {
+        const readPromise = this.reader.read();
+        const timeoutPromise = new Promise<{ value: undefined; done: true }>((resolve) =>
+          setTimeout(() => resolve({ value: undefined, done: true }), 10000)
+        );
+        const { value, done } = await Promise.race([readPromise, timeoutPromise]);
+        if (done || !value) break;
+        
+        const remaining = needed - collected;
+        if (value.length > remaining) {
+          chunks.push(value.slice(0, remaining));
+          this.buffer = value.slice(remaining); // save leftovers
+          collected += remaining;
+        } else {
+          chunks.push(value);
+          collected += value.length;
+        }
+      } catch (_e) { break; }
+    }
+
+    // Merge chunks
+    const result = new Uint8Array(collected);
+    let offset = 0;
+    for (const chunk of chunks) {
+      result.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return result;
+  }
+
+  // Read until we see the tag completion line (for post-literal trailing data)
+  private async readUntilTag(tag: string): Promise<string> {
+    let result = this.decoder.decode(this.buffer);
+    this.buffer = new Uint8Array(0);
+    const start = Date.now();
+    while (Date.now() - start < 5000) {
+      if (result.includes(`${tag} `)) return result;
+      try {
+        const readPromise = this.reader.read();
+        const timeoutPromise = new Promise<{ value: undefined; done: true }>((resolve) =>
+          setTimeout(() => resolve({ value: undefined, done: true }), 3000)
         );
         const { value, done } = await Promise.race([readPromise, timeoutPromise]);
         if (done || !value) break;
@@ -207,6 +279,7 @@ class ImapClient {
   }
 
   // Fetch individual MIME part by section number (e.g. "2", "1.2")
+  // Returns raw string (for small parts or backward compat)
   async fetchMimePart(seqNum: number, partNum: string): Promise<string> {
     const response = await this.command(`FETCH ${seqNum} BODY[${partNum}]`);
     // Strip IMAP wrapper to get raw part content
@@ -217,6 +290,64 @@ class ImapClient {
       return response.substring(start, start + len);
     }
     return response;
+  }
+
+  // Binary-efficient: fetch MIME part as raw bytes without string conversion
+  // Sends the FETCH command, reads the literal header to get size, then reads exact bytes
+  async fetchMimePartBinary(seqNum: number, partNum: string): Promise<Uint8Array> {
+    const tag = this.nextTag();
+    await this.write(`${tag} FETCH ${seqNum} BODY[${partNum}]\r\n`);
+    
+    // Read the initial response line with the literal size: * N FETCH (BODY[X] {SIZE}\r\n
+    let header = "";
+    if (this.buffer.length > 0) {
+      header = this.decoder.decode(this.buffer);
+      this.buffer = new Uint8Array(0);
+    }
+    const start = Date.now();
+    while (Date.now() - start < 10000) {
+      const literalMatch = header.match(/\{(\d+)\}\r?\n$/);
+      if (literalMatch) {
+        const literalSize = parseInt(literalMatch[1]);
+        // Calculate how many bytes of the literal are already in our header string
+        const afterLiteral = header.substring(header.indexOf(literalMatch[0]) + literalMatch[0].length);
+        const alreadyRead = new TextEncoder().encode(afterLiteral);
+        
+        // Read remaining literal bytes
+        const remaining = literalSize - alreadyRead.length;
+        let literalBytes: Uint8Array;
+        if (remaining <= 0) {
+          literalBytes = alreadyRead.slice(0, literalSize);
+          // Put excess back into buffer
+          if (alreadyRead.length > literalSize) {
+            this.buffer = alreadyRead.slice(literalSize);
+          }
+        } else {
+          const restBytes = await this.readExactBytes(remaining);
+          literalBytes = new Uint8Array(alreadyRead.length + restBytes.length);
+          literalBytes.set(alreadyRead, 0);
+          literalBytes.set(restBytes, alreadyRead.length);
+        }
+        
+        // Read trailing tag response
+        await this.readUntilTag(tag);
+        
+        return literalBytes;
+      }
+      
+      try {
+        const readPromise = this.reader.read();
+        const timeoutPromise = new Promise<{ value: undefined; done: true }>((resolve) =>
+          setTimeout(() => resolve({ value: undefined, done: true }), 5000)
+        );
+        const { value, done } = await Promise.race([readPromise, timeoutPromise]);
+        if (done || !value) break;
+        header += this.decoder.decode(value);
+      } catch (_e) { break; }
+    }
+    
+    // Fallback: return empty
+    return new Uint8Array(0);
   }
 
   // Fetch BODYSTRUCTURE to identify attachments without downloading them
@@ -325,6 +456,47 @@ function extractHeader(raw: string, headerName: string): string {
   }
   
   return value;
+}
+
+// Decode base64 from raw bytes (Uint8Array) without converting to JS string first
+// This is much more CPU-efficient than atob() for large payloads
+function decodeBase64BytesDirect(raw: Uint8Array, maxBytes?: number): Uint8Array {
+  // Build lookup table
+  const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const lookup = new Uint8Array(256).fill(255);
+  for (let i = 0; i < B64.length; i++) lookup[B64.charCodeAt(i)] = i;
+  lookup[61] = 0; // '='
+
+  // Count valid base64 chars (skip whitespace/newlines)
+  let validCount = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const b = raw[i];
+    if (lookup[b] < 255 || b === 61) validCount++;
+  }
+
+  const outputLen = Math.floor((validCount * 3) / 4);
+  if (maxBytes !== undefined && outputLen > maxBytes) return new Uint8Array(0);
+
+  const out = new Uint8Array(outputLen);
+  let outIdx = 0;
+  let acc = 0;
+  let bits = 0;
+
+  for (let i = 0; i < raw.length; i++) {
+    const b = raw[i];
+    if (b === 10 || b === 13 || b === 32) continue; // skip \n \r space
+    if (b === 61) break; // '=' padding
+    const val = lookup[b];
+    if (val === 255) continue;
+    acc = (acc << 6) | val;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out[outIdx++] = (acc >> bits) & 0xFF;
+    }
+  }
+
+  return outIdx === out.length ? out : out.slice(0, outIdx);
 }
 
 function extractEmail(from: string): string {
@@ -1756,12 +1928,13 @@ Deno.serve(async (req) => {
         if (!loginRes.includes("OK")) throw new Error("IMAP login failed");
         await imap.select(imapCfg.imap_folder);
 
-        const rawPart = await imap.fetchMimePart(Number(seq_num), part_num);
+        // Use binary path to avoid string conversion overhead for large attachments
+        const rawBytes = await imap.fetchMimePartBinary(Number(seq_num), part_num);
         let data: Uint8Array;
         if (encoding === "base64") {
-          data = decodeBase64ToBytes(rawPart, 5 * 1024 * 1024);
+          data = decodeBase64BytesDirect(rawBytes, 5 * 1024 * 1024);
         } else {
-          data = new TextEncoder().encode(rawPart);
+          data = rawBytes;
         }
 
         await imap.logout();
