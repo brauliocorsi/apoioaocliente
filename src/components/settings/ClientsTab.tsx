@@ -24,6 +24,8 @@ export default function ClientsTab() {
   const [clientToDelete, setClientToDelete] = useState<{ id: string; full_name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const queryClient = useQueryClient();
+
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["client-users"],
     queryFn: async () => {
