@@ -361,17 +361,26 @@ export default function Tickets() {
                         );
                       })}
                       {t.category_id && <Badge variant="outline" className="text-xs">{categories[t.category_id] || t.category_id}</Badge>}
-                      {emailUnreadCounts[t.id] > 0 && (
-                        <Badge className="text-[10px] h-5 min-w-[20px] justify-center gap-0.5 bg-blue-500 hover:bg-blue-600 text-white border-0">
-                          <Mail className="h-3 w-3" />
-                          {emailUnreadCounts[t.id]}
-                        </Badge>
-                      )}
-                      {unreadCounts[t.id] > 0 && !emailUnreadCounts[t.id] && (
-                        <Badge variant="destructive" className="text-[10px] h-5 min-w-[20px] justify-center">
-                          {unreadCounts[t.id]}
-                        </Badge>
-                      )}
+                       {emailUnreadCounts[t.id] > 0 ? (
+                         <Badge className="text-[10px] h-5 min-w-[20px] justify-center gap-0.5 bg-blue-500 hover:bg-blue-600 text-white border-0 animate-pulse">
+                           <Mail className="h-3 w-3" />
+                           {emailUnreadCounts[t.id]}
+                         </Badge>
+                       ) : agentRepliedMap[t.id] ? (
+                         <Tooltip>
+                           <TooltipTrigger asChild>
+                             <span className="inline-flex items-center">
+                               <MailCheck className="h-4 w-4 text-success" />
+                             </span>
+                           </TooltipTrigger>
+                           <TooltipContent><p className="text-xs">Cliente respondido</p></TooltipContent>
+                         </Tooltip>
+                       ) : null}
+                       {unreadCounts[t.id] > 0 && !emailUnreadCounts[t.id] && (
+                         <Badge variant="destructive" className="text-[10px] h-5 min-w-[20px] justify-center">
+                           {unreadCounts[t.id]}
+                         </Badge>
+                       )}
                       <PriorityFlag priority={t.priority} />
                       <Badge variant="secondary">{statusLabels[t.status] || t.status}</Badge>
                     </div>
