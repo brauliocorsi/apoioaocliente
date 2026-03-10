@@ -125,6 +125,17 @@ class ImapClient {
     return match[1].trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
   }
 
+  async searchSince(daysAgo: number): Promise<number[]> {
+    const d = new Date();
+    d.setDate(d.getDate() - daysAgo);
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const dateStr = `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear()}`;
+    const response = await this.command(`SEARCH SINCE ${dateStr}`);
+    const match = response.match(/\* SEARCH([\d\s]*)/);
+    if (!match || !match[1].trim()) return [];
+    return match[1].trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
+  }
+
   async fetchMessage(seqNum: number): Promise<{
     from: string;
     subject: string;
@@ -631,6 +642,11 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
       emailIds = allIds.slice(-params.maxEmails);
     } else {
       emailIds = await imap.searchUnseen();
+      // Fallback: if no unseen emails, search last 7 days to catch already-read emails
+      if (emailIds.length === 0) {
+        console.log("No unseen emails found, falling back to SEARCH SINCE (7 days)");
+        emailIds = await imap.searchSince(7);
+      }
     }
 
     let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
@@ -896,7 +912,7 @@ Deno.serve(async (req) => {
       const body = await req.json();
       testOnly = body?.test_only === true;
       fetchRecent = body?.fetch_recent === true;
-      if (body?.max_emails) maxEmails = Math.min(Number(body.max_emails), 10);
+      if (body?.max_emails) maxEmails = Math.min(Number(body.max_emails), 50);
       if (body?.agent_id) agentId = body.agent_id;
       action = body?.action;
       pendingId = body?.pending_id;
