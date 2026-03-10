@@ -459,11 +459,18 @@ export default function EmailTicketDetail() {
                 }
               }}
             />
+            <FileUpload
+              ticketId={id}
+              userId={user?.id || ""}
+              attachments={replyAttachments}
+              onAttachmentsChange={setReplyAttachments}
+              disabled={sending}
+            />
             <div className="flex items-center justify-between">
               <p className="text-[10px] text-muted-foreground">Ctrl+Enter para enviar</p>
               <Button onClick={sendEmailReply} disabled={sending || !reply.trim()}>
                 {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                Enviar Email
+                Enviar Email{replyAttachments.length > 0 ? ` (${replyAttachments.length} anexo${replyAttachments.length > 1 ? "s" : ""})` : ""}
               </Button>
             </div>
           </div>
