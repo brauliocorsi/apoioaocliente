@@ -258,7 +258,7 @@ Deno.serve(async (req) => {
     // Decode based on encoding
     let fileBytes: Uint8Array;
     if (encoding === "base64") {
-      fileBytes = fastB64Decode(rawBytes);
+      fileBytes = await fastB64Decode(rawBytes);
     } else {
       // 7bit, 8bit, quoted-printable — raw bytes are the file
       fileBytes = rawBytes;
