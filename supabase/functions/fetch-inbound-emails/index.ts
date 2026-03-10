@@ -1980,11 +1980,25 @@ Deno.serve(async (req) => {
         await imap.logout();
 
         if (data.length > 0 && data.length <= 5 * 1024 * 1024) {
-          await uploadAttachment(adminClient, attTicketId, {
-            filename,
-            contentType: content_type || "application/octet-stream",
-            data,
-          }, agentId);
+          const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const filePath = `${attTicketId}/${Date.now()}_${safeName}`;
+          const { error: upErr } = await adminClient.storage
+            .from("ticket-attachments")
+            .upload(filePath, data, {
+              contentType: content_type || "application/octet-stream",
+              upsert: false,
+            });
+          if (upErr) throw new Error(`Storage: ${upErr.message}`);
+
+          await adminClient.from("ticket_attachments").insert({
+            ticket_id: attTicketId,
+            file_name: filename,
+            file_path: filePath,
+            file_type: content_type || "application/octet-stream",
+            file_size: data.length,
+            uploaded_by: agentId,
+          });
+
           console.log(`Single attachment uploaded: ${filename} (${data.length} bytes)`);
           return new Response(JSON.stringify({ success: true, message: `Anexo ${filename} importado`, uploaded: true }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
