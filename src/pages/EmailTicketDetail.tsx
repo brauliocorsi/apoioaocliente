@@ -156,6 +156,7 @@ export default function EmailTicketDetail() {
   const [originalViewContent, setOriginalViewContent] = useState<string | null>(null);
   const [replyAttachments, setReplyAttachments] = useState<{ file_name: string; file_path: string; file_type: string; file_size: number; url: string }[]>([]);
   const [refetching, setRefetching] = useState(false);
+  const [bgAttachments, setBgAttachments] = useState(0);
 
   const fetchData = async () => {
     if (!id) return;
@@ -262,8 +263,13 @@ export default function EmailTicketDetail() {
       });
       if (error) throw error;
       if (data?.success === false) throw new Error(data.message);
+      const bgCount = data?.attachments_background || 0;
+      setBgAttachments(bgCount);
       toast({ title: "Re-importação concluída", description: data?.message || "Emails verificados" });
       fetchData();
+      if (bgCount > 0) {
+        setTimeout(() => { fetchData(); setBgAttachments(0); }, 15000);
+      }
     } catch (err) {
       toast({ title: "Erro na re-importação", description: (err as Error).message, variant: "destructive" });
     }
@@ -301,6 +307,13 @@ export default function EmailTicketDetail() {
           </Button>
         )}
       </div>
+
+      {bgAttachments > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary animate-pulse">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>A importar {bgAttachments} anexo{bgAttachments > 1 ? "s" : ""} em segundo plano… A página será atualizada automaticamente.</span>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="flex flex-wrap gap-3">
