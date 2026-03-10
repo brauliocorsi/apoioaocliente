@@ -1980,11 +1980,25 @@ Deno.serve(async (req) => {
         await imap.logout();
 
         if (data.length > 0 && data.length <= 5 * 1024 * 1024) {
-          await uploadAttachment(adminClient, attTicketId, {
-            filename,
-            contentType: content_type || "application/octet-stream",
-            data,
-          }, agentId);
+          const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const filePath = `${attTicketId}/${Date.now()}_${safeName}`;
+          const { error: upErr } = await adminClient.storage
+            .from("ticket-attachments")
+            .upload(filePath, data, {
+              contentType: content_type || "application/octet-stream",
+              upsert: false,
+            });
+          if (upErr) throw new Error(`Storage: ${upErr.message}`);
+
+          await adminClient.from("ticket_attachments").insert({
+            ticket_id: attTicketId,
+            file_name: filename,
+            file_path: filePath,
+            file_type: content_type || "application/octet-stream",
+            file_size: data.length,
+            uploaded_by: agentId,
+          });
+
           console.log(`Single attachment uploaded: ${filename} (${data.length} bytes)`);
           return new Response(JSON.stringify({ success: true, message: `Anexo ${filename} importado`, uploaded: true }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -2035,8 +2049,7 @@ Deno.serve(async (req) => {
       const port = Number(imapCfg.imap_port) || 993;
       let messagesAdded = 0;
       let contentUpdated = false;
-      let attachmentPartsFound = 0;
-      let attachmentsImported = 0;
+      const pendingAttachments: { seq_num: number; part_num: string; filename: string; content_type: string; encoding: string; size: number }[] = [];
 
       try {
         const greeting = await imap.connect(imapCfg.imap_host, port);
@@ -2070,71 +2083,28 @@ Deno.serve(async (req) => {
             const senderEmail = extractEmail(headers.from);
             if (senderEmail.toLowerCase() !== clientEmail) continue;
 
-            // Find and download attachments inline (reuses existing IMAP session — no extra TLS)
+            // Collect attachment metadata — don't download inline (CPU limit)
             const bs = await imap.fetchBodyStructure(seqNum);
             const parts = parseBodyStructureAttachments(bs);
             const validParts = parts.filter(p => p.size <= 5 * 1024 * 1024);
-            attachmentPartsFound += validParts.length;
 
             for (const part of validParts) {
-              try {
-                // Check if already exists in DB
-                const { count } = await adminClient.from("ticket_attachments")
-                  .select("id", { count: "exact", head: true })
-                  .eq("ticket_id", ticketIdParam)
-                  .eq("file_name", part.filename);
-                if (count && count > 0) {
-                  console.log(`Attachment ${part.filename} already exists, skipping`);
-                  continue;
-                }
-
-                // Fetch the MIME part body using the existing IMAP session
-                console.log(`Fetching attachment: ${part.filename} part=${part.partNum} encoding=${part.encoding} size=${part.size}`);
-                const rawBytes = await imap.fetchMimePartBinary(seqNum, part.partNum);
-                console.log(`Got ${rawBytes.length} raw bytes for ${part.filename}`);
-
-                if (rawBytes.length === 0) {
-                  console.error(`Empty data for attachment ${part.filename}`);
-                  continue;
-                }
-
-                // Decode base64 if needed
-                let fileBytes: Uint8Array;
-                if (part.encoding === "base64") {
-                  fileBytes = fastB64Decode(rawBytes);
-                } else {
-                  fileBytes = rawBytes;
-                }
-                console.log(`Decoded ${part.filename}: ${fileBytes.length} bytes`);
-
-                // Upload to storage
-                const safeName = part.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-                const filePath = `${ticketIdParam}/${Date.now()}_${safeName}`;
-                const { error: upErr } = await adminClient.storage
-                  .from("ticket-attachments")
-                  .upload(filePath, fileBytes, {
-                    contentType: part.contentType || "application/octet-stream",
-                    upsert: false,
-                  });
-                if (upErr) {
-                  console.error(`Storage upload error for ${part.filename}: ${upErr.message}`);
-                  continue;
-                }
-
-                // Insert DB record
-                await adminClient.from("ticket_attachments").insert({
-                  ticket_id: ticketIdParam,
-                  file_name: part.filename,
-                  file_path: filePath,
-                  file_type: part.contentType || "application/octet-stream",
-                  file_size: fileBytes.length,
-                  uploaded_by: "00000000-0000-0000-0000-000000000000",
-                });
-                attachmentsImported++;
-                console.log(`✓ Imported ${part.filename} (${fileBytes.length} bytes)`);
-              } catch (attErr) {
-                console.error(`Attachment ${part.filename} error: ${(attErr as Error).message}`);
+              const { count } = await adminClient.from("ticket_attachments")
+                .select("id", { count: "exact", head: true })
+                .eq("ticket_id", ticketIdParam)
+                .eq("file_name", part.filename);
+              if (count && count > 0) {
+                console.log(`Attachment ${part.filename} already exists, skipping`);
+                continue;
               }
+              pendingAttachments.push({
+                seq_num: seqNum,
+                part_num: part.partNum,
+                filename: part.filename,
+                content_type: part.contentType || "application/octet-stream",
+                encoding: part.encoding || "base64",
+                size: part.size,
+              });
             }
 
             // Fetch text content only (use partial for large emails to save CPU)
@@ -2193,17 +2163,16 @@ Deno.serve(async (req) => {
         });
       }
 
-      const parts = [];
-      if (contentUpdated) parts.push("conteúdo atualizado");
-      if (messagesAdded > 0) parts.push(`${messagesAdded} mensagem(ns) adicionada(s)`);
-      if (attachmentsImported > 0) parts.push(`${attachmentsImported} anexo(s) importado(s)`);
-      else if (attachmentPartsFound > 0) parts.push(`${attachmentPartsFound} anexo(s) encontrado(s), já existentes`);
-      if (parts.length === 0) parts.push("Nenhum conteúdo novo encontrado");
+      const msgParts = [];
+      if (contentUpdated) msgParts.push("conteúdo atualizado");
+      if (messagesAdded > 0) msgParts.push(`${messagesAdded} mensagem(ns) adicionada(s)`);
+      if (pendingAttachments.length > 0) msgParts.push(`${pendingAttachments.length} anexo(s) para importar`);
+      if (msgParts.length === 0) msgParts.push("Nenhum conteúdo novo encontrado");
 
       return new Response(JSON.stringify({
         success: true,
-        message: parts.join(", "),
-        attachments_imported: attachmentsImported,
+        message: msgParts.join(", "),
+        pending_attachments: pendingAttachments,
         content_updated: contentUpdated,
         messages_added: messagesAdded,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
