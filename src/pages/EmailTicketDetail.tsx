@@ -156,6 +156,7 @@ export default function EmailTicketDetail() {
   const [originalViewContent, setOriginalViewContent] = useState<string | null>(null);
   const [replyAttachments, setReplyAttachments] = useState<{ file_name: string; file_path: string; file_type: string; file_size: number; url: string }[]>([]);
   const [refetching, setRefetching] = useState(false);
+  const [bgAttachments, setBgAttachments] = useState(0);
 
   const fetchData = async () => {
     if (!id) return;
