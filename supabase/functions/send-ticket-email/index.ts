@@ -66,7 +66,7 @@ async function sendViaResend(from: string, to: string, subject: string, text: st
   }
 }
 
-async function sendViaSmtp(cfg: Record<string, string>, to: string, subject: string, text: string) {
+async function sendViaSmtp(cfg: Record<string, string>, to: string, subject: string, text: string, html?: string) {
   const port = Number(cfg.smtp_port) || 465;
   const client = new SMTPClient({
     connection: {
@@ -78,7 +78,7 @@ async function sendViaSmtp(cfg: Record<string, string>, to: string, subject: str
   });
 
   const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.smtp_from_email || cfg.smtp_user}>`;
-  await client.send({ from: fromAddr, to, subject, content: text, html: text });
+  await client.send({ from: fromAddr, to, subject, content: text, html: html || text });
   try { await client.close(); } catch { /* ignore */ }
 }
 
