@@ -21,6 +21,8 @@ export default function ClientsTab() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
+  const [clientToDelete, setClientToDelete] = useState<{ id: string; full_name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["client-users"],
