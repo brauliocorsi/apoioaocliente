@@ -633,7 +633,7 @@ async function storePendingAttachment(
   };
 }
 
-async function processEmails(params: { fetchRecent: boolean; maxEmails: number; agentId?: string }) {
+async function processEmails(params: { fetchRecent: boolean; maxEmails: number; agentId?: string; offset?: number }) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
@@ -684,15 +684,23 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
       const idSet = new Set(unseenIds);
       for (const id of sinceIds) idSet.add(id);
       emailIds = Array.from(idSet).sort((a, b) => a - b);
-      console.log(`Found ${unseenIds.length} unseen + ${sinceIds.length} since-24h = ${emailIds.length} unique emails to check`);
     }
 
-    let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
-    let processed = 0;
+    const totalEmails = emailIds.length;
+    const offset = params.offset || 0;
+    
+    // Only process a window of 5 emails per call to stay within CPU limits
+    const BATCH_SIZE = 5;
+    const batchIds = emailIds.slice(offset, offset + BATCH_SIZE);
+    const nextOffset = offset + BATCH_SIZE;
+    const hasMore = nextOffset < totalEmails;
 
-    // Phase 1: Quick header-only scan to find non-duplicate emails
-    // Phase 2: Full fetch only for emails that pass dedup
-    for (const seqNum of emailIds) {
+    console.log(`Batch: offset=${offset}, checking ${batchIds.length} of ${totalEmails} total emails`);
+
+    let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
+    let newEmailProcessed = false;
+
+    for (const seqNum of batchIds) {
       try {
         // Lightweight: fetch only headers (no body download)
         const headers = await imap.fetchHeaders(seqNum);
