@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Search, Loader2, List, LayoutGrid, AlertTriangle, Clock, CheckCircle, Timer, Phone, Mail } from "lucide-react";
+import { Plus, Search, Loader2, List, LayoutGrid, AlertTriangle, Clock, CheckCircle, Timer, Phone, Mail, MailCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import KanbanBoard from "@/components/KanbanBoard";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
@@ -86,6 +86,7 @@ export default function Tickets() {
   const [view, setView] = useState<"list" | "kanban">("kanban");
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [emailUnreadCounts, setEmailUnreadCounts] = useState<Record<string, number>>({});
+  const [agentRepliedMap, setAgentRepliedMap] = useState<Record<string, boolean>>({});
   const [fetchKey, setFetchKey] = useState(0);
   const navigate = useNavigate();
   const { statuses, statusLabels } = useTicketStatuses();
@@ -150,14 +151,16 @@ export default function Tickets() {
       setTicketTagsMap(tagsMap);
       setLoading(false);
 
-      // Fetch unread message counts for agent
+      // Fetch unread message counts and agent-replied status
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (currentUser && data && data.length > 0) {
         const ticketIds = data.map((t: any) => t.id);
-        const [{ data: readStatuses }, { data: clientMsgs }, { data: emailThreads }] = await Promise.all([
+        const [{ data: readStatuses }, { data: clientMsgs }, { data: emailThreads }, { data: lastMsgs }] = await Promise.all([
           supabase.from("ticket_read_status").select("ticket_id, last_read_at").in("ticket_id", ticketIds),
           supabase.from("ticket_messages").select("ticket_id, created_at, sender_type").eq("sender_type", "client").in("ticket_id", ticketIds),
           supabase.from("email_threads").select("ticket_id").in("ticket_id", ticketIds),
+          // Fetch the most recent message per ticket to determine if agent replied last
+          supabase.from("ticket_messages").select("ticket_id, sender_type, created_at").in("ticket_id", ticketIds).order("created_at", { ascending: false }),
         ]);
         const readMap: Record<string, string> = {};
         (readStatuses || []).forEach((r: any) => { readMap[r.ticket_id] = r.last_read_at; });
@@ -175,6 +178,20 @@ export default function Tickets() {
         });
         setUnreadCounts(unread);
         setEmailUnreadCounts(emailUnread);
+
+        // Determine agent-replied: last message is from agent AND there are client messages in the thread
+        const replied: Record<string, boolean> = {};
+        const seenTickets = new Set<string>();
+        (lastMsgs || []).forEach((m: any) => {
+          if (!seenTickets.has(m.ticket_id)) {
+            seenTickets.add(m.ticket_id);
+            // Only mark as "replied" if the last message is from an agent AND ticket had client messages
+            if (m.sender_type === "agent" && emailTicketIds.has(m.ticket_id)) {
+              replied[m.ticket_id] = true;
+            }
+          }
+        });
+        setAgentRepliedMap(replied);
       }
     };
     fetch();
@@ -296,7 +313,7 @@ export default function Tickets() {
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : view === "kanban" ? (
-        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} callCounts={callCounts} agentProfiles={agentProfiles} unreadCounts={unreadCounts} emailUnreadCounts={emailUnreadCounts} ticketTagsMap={ticketTagsMap} allTags={allTags} />
+        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} callCounts={callCounts} agentProfiles={agentProfiles} unreadCounts={unreadCounts} emailUnreadCounts={emailUnreadCounts} ticketTagsMap={ticketTagsMap} allTags={allTags} agentRepliedMap={agentRepliedMap} />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -344,17 +361,26 @@ export default function Tickets() {
                         );
                       })}
                       {t.category_id && <Badge variant="outline" className="text-xs">{categories[t.category_id] || t.category_id}</Badge>}
-                      {emailUnreadCounts[t.id] > 0 && (
-                        <Badge className="text-[10px] h-5 min-w-[20px] justify-center gap-0.5 bg-blue-500 hover:bg-blue-600 text-white border-0">
-                          <Mail className="h-3 w-3" />
-                          {emailUnreadCounts[t.id]}
-                        </Badge>
-                      )}
-                      {unreadCounts[t.id] > 0 && !emailUnreadCounts[t.id] && (
-                        <Badge variant="destructive" className="text-[10px] h-5 min-w-[20px] justify-center">
-                          {unreadCounts[t.id]}
-                        </Badge>
-                      )}
+                       {emailUnreadCounts[t.id] > 0 ? (
+                         <Badge className="text-[10px] h-5 min-w-[20px] justify-center gap-0.5 bg-blue-500 hover:bg-blue-600 text-white border-0 animate-pulse">
+                           <Mail className="h-3 w-3" />
+                           {emailUnreadCounts[t.id]}
+                         </Badge>
+                       ) : agentRepliedMap[t.id] ? (
+                         <Tooltip>
+                           <TooltipTrigger asChild>
+                             <span className="inline-flex items-center">
+                               <MailCheck className="h-4 w-4 text-success" />
+                             </span>
+                           </TooltipTrigger>
+                           <TooltipContent><p className="text-xs">Cliente respondido</p></TooltipContent>
+                         </Tooltip>
+                       ) : null}
+                       {unreadCounts[t.id] > 0 && !emailUnreadCounts[t.id] && (
+                         <Badge variant="destructive" className="text-[10px] h-5 min-w-[20px] justify-center">
+                           {unreadCounts[t.id]}
+                         </Badge>
+                       )}
                       <PriorityFlag priority={t.priority} />
                       <Badge variant="secondary">{statusLabels[t.status] || t.status}</Badge>
                     </div>
