@@ -1153,9 +1153,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Process emails - limit batch to 3 to stay within CPU limits
-    const safeBatchSize = Math.min(maxEmails, 3);
-    const result = await processEmails({ fetchRecent, maxEmails: safeBatchSize, agentId });
+    // Process emails - 1 at a time, frontend loop handles iteration
+    const result = await processEmails({ fetchRecent, maxEmails: 1, agentId });
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
