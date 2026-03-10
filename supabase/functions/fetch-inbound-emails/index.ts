@@ -653,7 +653,9 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
     }
 
     let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
-    const batch = emailIds.slice(0, params.maxEmails);
+    // Process only 1 email per invocation to stay within CPU limits
+    // The frontend loop will keep calling until remaining == 0
+    const batch = emailIds.slice(0, 1);
 
     for (const seqNum of batch) {
       try {
