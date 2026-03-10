@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { encode as base64Encode } from "https://deno.land/std@0.208.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,13 +47,65 @@ function buildEmailHtml(clientName: string, content: string): string {
 </html>`;
 }
 
-async function sendViaResend(from: string, to: string, subject: string, text: string, html?: string) {
+interface DownloadedAttachment {
+  filename: string;
+  content: string; // base64
+  contentType: string;
+  size: number;
+}
+
+async function downloadAttachments(
+  adminClient: ReturnType<typeof createClient>,
+  paths: string[]
+): Promise<DownloadedAttachment[]> {
+  const results: DownloadedAttachment[] = [];
+  for (const path of paths) {
+    try {
+      const { data, error } = await adminClient.storage.from("ticket-attachments").download(path);
+      if (error || !data) {
+        console.error(`Failed to download attachment ${path}:`, error?.message);
+        continue;
+      }
+      const arrayBuffer = await data.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      const b64 = base64Encode(bytes);
+      const filename = path.split("/").pop() || "attachment";
+      results.push({
+        filename,
+        content: b64,
+        contentType: data.type || "application/octet-stream",
+        size: bytes.length,
+      });
+    } catch (err) {
+      console.error(`Error downloading ${path}:`, (err as Error).message);
+    }
+  }
+  return results;
+}
+
+async function sendViaResend(
+  from: string, to: string, subject: string, text: string,
+  html?: string, attachments?: DownloadedAttachment[]
+) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) throw new Error("RESEND_API_KEY não configurada");
+
+  const payload: Record<string, unknown> = {
+    from, to: [to], subject, text, html: html || text,
+  };
+
+  if (attachments && attachments.length > 0) {
+    payload.attachments = attachments.map(a => ({
+      filename: a.filename,
+      content: a.content,
+      content_type: a.contentType,
+    }));
+  }
+
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to: [to], subject, text, html: html || text }),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) {
     const body = await res.text();
@@ -92,7 +145,7 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    const { ticket_id, content } = await req.json();
+    const { ticket_id, content, attachment_paths } = await req.json();
     if (!ticket_id || !content) {
       return new Response(JSON.stringify({ error: "ticket_id e content são obrigatórios" }), {
         status: 400,
@@ -141,6 +194,12 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Download attachments if provided
+    let downloadedAttachments: DownloadedAttachment[] = [];
+    if (attachment_paths && Array.isArray(attachment_paths) && attachment_paths.length > 0) {
+      downloadedAttachments = await downloadAttachments(adminClient, attachment_paths);
+    }
+
     const subject = `Re: [Ticket #${ticket.ticket_number}] ${ticket.subject || ""}`;
     const clientDisplayName = ticket.client_name || "Cliente";
     const plainText = `Olá ${clientDisplayName},\n\n${content}\n\n--\nUP Móveis\nApoio ao Cliente\napoioaocliente@upmoveis.pt\nwww.upmoveis.pt\n\nPara responder, basta responder a este email.`;
@@ -154,7 +213,7 @@ Deno.serve(async (req) => {
     try {
       if (useResend) {
         const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.resend_from_email || cfg.smtp_from_email || "noreply@upmoveis.pt"}>`;
-        const result = await sendViaResend(fromAddr, clientEmail, subject, plainText, htmlBody);
+        const result = await sendViaResend(fromAddr, clientEmail, subject, plainText, htmlBody, downloadedAttachments);
         deliveryStatus = "delivered";
         deliveryDetails = "Enviado via Resend API";
         smtpResponse = JSON.stringify(result);
@@ -170,13 +229,25 @@ Deno.serve(async (req) => {
         });
 
         const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.smtp_from_email || cfg.smtp_user}>`;
-        const sendResult = await client.send({
+
+        const smtpPayload: Record<string, unknown> = {
           from: fromAddr,
           to: clientEmail,
           subject,
           content: plainText,
           html: htmlBody,
-        });
+        };
+
+        if (downloadedAttachments.length > 0) {
+          smtpPayload.attachments = downloadedAttachments.map(a => ({
+            filename: a.filename,
+            content: a.content,
+            encoding: "base64",
+            contentType: a.contentType,
+          }));
+        }
+
+        const sendResult = await client.send(smtpPayload as any);
 
         if (sendResult) {
           smtpResponse = typeof sendResult === "string" ? sendResult : JSON.stringify(sendResult);
@@ -213,6 +284,22 @@ Deno.serve(async (req) => {
       sender_type: "agent",
       content,
     });
+
+    // Save attachment records in ticket_attachments
+    if (attachment_paths && Array.isArray(attachment_paths)) {
+      for (const path of attachment_paths) {
+        const filename = path.split("/").pop() || "attachment";
+        const matchedDownload = downloadedAttachments.find(a => a.filename === filename);
+        await adminClient.from("ticket_attachments").insert({
+          ticket_id,
+          uploaded_by: userData.user.id,
+          file_name: filename,
+          file_path: path,
+          file_type: matchedDownload?.contentType || "application/octet-stream",
+          file_size: matchedDownload?.size || 0,
+        });
+      }
+    }
 
     await adminClient.from("email_logs").insert({
       recipient: clientEmail,
