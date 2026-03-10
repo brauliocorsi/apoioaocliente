@@ -254,71 +254,25 @@ export default function EmailTicketDetail() {
     window.open(data.publicUrl, "_blank");
   };
 
-  // Download a single attachment via chunked IMAP partial fetches
-  const downloadAttachmentChunked = async (job: any) => {
-    const CHUNK_SIZE = 300000; // 300KB per chunk (safe for CPU limit)
-    const chunks: string[] = [];
-    let offset = 0;
-    let done = false;
-
-    while (!done) {
-      const { data: chunkData, error: chunkErr } = await supabase.functions.invoke("download-attachment", {
-        body: {
-          uid: job.uid,
-          part_num: job.partNum,
-          offset,
-          chunk_size: CHUNK_SIZE,
-          total_size: job.size || 0,
-        },
-      });
-      if (chunkErr) throw new Error(`Chunk error at offset ${offset}: ${chunkErr.message}`);
-      if (!chunkData?.success) throw new Error(chunkData?.message || "Chunk failed");
-
-      chunks.push(chunkData.data); // base64-encoded chunk
-      offset += chunkData.bytes_read;
-      done = chunkData.done || chunkData.bytes_read === 0;
-    }
-
-    // Combine all base64 chunks → decode the raw base64 content from IMAP
-    const fullBase64Raw = chunks.map(c => atob(c)).join("");
-
-    // The raw content from IMAP is base64-encoded attachment data
-    // Decode it to get the actual binary file
-    let fileBytes: Uint8Array;
-    if (job.encoding === "base64") {
-      // fullBase64Raw contains the base64 text from the email - decode it
-      const cleanB64 = fullBase64Raw.replace(/[\r\n\s]/g, "");
-      const binaryStr = atob(cleanB64);
-      fileBytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        fileBytes[i] = binaryStr.charCodeAt(i);
-      }
-    } else {
-      fileBytes = new Uint8Array(fullBase64Raw.length);
-      for (let i = 0; i < fullBase64Raw.length; i++) {
-        fileBytes[i] = fullBase64Raw.charCodeAt(i);
-      }
-    }
-
-    // Upload to storage
-    const safeName = job.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const filePath = `${id}/${Date.now()}_${safeName}`;
-    const { error: upErr } = await supabase.storage
-      .from("ticket-attachments")
-      .upload(filePath, fileBytes, { contentType: job.contentType || "application/octet-stream", upsert: false });
-    if (upErr) throw new Error(`Upload failed: ${upErr.message}`);
-
-    // Create attachment record
-    await supabase.from("ticket_attachments").insert({
-      ticket_id: id,
-      file_name: job.filename,
-      file_path: filePath,
-      file_type: job.contentType || "application/octet-stream",
-      file_size: fileBytes.length,
-      uploaded_by: user!.id,
+  // Download a single attachment via server-side edge function (full fetch + upload)
+  const downloadAttachmentServerSide = async (job: any) => {
+    const { data, error } = await supabase.functions.invoke("download-attachment", {
+      body: {
+        uid: job.uid,
+        part_num: job.partNum,
+        ticket_id: id,
+        filename: job.filename,
+        content_type: job.contentType,
+        encoding: job.encoding,
+      },
     });
-
-    console.log(`Imported ${job.filename} (${fileBytes.length} bytes) via ${chunks.length} chunks`);
+    if (error) throw new Error(`Download error: ${error.message}`);
+    if (!data?.success) throw new Error(data?.message || "Download failed");
+    if (data?.skipped) {
+      console.log(`Skipped ${job.filename} (already exists)`);
+      return;
+    }
+    console.log(`Imported ${job.filename} (${data.file_size} bytes) server-side`);
   };
 
   const refetchEmails = async () => {
@@ -333,23 +287,13 @@ export default function EmailTicketDetail() {
       toast({ title: "Re-importação concluída", description: data?.message || "Emails verificados" });
       fetchData();
 
-      // Download attachments sequentially via chunked fetch
+      // Download attachments server-side (edge function handles full fetch + upload)
       const jobs = data?.attachment_jobs || [];
       if (jobs.length > 0) {
         setBgAttachments(jobs.length);
         for (const job of jobs) {
           try {
-            // Check if already exists
-            const { count } = await supabase
-              .from("ticket_attachments")
-              .select("id", { count: "exact", head: true })
-              .eq("ticket_id", id!)
-              .eq("file_name", job.filename);
-            if (count && count > 0) {
-              setBgAttachments(prev => Math.max(0, prev - 1));
-              continue;
-            }
-            await downloadAttachmentChunked(job);
+            await downloadAttachmentServerSide(job);
             setBgAttachments(prev => Math.max(0, prev - 1));
           } catch (err) {
             console.error(`Attachment error for ${job.filename}: ${(err as Error).message}`);
