@@ -54,6 +54,7 @@ interface KanbanBoardProps {
   ticketTagsMap?: Record<string, string[]>;
   allTags?: { id: string; name: string; color: string | null }[];
   agentRepliedMap?: Record<string, boolean>;
+  attachmentInfoMap?: Record<string, AttachmentInfo>;
 }
 
 function formatSlaTime(ms: number): string {
