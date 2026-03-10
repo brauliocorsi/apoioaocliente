@@ -553,16 +553,17 @@ function hasReadableEmailContent(parsed: MimeParsed): boolean {
 }
 
 function parseMimeMessageFast(raw: string): MimeParsed {
-  const limitedRaw = raw.substring(0, 900 * 1024);
-  const parsed = parseMimeMessage(limitedRaw);
+  // For text content, only scan first 900KB to save CPU
+  const textLimit = 900 * 1024;
+  const limitedRaw = raw.substring(0, textLimit);
+  const textParsed = parseMimeMessage(limitedRaw);
 
-  // In fast mode we prioritize body readability and skip attachment processing
-  parsed.attachments = [];
-  if (parsed.bodyText.length > 150000) parsed.bodyText = parsed.bodyText.substring(0, 150000);
-  if (parsed.bodyHtml.length > 250000) parsed.bodyHtml = parsed.bodyHtml.substring(0, 250000);
+  // Limit text sizes
+  if (textParsed.bodyText.length > 150000) textParsed.bodyText = textParsed.bodyText.substring(0, 150000);
+  if (textParsed.bodyHtml.length > 250000) textParsed.bodyHtml = textParsed.bodyHtml.substring(0, 250000);
 
-  if (!hasReadableEmailContent(parsed)) {
-    parsed.bodyText = limitedRaw
+  if (!hasReadableEmailContent(textParsed)) {
+    textParsed.bodyText = limitedRaw
       .split(/\r?\n/)
       .filter((line) => {
         const l = line.trim();
@@ -573,10 +574,17 @@ function parseMimeMessageFast(raw: string): MimeParsed {
       })
       .join("\n")
       .substring(0, 100000);
-    parsed.bodyHtml = "";
+    textParsed.bodyHtml = "";
   }
 
-  return parsed;
+  // For attachments, parse the FULL raw (attachments are already capped at 5MB each in parseMimeMessage)
+  // Only do this if the limited parse didn't find them and the full raw is bigger
+  if (textParsed.attachments.length === 0 && raw.length > textLimit) {
+    const fullParsed = parseMimeMessage(raw);
+    textParsed.attachments = fullParsed.attachments;
+  }
+
+  return textParsed;
 }
 
 function extractName(from: string): string {
