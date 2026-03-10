@@ -894,7 +894,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
     if (blocked > 0) parts.push(`${blocked} bloqueados`);
     if (skipped > 0) parts.push(`${skipped} duplicados`);
     if (parts.length === 0) parts.push("0 novos emails");
-    const message = parts.join(", ") + (remaining > 0 ? `. Restam ${remaining} — clique novamente.` : "");
+    const message = parts.join(", ") + (remaining > 0 ? ". Restam " + remaining + " - clique novamente." : "");
 
     return { success: true, message, created, pending, updated, blocked, skipped, total: batch.length, remaining };
   } catch (err) {
