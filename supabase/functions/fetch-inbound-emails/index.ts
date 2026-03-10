@@ -910,12 +910,13 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         }
 
         // New email from unknown/closed thread → pending review queue
+        const pendingHtmlPreview = msg.bodyHtml ? msg.bodyHtml.substring(0, 20000) : "";
         const pendingInsert: any = {
           from_address: clientEmail.toLowerCase(),
           from_name: clientName,
           subject: msg.subject.substring(0, 500),
           body_text: (msg.bodyText || "").substring(0, 5000),
-          body_html: (msg.bodyHtml ? sanitizeHtml(msg.bodyHtml) : "").substring(0, 10000),
+          body_html: pendingHtmlPreview ? sanitizeHtml(pendingHtmlPreview).substring(0, 10000) : "",
           message_id: emailFingerprint,
           status: "pending",
         };
