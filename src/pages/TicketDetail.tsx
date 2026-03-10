@@ -514,12 +514,6 @@ export default function TicketDetail() {
               attachment_paths: uploadedFilePaths.length > 0 ? uploadedFilePaths : undefined,
             },
           });
-            body: { 
-              ticket_id: id, 
-              content: originalReply || content,
-              attachment_paths: uploadedPaths.length > 0 ? uploadedPaths : undefined,
-            },
-          });
           if (emailError) {
             console.error("Erro ao enviar email:", emailError);
             toast({ title: "Erro ao enviar email", description: "A resposta não foi enviada por email.", variant: "destructive" });
