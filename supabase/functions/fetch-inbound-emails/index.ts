@@ -200,8 +200,8 @@ class ImapClient {
   }
 
   async logout(): Promise<void> {
-    try { await this.command("LOGOUT"); } catch { /* ignore */ }
-    try { this.conn.close(); } catch { /* ignore */ }
+    try { await this.command("LOGOUT"); } catch (_e) { /* ignore */ }
+    try { this.conn.close(); } catch (_e2) { /* ignore */ }
   }
 }
 
