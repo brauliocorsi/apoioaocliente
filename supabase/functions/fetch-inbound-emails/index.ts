@@ -712,6 +712,100 @@ async function generateFingerprint(from: string, subject: string, bodySnippet: s
   const hash = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("").substring(0, 40);
 }
+// Parse BODYSTRUCTURE response to find attachment parts (part number, filename, content-type, size)
+interface AttachmentPart { partNum: string; filename: string; contentType: string; encoding: string; size: number; }
+
+function parseBodyStructureAttachments(bs: string): AttachmentPart[] {
+  const results: AttachmentPart[] = [];
+  // Match attachment patterns: look for "attachment" disposition or known binary types with filenames
+  // BODYSTRUCTURE is deeply nested parentheses — use regex for common patterns
+  const partRegex = /\("([^"]+)"\s+"([^"]+)"[^)]*?"([^"]*)"[^)]*?(\d+)\)/gi;
+  
+  // Simpler approach: find filename references with their part context
+  const lines = bs.split(/[\r\n]+/);
+  const fullText = bs;
+  
+  // Find all "name" "filename.ext" patterns
+  const nameMatches = [...fullText.matchAll(/(?:"name"\s*"([^"]+)"|"filename"\s*"([^"]+)")/gi)];
+  
+  for (const m of nameMatches) {
+    const filename = decodeHeaderValue(m[1] || m[2]);
+    if (!filename) continue;
+    
+    // Determine part number by counting opening parens before this match
+    const before = fullText.substring(0, m.index);
+    let depth = 0;
+    let partNum = "1";
+    const partNums: number[] = [0];
+    for (const ch of before) {
+      if (ch === "(") { depth++; partNums[depth] = (partNums[depth] || 0) + 1; }
+      if (ch === ")") { depth--; }
+    }
+    // Simple heuristic: use the top-level part counter
+    partNum = String(partNums[1] || 1);
+    
+    // Try to find content type and encoding near this match
+    const context = fullText.substring(Math.max(0, (m.index || 0) - 200), (m.index || 0) + 100);
+    const ctMatch = context.match(/"(image|application|audio|video|text)"\s+"([^"]+)"/i);
+    const contentType = ctMatch ? `${ctMatch[1]}/${ctMatch[2]}`.toLowerCase() : "application/octet-stream";
+    const encMatch = context.match(/"(base64|quoted-printable|7bit|8bit)"/i);
+    const encoding = encMatch ? encMatch[1].toLowerCase() : "base64";
+    const sizeMatch = context.match(/\s(\d{3,})\s/);
+    const size = sizeMatch ? parseInt(sizeMatch[1]) : 0;
+    
+    results.push({ partNum, filename, contentType, encoding, size });
+  }
+  
+  return results;
+}
+
+// Fetch attachments individually via MIME part numbers (CPU-efficient, no full email parsing)
+async function fetchAttachmentsParts(
+  imap: ImapClient,
+  adminClient: ReturnType<typeof createClient>,
+  seqNum: number,
+  ticketId: string,
+  agentId: string,
+): Promise<number> {
+  try {
+    const bs = await imap.fetchBodyStructure(seqNum);
+    const parts = parseBodyStructureAttachments(bs);
+    
+    if (parts.length === 0) return 0;
+    
+    let uploaded = 0;
+    for (const part of parts) {
+      // Skip very large attachments (> 5MB)
+      if (part.size > 5 * 1024 * 1024) continue;
+      
+      try {
+        const rawPart = await imap.fetchMimePart(seqNum, part.partNum);
+        let data: Uint8Array;
+        
+        if (part.encoding === "base64") {
+          data = decodeBase64ToBytes(rawPart, 5 * 1024 * 1024);
+        } else {
+          data = new TextEncoder().encode(rawPart);
+        }
+        
+        if (data.length > 0 && data.length <= 5 * 1024 * 1024) {
+          await uploadAttachment(adminClient, ticketId, {
+            filename: part.filename,
+            contentType: part.contentType,
+            data,
+          }, agentId);
+          uploaded++;
+        }
+      } catch (err) {
+        console.error(`Part ${part.partNum} fetch error: ${(err as Error).message}`);
+      }
+    }
+    return uploaded;
+  } catch (err) {
+    console.error(`BODYSTRUCTURE error: ${(err as Error).message}`);
+    return 0;
+  }
+}
 
 
 async function uploadAttachment(
