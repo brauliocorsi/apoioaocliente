@@ -52,7 +52,7 @@ async function sendViaResend(from: string, to: string, subject: string, text: st
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to: [to], subject, text }),
+    body: JSON.stringify({ from, to: [to], subject, text, html: html || text }),
   });
   if (!res.ok) {
     const body = await res.text();
