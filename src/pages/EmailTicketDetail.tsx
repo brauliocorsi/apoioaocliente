@@ -140,6 +140,7 @@ export default function EmailTicketDetail() {
   const [agents, setAgents] = useState<Record<string, { full_name: string; avatar_url?: string | null }>>({});
   const [emailThread, setEmailThread] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [originalViewContent, setOriginalViewContent] = useState<string | null>(null);
 
   const fetchData = async () => {
     if (!id) return;
