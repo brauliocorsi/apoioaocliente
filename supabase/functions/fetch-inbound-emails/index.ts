@@ -764,6 +764,25 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           continue;
         }
 
+        // Very large emails can exceed edge CPU limits when parsing full MIME + attachments.
+        // Fallback: import as pending with header metadata so the inbox doesn't block.
+        if (headers.size && headers.size > MAX_INLINE_EMAIL_SIZE) {
+          const clientName = extractName(headers.from);
+          await adminClient.from("pending_emails").insert({
+            from_address: clientEmail.toLowerCase(),
+            from_name: clientName,
+            subject: headers.subject.substring(0, 500),
+            body_text: `Email recebido (${Math.round(headers.size / 1024)} KB). Conteúdo completo indisponível neste modo de importação.`,
+            body_html: "",
+            message_id: emailFingerprint,
+            status: "pending",
+          });
+          pending++;
+          await imap.markAsSeen(seqNum);
+          newEmailProcessed = true;
+          break;
+        }
+
         // This email is NOT a duplicate - now fetch the full message body
         const msg = await imap.fetchMessage(seqNum);
         const clientName = extractName(msg.from);
