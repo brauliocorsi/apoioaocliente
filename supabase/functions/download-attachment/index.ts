@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Minimal IMAP client - UID-based partial fetch
+// Minimal IMAP client — full UID FETCH (no partial)
 class MiniImap {
   private conn!: Deno.TlsConn | Deno.Conn;
   private reader!: ReadableStreamDefaultReader<Uint8Array>;
@@ -29,21 +29,6 @@ class MiniImap {
     const w = this.conn.writable.getWriter();
     await w.write(this.encoder.encode(s));
     w.releaseLock();
-  }
-
-  private async cmd(c: string): Promise<string> {
-    const tag = this.nextTag();
-    await this.write(`${tag} ${c}\r\n`);
-    let result = "";
-    const start = Date.now();
-    while (Date.now() - start < 10000) {
-      const tail = result.length > 300 ? result.substring(result.length - 300) : result;
-      if (tail.includes(`${tag} OK`) || tail.includes(`${tag} NO`) || tail.includes(`${tag} BAD`)) return result;
-      const chunk = await this.readChunk();
-      if (!chunk) break;
-      result += this.decoder.decode(chunk);
-    }
-    return result;
   }
 
   private async readLine(): Promise<string> {
@@ -87,7 +72,7 @@ class MiniImap {
       this.buf = new Uint8Array(0);
     }
     const start = Date.now();
-    while (got < n && Date.now() - start < 15000) {
+    while (got < n && Date.now() - start < 30000) {
       const chunk = await this.readChunk();
       if (!chunk) break;
       const need = n - got;
@@ -106,6 +91,21 @@ class MiniImap {
     return result;
   }
 
+  private async cmd(c: string): Promise<string> {
+    const tag = this.nextTag();
+    await this.write(`${tag} ${c}\r\n`);
+    let result = "";
+    const start = Date.now();
+    while (Date.now() - start < 10000) {
+      const tail = result.length > 300 ? result.substring(result.length - 300) : result;
+      if (tail.includes(`${tag} OK`) || tail.includes(`${tag} NO`) || tail.includes(`${tag} BAD`)) return result;
+      const chunk = await this.readChunk();
+      if (!chunk) break;
+      result += this.decoder.decode(chunk);
+    }
+    return result;
+  }
+
   async login(user: string, pass: string): Promise<boolean> {
     const r = await this.cmd(`LOGIN "${user}" "${pass}"`);
     return r.includes("OK");
@@ -115,15 +115,15 @@ class MiniImap {
     await this.cmd(`SELECT "${folder}"`);
   }
 
-  // UID-based partial fetch: UID FETCH uid BODY[part]<offset.size>
-  async uidFetchPartial(uid: number, partNum: string, offset: number, size: number): Promise<Uint8Array> {
+  // Fetch entire MIME part as raw bytes using UID FETCH
+  async uidFetchFull(uid: number, partNum: string): Promise<Uint8Array> {
     const tag = this.nextTag();
-    const cmd = `UID FETCH ${uid} BODY[${partNum}]<${offset}.${size}>`;
+    const cmd = `UID FETCH ${uid} BODY[${partNum}]`;
     await this.write(`${tag} ${cmd}\r\n`);
 
     let header = "";
     const start = Date.now();
-    while (Date.now() - start < 10000) {
+    while (Date.now() - start < 15000) {
       const chunk = await this.readChunk();
       if (!chunk) break;
       header += this.decoder.decode(chunk);
@@ -131,7 +131,7 @@ class MiniImap {
       if (m) {
         const litSize = parseInt(m[1]);
         const afterPos = header.indexOf(m[0]) + m[0].length;
-        const already = this.encoder.encode(header.substring(afterPos));
+        const already = new Uint8Array([...header.substring(afterPos)].map(c => c.charCodeAt(0)));
 
         let literalBytes: Uint8Array;
         if (already.length >= litSize) {
@@ -147,7 +147,7 @@ class MiniImap {
         // Drain trailing response
         let trail = "";
         const drainStart = Date.now();
-        while (Date.now() - drainStart < 3000) {
+        while (Date.now() - drainStart < 5000) {
           if (this.buf.length > 0) {
             trail += this.decoder.decode(this.buf);
             this.buf = new Uint8Array(0);
@@ -159,14 +159,10 @@ class MiniImap {
         }
         return literalBytes;
       }
-      // Check for NO/BAD response (uid not found)
       if (header.includes(`${tag} NO`) || header.includes(`${tag} BAD`)) {
-        console.error(`IMAP error: ${header.substring(header.lastIndexOf(tag))}`);
         return new Uint8Array(0);
       }
-      // Check for OK with no data (uid exists but part doesn't)
       if (header.includes(`${tag} OK`) && !header.includes("{")) {
-        console.error("UID FETCH returned OK but no data");
         return new Uint8Array(0);
       }
     }
@@ -179,17 +175,41 @@ class MiniImap {
   }
 }
 
-// Convert Uint8Array to base64 string for JSON response
-function uint8ToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const slice = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-    for (let j = 0; j < slice.length; j++) {
-      binary += String.fromCharCode(slice[j]);
+// Fast base64 decode using lookup table — works on Uint8Array directly
+function fastB64Decode(raw: Uint8Array): Uint8Array {
+  // Build lookup table
+  const lut = new Uint8Array(256).fill(255);
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  for (let i = 0; i < 64; i++) lut[chars.charCodeAt(i)] = i;
+
+  // Strip whitespace and count valid chars
+  const clean = new Uint8Array(raw.length);
+  let len = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const b = raw[i];
+    if (lut[b] < 64 || b === 61) { // valid b64 char or '='
+      clean[len++] = b;
     }
   }
-  return btoa(binary);
+
+  // Calculate output size
+  let padding = 0;
+  if (len > 0 && clean[len - 1] === 61) padding++;
+  if (len > 1 && clean[len - 2] === 61) padding++;
+  const outLen = Math.floor(len * 3 / 4) - padding;
+  const out = new Uint8Array(outLen);
+
+  let j = 0;
+  for (let i = 0; i < len; i += 4) {
+    const a = lut[clean[i]];
+    const b = lut[clean[i + 1]];
+    const c = lut[clean[i + 2]];
+    const d = lut[clean[i + 3]];
+    if (j < outLen) out[j++] = (a << 2) | (b >> 4);
+    if (j < outLen) out[j++] = ((b & 15) << 4) | (c >> 2);
+    if (j < outLen) out[j++] = ((c & 3) << 6) | d;
+  }
+  return out;
 }
 
 Deno.serve(async (req) => {
@@ -199,10 +219,10 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { uid, part_num, offset, chunk_size, total_size } = body;
+    const { uid, part_num, ticket_id, filename, content_type, encoding } = body;
 
-    if (!uid || !part_num || offset === undefined || !chunk_size) {
-      return new Response(JSON.stringify({ success: false, message: "Missing params (uid, part_num, offset, chunk_size required)" }), {
+    if (!uid || !part_num || !ticket_id || !filename) {
+      return new Response(JSON.stringify({ success: false, message: "Missing params (uid, part_num, ticket_id, filename required)" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -210,6 +230,18 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const admin = createClient(supabaseUrl, serviceKey);
+
+    // Check if attachment already exists
+    const { count } = await admin.from("ticket_attachments")
+      .select("id", { count: "exact", head: true })
+      .eq("ticket_id", ticket_id)
+      .eq("file_name", filename);
+    if (count && count > 0) {
+      console.log(`Attachment ${filename} already exists for ticket ${ticket_id}, skipping`);
+      return new Response(JSON.stringify({ success: true, skipped: true, message: "Already exists" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Get IMAP config
     const { data: settings } = await admin.from("system_settings")
@@ -226,27 +258,71 @@ Deno.serve(async (req) => {
     const port = Number(cfg.imap_port) || 993;
     const imap = new MiniImap();
 
+    console.log(`Fetching: uid=${uid} part=${part_num} file=${filename} encoding=${encoding}`);
+
     const ok = await imap.connect(cfg.imap_host, port);
     if (!ok) throw new Error("IMAP connect failed");
     const loggedIn = await imap.login(cfg.imap_user, cfg.imap_pass);
     if (!loggedIn) throw new Error("IMAP login failed");
     await imap.select(cfg.imap_folder || "INBOX");
 
-    console.log(`UID chunk: uid=${uid} part=${part_num} offset=${offset} size=${chunk_size}`);
-    const rawBytes = await imap.uidFetchPartial(Number(uid), part_num, Number(offset), Number(chunk_size));
-    console.log(`Got ${rawBytes.length} bytes`);
+    // Fetch entire MIME part at once
+    const rawBytes = await imap.uidFetchFull(Number(uid), part_num);
+    console.log(`Raw IMAP data: ${rawBytes.length} bytes`);
 
     await imap.logout();
 
-    // Return chunk as base64 in JSON
-    const b64 = rawBytes.length > 0 ? uint8ToBase64(rawBytes) : "";
+    if (rawBytes.length === 0) {
+      return new Response(JSON.stringify({ success: false, message: "IMAP returned 0 bytes" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Decode based on encoding
+    let fileBytes: Uint8Array;
+    if (encoding === "base64") {
+      fileBytes = fastB64Decode(rawBytes);
+    } else {
+      // 7bit, 8bit, quoted-printable — raw bytes are the file
+      fileBytes = rawBytes;
+    }
+
+    console.log(`Decoded file: ${fileBytes.length} bytes`);
+
+    // Upload to Supabase Storage
+    const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const filePath = `${ticket_id}/${Date.now()}_${safeName}`;
+    const { error: upErr } = await admin.storage
+      .from("ticket-attachments")
+      .upload(filePath, fileBytes, {
+        contentType: content_type || "application/octet-stream",
+        upsert: false,
+      });
+    if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
+
+    // Insert attachment record (use service role — bypasses RLS)
+    const { error: dbErr } = await admin.from("ticket_attachments").insert({
+      ticket_id,
+      file_name: filename,
+      file_path: filePath,
+      file_type: content_type || "application/octet-stream",
+      file_size: fileBytes.length,
+      uploaded_by: "00000000-0000-0000-0000-000000000000",
+    });
+    if (dbErr) {
+      console.error(`DB insert error: ${dbErr.message}`);
+      // Try to clean up the uploaded file
+      await admin.storage.from("ticket-attachments").remove([filePath]);
+      throw new Error(`DB insert failed: ${dbErr.message}`);
+    }
+
+    console.log(`✓ Imported ${filename} (${fileBytes.length} bytes) → ${filePath}`);
 
     return new Response(JSON.stringify({
       success: true,
-      data: b64,
-      bytes_read: rawBytes.length,
-      offset: Number(offset),
-      done: rawBytes.length === 0 || rawBytes.length < Number(chunk_size) || (total_size && Number(offset) + rawBytes.length >= Number(total_size)),
+      file_name: filename,
+      file_size: fileBytes.length,
+      file_path: filePath,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
