@@ -505,8 +505,20 @@ export default function TicketDetail() {
 
       if (emailThread || ticket?.client_email) {
         try {
+          // Collect uploaded file paths for email attachments
+          const uploadedPaths = attachments
+            .filter((a: any) => {
+              const attTime = new Date(a.created_at).getTime();
+              const now = Date.now();
+              return now - attTime < 60000; // files uploaded in the last minute
+            })
+            .map((a: any) => a.file_path);
           const { error: emailError } = await supabase.functions.invoke("reply-email-ticket", {
-            body: { ticket_id: id, content: originalReply || content },
+            body: { 
+              ticket_id: id, 
+              content: originalReply || content,
+              attachment_paths: uploadedPaths.length > 0 ? uploadedPaths : undefined,
+            },
           });
           if (emailError) {
             console.error("Erro ao enviar email:", emailError);
