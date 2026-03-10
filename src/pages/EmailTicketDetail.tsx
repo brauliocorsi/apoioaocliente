@@ -308,6 +308,13 @@ export default function EmailTicketDetail() {
         )}
       </div>
 
+      {bgAttachments > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary animate-pulse">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>A importar {bgAttachments} anexo{bgAttachments > 1 ? "s" : ""} em segundo plano… A página será atualizada automaticamente.</span>
+        </div>
+      )}
+
       {/* Controls */}
       <div className="flex flex-wrap gap-3">
         <Select value={ticket.status} onValueChange={updateStatus}>
