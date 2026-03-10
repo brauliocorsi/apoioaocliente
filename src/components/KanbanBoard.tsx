@@ -52,6 +52,7 @@ interface KanbanBoardProps {
   emailUnreadCounts?: Record<string, number>;
   ticketTagsMap?: Record<string, string[]>;
   allTags?: { id: string; name: string; color: string | null }[];
+  agentRepliedMap?: Record<string, boolean>;
 }
 
 function formatSlaTime(ms: number): string {
