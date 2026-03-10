@@ -1717,7 +1717,7 @@ Deno.serve(async (req) => {
       const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
       const { ticket_id: attTicketId, seq_num, part_num, filename, content_type, encoding } = ticketIdBody
-        ? { ticket_id: ticketIdBody, seq_num: body.seq_num, part_num: body.part_num, filename: body.filename, content_type: body.content_type, encoding: body.encoding }
+        ? { ticket_id: ticketIdBody, seq_num: bodyParsed.seq_num, part_num: bodyParsed.part_num, filename: bodyParsed.filename, content_type: bodyParsed.content_type, encoding: bodyParsed.encoding }
         : { ticket_id: null, seq_num: null, part_num: null, filename: null, content_type: null, encoding: null };
 
       if (!attTicketId || !seq_num || !part_num || !filename) {
