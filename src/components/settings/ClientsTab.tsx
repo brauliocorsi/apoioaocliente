@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { KeyRound, Loader2, Search } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { KeyRound, Loader2, Search, Trash2 } from "lucide-react";
 
 export default function ClientsTab() {
   const { role } = useAuth();
@@ -20,6 +21,10 @@ export default function ClientsTab() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
+  const [clientToDelete, setClientToDelete] = useState<{ id: string; full_name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const queryClient = useQueryClient();
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["client-users"],
@@ -64,6 +69,22 @@ export default function ClientsTab() {
       setConfirmPassword("");
     }
     setSaving(false);
+  };
+
+  const handleDeleteClient = async () => {
+    if (!clientToDelete) return;
+    setDeleting(true);
+    const { data, error } = await supabase.functions.invoke("delete-client", {
+      body: { client_user_id: clientToDelete.id },
+    });
+    if (error || data?.error) {
+      toast({ title: "Erro ao eliminar cliente", description: data?.error || error?.message, variant: "destructive" });
+    } else {
+      toast({ title: "Cliente eliminado", description: `${clientToDelete.full_name} foi removido do sistema.` });
+      queryClient.invalidateQueries({ queryKey: ["client-users"] });
+    }
+    setClientToDelete(null);
+    setDeleting(false);
   };
 
   if (role !== "supervisor") {
@@ -137,15 +158,25 @@ export default function ClientsTab() {
                           <TableCell className="text-sm">{client.email}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{client.phone || "–"}</TableCell>
                           <TableCell>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 gap-1 text-xs"
-                              onClick={() => setSelectedClient({ id: client.id, full_name: client.full_name, email: client.email })}
-                            >
-                              <KeyRound className="h-3 w-3" />
-                              Senha
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => setSelectedClient({ id: client.id, full_name: client.full_name, email: client.email })}
+                              >
+                                <KeyRound className="h-3 w-3" />
+                                Senha
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+                                onClick={() => setClientToDelete({ id: client.id, full_name: client.full_name })}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
@@ -196,6 +227,28 @@ export default function ClientsTab() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!clientToDelete} onOpenChange={(open) => { if (!open) setClientToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar cliente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O cliente <strong>{clientToDelete?.full_name}</strong> será permanentemente removido do sistema. Os tickets existentes serão mantidos mas desassociados. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteClient}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Trash2 className="h-3.5 w-3.5 mr-1" />}
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
