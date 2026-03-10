@@ -17,13 +17,42 @@ async function getEmailConfig(adminClient: ReturnType<typeof createClient>) {
   return cfg;
 }
 
-async function sendViaResend(from: string, to: string, subject: string, text: string) {
+function buildEmailHtml(clientName: string, content: string): string {
+  const escapedContent = content
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br>");
+
+  return `<!DOCTYPE html>
+<html lang="pt">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f7f7f7;">
+<div style="max-width:600px;margin:20px auto;background-color:#ffffff;border-radius:6px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#333333;">
+  <div style="padding:28px 32px;">
+    <p style="margin:0 0 16px 0;">Olá <strong>${clientName}</strong>,</p>
+    <div style="margin:0 0 24px 0;">${escapedContent}</div>
+    <hr style="border:none;border-top:1px solid #e0e0e0;margin:24px 0;">
+    <div style="font-size:12px;color:#888888;line-height:1.5;">
+      <p style="margin:0 0 2px 0;font-weight:bold;color:#555555;">UP Móveis</p>
+      <p style="margin:0 0 2px 0;">Apoio ao Cliente</p>
+      <p style="margin:0 0 2px 0;">✉ apoioaocliente@upmoveis.pt</p>
+      <p style="margin:0 0 8px 0;">🌐 www.upmoveis.pt</p>
+      <p style="margin:0;font-size:11px;color:#aaaaaa;">Para responder, basta responder a este email.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+}
+
+async function sendViaResend(from: string, to: string, subject: string, text: string, html?: string) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) throw new Error("RESEND_API_KEY não configurada");
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to: [to], subject, text }),
+    body: JSON.stringify({ from, to: [to], subject, text, html: html || text }),
   });
   if (!res.ok) {
     const body = await res.text();
@@ -113,7 +142,9 @@ Deno.serve(async (req) => {
     }
 
     const subject = `Re: [Ticket #${ticket.ticket_number}] ${ticket.subject || ""}`;
-    const plainText = `Olá ${ticket.client_name || "Cliente"},\n\n${content}\n\n--\nUP Móveis - Apoio ao Cliente\nPara responder, basta responder a este email.`;
+    const clientDisplayName = ticket.client_name || "Cliente";
+    const plainText = `Olá ${clientDisplayName},\n\n${content}\n\n--\nUP Móveis\nApoio ao Cliente\napoioaocliente@upmoveis.pt\nwww.upmoveis.pt\n\nPara responder, basta responder a este email.`;
+    const htmlBody = buildEmailHtml(clientDisplayName, content);
 
     let deliveryStatus = "accepted";
     let deliveryDetails: string | null = null;
@@ -123,7 +154,7 @@ Deno.serve(async (req) => {
     try {
       if (useResend) {
         const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.resend_from_email || cfg.smtp_from_email || "noreply@upmoveis.pt"}>`;
-        const result = await sendViaResend(fromAddr, clientEmail, subject, plainText);
+        const result = await sendViaResend(fromAddr, clientEmail, subject, plainText, htmlBody);
         deliveryStatus = "delivered";
         deliveryDetails = "Enviado via Resend API";
         smtpResponse = JSON.stringify(result);
@@ -144,7 +175,7 @@ Deno.serve(async (req) => {
           to: clientEmail,
           subject,
           content: plainText,
-          html: plainText,
+          html: htmlBody,
         });
 
         if (sendResult) {

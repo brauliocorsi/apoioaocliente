@@ -31,13 +31,34 @@ function stripHtmlToText(html: string): string {
     .trim();
 }
 
-async function sendViaResend(from: string, to: string, subject: string, text: string) {
+function wrapEmailHtml(bodyContent: string): string {
+  return `<!DOCTYPE html>
+<html lang="pt">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f7f7f7;">
+<div style="max-width:600px;margin:20px auto;background-color:#ffffff;border-radius:6px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#333333;">
+  <div style="padding:28px 32px;">
+    ${bodyContent}
+    <hr style="border:none;border-top:1px solid #e0e0e0;margin:24px 0;">
+    <div style="font-size:12px;color:#888888;line-height:1.5;">
+      <p style="margin:0 0 2px 0;font-weight:bold;color:#555555;">UP Móveis</p>
+      <p style="margin:0 0 2px 0;">Apoio ao Cliente</p>
+      <p style="margin:0 0 2px 0;">✉ apoioaocliente@upmoveis.pt</p>
+      <p style="margin:0 0 8px 0;">🌐 www.upmoveis.pt</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+}
+
+async function sendViaResend(from: string, to: string, subject: string, text: string, html?: string) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) throw new Error("RESEND_API_KEY não configurada");
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to: [to], subject, text }),
+    body: JSON.stringify({ from, to: [to], subject, text, html: html || text }),
   });
   if (!res.ok) {
     const body = await res.text();
@@ -45,7 +66,7 @@ async function sendViaResend(from: string, to: string, subject: string, text: st
   }
 }
 
-async function sendViaSmtp(cfg: Record<string, string>, to: string, subject: string, text: string) {
+async function sendViaSmtp(cfg: Record<string, string>, to: string, subject: string, text: string, html?: string) {
   const port = Number(cfg.smtp_port) || 465;
   const client = new SMTPClient({
     connection: {
@@ -57,7 +78,7 @@ async function sendViaSmtp(cfg: Record<string, string>, to: string, subject: str
   });
 
   const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.smtp_from_email || cfg.smtp_user}>`;
-  await client.send({ from: fromAddr, to, subject, content: text, html: text });
+  await client.send({ from: fromAddr, to, subject, content: text, html: html || text });
   try { await client.close(); } catch { /* ignore */ }
 }
 
@@ -165,13 +186,14 @@ Deno.serve(async (req) => {
     }
 
     const plainText = stripHtmlToText(body);
+    const htmlEmail = wrapEmailHtml(body);
 
     try {
       if (useResend) {
         const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.resend_from_email || cfg.smtp_from_email || "noreply@upmoveis.pt"}>`;
-        await sendViaResend(fromAddr, clientEmail, subject, plainText);
+        await sendViaResend(fromAddr, clientEmail, subject, plainText, htmlEmail);
       } else {
-        await sendViaSmtp(cfg, clientEmail, subject, plainText);
+        await sendViaSmtp(cfg, clientEmail, subject, plainText, htmlEmail);
       }
       await adminClient.from("email_logs").insert({
         recipient: clientEmail, subject, status: "sent", source: "send-ticket-email", ticket_id, template_id,
