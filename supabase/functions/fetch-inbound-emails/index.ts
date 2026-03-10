@@ -676,14 +676,8 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
       const allIds = await imap.searchAll();
       emailIds = allIds.slice(-params.maxEmails);
     } else {
-      // Get unseen emails first
-      const unseenIds = await imap.searchUnseen();
-      // Always search last 24h to catch already-read emails not yet processed
-      const sinceIds = await imap.searchSince(1);
-      // Merge both sets, removing duplicates, keeping order
-      const idSet = new Set(unseenIds);
-      for (const id of sinceIds) idSet.add(id);
-      emailIds = Array.from(idSet).sort((a, b) => a - b);
+      // Single search: all emails from last 24h (includes read and unread)
+      emailIds = await imap.searchSince(1);
     }
 
     const totalEmails = emailIds.length;
