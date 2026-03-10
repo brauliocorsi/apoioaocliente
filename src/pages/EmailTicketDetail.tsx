@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Send, Mail, User, Clock, Paperclip, Download, FileText, Image, X } from "lucide-react";
+import { ArrowLeft, Loader2, Send, Mail, User, Clock, Paperclip, Download, FileText, Image, X, RefreshCw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
@@ -155,6 +155,7 @@ export default function EmailTicketDetail() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [originalViewContent, setOriginalViewContent] = useState<string | null>(null);
   const [replyAttachments, setReplyAttachments] = useState<{ file_name: string; file_path: string; file_type: string; file_size: number; url: string }[]>([]);
+  const [refetching, setRefetching] = useState(false);
 
   const fetchData = async () => {
     if (!id) return;
@@ -252,6 +253,22 @@ export default function EmailTicketDetail() {
     window.open(data.publicUrl, "_blank");
   };
 
+  const refetchEmails = async () => {
+    if (!id || !user || refetching) return;
+    setRefetching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-inbound-emails", {
+        body: { action: "refetch_ticket", ticket_id: id, agent_id: user.id },
+      });
+      if (error) throw error;
+      if (data?.success === false) throw new Error(data.message);
+      toast({ title: "Re-importação concluída", description: data?.message || "Emails verificados" });
+      fetchData();
+    } catch (err) {
+      toast({ title: "Erro na re-importação", description: (err as Error).message, variant: "destructive" });
+    }
+    setRefetching(false);
+  };
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!ticket) return <div className="text-center py-20 text-muted-foreground">Ticket não encontrado</div>;
 
@@ -277,6 +294,12 @@ export default function EmailTicketDetail() {
             {emailThread ? ` · Thread: ${emailThread.email_address}` : ""}
           </p>
         </div>
+        {ticket.client_email && (
+          <Button variant="outline" size="sm" onClick={refetchEmails} disabled={refetching} className="shrink-0 gap-1.5">
+            <RefreshCw className={`h-3.5 w-3.5 ${refetching ? "animate-spin" : ""}`} />
+            {refetching ? "A importar..." : "Re-importar emails"}
+          </Button>
+        )}
       </div>
 
       {/* Controls */}
