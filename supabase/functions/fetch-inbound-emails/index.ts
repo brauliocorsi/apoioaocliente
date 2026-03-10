@@ -923,7 +923,7 @@ Deno.serve(async (req) => {
       if (body?.agent_id) agentId = body.agent_id;
       action = body?.action;
       pendingId = body?.pending_id;
-    } catch { /* no body */ }
+    } catch (_e) { /* no body */ }
 
     // Test-only: quick connection check
     if (testOnly) {
