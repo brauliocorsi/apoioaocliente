@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import { formatDistanceToNow, format } from "date-fns";
 import { pt } from "date-fns/locale";
+import FileUpload from "@/components/FileUpload";
 
 // Check if content looks like HTML
 function isHtmlContent(text: string): boolean {
@@ -42,10 +43,22 @@ function cleanEmailText(text: string): string {
   cleaned = cleaned.replace(/=([0-9A-Fa-f]{2})/g, (_match: string, hex: string) => {
     return String.fromCharCode(parseInt(hex, 16));
   });
-  try {
-    const bytes = new Uint8Array([...cleaned].map(c => c.charCodeAt(0)));
-    cleaned = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
-  } catch { /* keep as-is */ }
+  // Only attempt byte→UTF-8 re-decode if the text contains high bytes (likely latin1/windows-1252 raw bytes)
+  // Skip if text is already valid UTF-8 (no replacement characters after a test decode)
+  const hasHighBytes = /[\x80-\xff]/.test(cleaned);
+  if (hasHighBytes) {
+    try {
+      const bytes = new Uint8Array([...cleaned].map(c => c.charCodeAt(0)));
+      const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      cleaned = decoded;
+    } catch {
+      // Not valid UTF-8 bytes, try windows-1252
+      try {
+        const bytes = new Uint8Array([...cleaned].map(c => c.charCodeAt(0)));
+        cleaned = new TextDecoder("windows-1252", { fatal: false }).decode(bytes);
+      } catch { /* keep as-is */ }
+    }
+  }
   cleaned = cleaned.replace(/--[0-9a-f]{20,}--?/g, "");
   cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
   return cleaned;
@@ -141,6 +154,7 @@ export default function EmailTicketDetail() {
   const [emailThread, setEmailThread] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [originalViewContent, setOriginalViewContent] = useState<string | null>(null);
+  const [replyAttachments, setReplyAttachments] = useState<{ file_name: string; file_path: string; file_type: string; file_size: number; url: string }[]>([]);
 
   const fetchData = async () => {
     if (!id) return;
@@ -196,13 +210,15 @@ export default function EmailTicketDetail() {
     if (!id || !user || !reply.trim()) return;
     setSending(true);
     try {
+      const attachmentPaths = replyAttachments.map(a => a.file_path);
       const { data, error } = await supabase.functions.invoke("reply-email-ticket", {
-        body: { ticket_id: id, content: reply.trim() },
+        body: { ticket_id: id, content: reply.trim(), attachment_paths: attachmentPaths.length > 0 ? attachmentPaths : undefined },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast({ title: "Email enviado com sucesso" });
       setReply("");
+      setReplyAttachments([]);
       fetchData();
     } catch (err) {
       toast({ title: "Erro ao enviar email", description: (err as Error).message, variant: "destructive" });
@@ -443,11 +459,18 @@ export default function EmailTicketDetail() {
                 }
               }}
             />
+            <FileUpload
+              ticketId={id}
+              userId={user?.id || ""}
+              attachments={replyAttachments}
+              onAttachmentsChange={setReplyAttachments}
+              disabled={sending}
+            />
             <div className="flex items-center justify-between">
               <p className="text-[10px] text-muted-foreground">Ctrl+Enter para enviar</p>
               <Button onClick={sendEmailReply} disabled={sending || !reply.trim()}>
                 {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                Enviar Email
+                Enviar Email{replyAttachments.length > 0 ? ` (${replyAttachments.length} anexo${replyAttachments.length > 1 ? "s" : ""})` : ""}
               </Button>
             </div>
           </div>

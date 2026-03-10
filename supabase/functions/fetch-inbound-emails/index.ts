@@ -481,12 +481,18 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
         partBody = decodeQuotedPrintable(partBody, charset);
       } else if (transferEncoding === "base64") {
         partBody = decodeBase64(partBody, charset);
-      } else if (charset && charset.toLowerCase() !== "utf-8" && charset.toLowerCase() !== "us-ascii") {
-        // Raw body with non-UTF-8 charset — re-decode
-        try {
-          const bytes = new Uint8Array([...partBody].map(c => c.charCodeAt(0)));
-          partBody = new TextDecoder(normalizeCharset(charset), { fatal: false }).decode(bytes);
-        } catch (_e) { /* keep as-is */ }
+      } else {
+        // For 7bit/8bit/unspecified transfer encoding, always re-decode through charset
+        // The raw bytes come from latin1 decoder, so we must re-interpret them with the correct charset
+        const hasHighBytes = /[\x80-\xff]/.test(partBody);
+        const normalizedCharset = normalizeCharset(charset);
+        if (hasHighBytes || (normalizedCharset !== "utf-8")) {
+          try {
+            const bytes = new Uint8Array([...partBody].map(c => c.charCodeAt(0)));
+            const targetCharset = (normalizedCharset === "utf-8" && hasHighBytes) ? "windows-1252" : normalizedCharset;
+            partBody = new TextDecoder(targetCharset, { fatal: false }).decode(bytes);
+          } catch (_e) { /* keep as-is */ }
+        }
       }
 
       if (contentType.includes("text/plain") && !result.bodyText) {
@@ -514,11 +520,16 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
       body = decodeQuotedPrintable(body, singleCharset);
     } else if (transferEncoding === "base64") {
       body = decodeBase64(body, singleCharset);
-    } else if (singleCharset && singleCharset.toLowerCase() !== "utf-8" && singleCharset.toLowerCase() !== "us-ascii") {
-      try {
-        const bytes = new Uint8Array([...body].map(c => c.charCodeAt(0)));
-        body = new TextDecoder(normalizeCharset(singleCharset), { fatal: false }).decode(bytes);
-      } catch (_e) { /* keep as-is */ }
+    } else {
+      const hasHighBytes = /[\x80-\xff]/.test(body);
+      const normalizedCharset = normalizeCharset(singleCharset);
+      if (hasHighBytes || (normalizedCharset !== "utf-8")) {
+        try {
+          const bytes = new Uint8Array([...body].map(c => c.charCodeAt(0)));
+          const targetCharset = (normalizedCharset === "utf-8" && hasHighBytes) ? "windows-1252" : normalizedCharset;
+          body = new TextDecoder(targetCharset, { fatal: false }).decode(bytes);
+        } catch (_e) { /* keep as-is */ }
+      }
     }
 
     const contentTypeMatch = headerSection.match(/Content-Type:\s*([^;\r\n]+)/i);
