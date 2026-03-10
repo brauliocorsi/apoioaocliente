@@ -71,6 +71,22 @@ export default function ClientsTab() {
     setSaving(false);
   };
 
+  const handleDeleteClient = async () => {
+    if (!clientToDelete) return;
+    setDeleting(true);
+    const { data, error } = await supabase.functions.invoke("delete-client", {
+      body: { client_user_id: clientToDelete.id },
+    });
+    if (error || data?.error) {
+      toast({ title: "Erro ao eliminar cliente", description: data?.error || error?.message, variant: "destructive" });
+    } else {
+      toast({ title: "Cliente eliminado", description: `${clientToDelete.full_name} foi removido do sistema.` });
+      queryClient.invalidateQueries({ queryKey: ["client-users"] });
+    }
+    setClientToDelete(null);
+    setDeleting(false);
+  };
+
   if (role !== "supervisor") {
     return (
       <Card>
