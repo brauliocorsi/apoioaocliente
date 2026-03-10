@@ -1,0 +1,1 @@
+DELETE FROM ticket_attachments WHERE file_size = 0;
