@@ -726,21 +726,22 @@ async function generateFingerprint(from: string, subject: string, bodySnippet: s
 // Parse BODYSTRUCTURE response to find attachment parts (part number, filename, content-type, size)
 interface AttachmentPart { partNum: string; filename: string; contentType: string; encoding: string; size: number; }
 
-function parseBodyStructureAttachments(bs: string): AttachmentPart[] {
+function parseBodyStructureAttachments(bs: string, prefix = ""): AttachmentPart[] {
   const results: AttachmentPart[] = [];
   
   // Extract the BODYSTRUCTURE content between the outer FETCH parens
-  const bsMatch = bs.match(/BODYSTRUCTURE\s+(\(.*\))\s*\)\s*\n/s);
-  if (!bsMatch) return results;
-  const struct = bsMatch[1];
+  let struct = bs;
+  if (!prefix) {
+    const bsMatch = bs.match(/BODYSTRUCTURE\s+(\(.*\))\s*\)\s*\n/s);
+    if (!bsMatch) return results;
+    struct = bsMatch[1];
+  }
   
   // Parse top-level parts by tracking parenthesis depth
-  // In multipart, each top-level ( ) group is a part numbered 1, 2, 3...
   const topParts: { content: string; index: number }[] = [];
   let depth = 0;
   let partStart = -1;
   
-  // Skip the outermost parens
   for (let i = 1; i < struct.length - 1; i++) {
     if (struct[i] === "(") {
       if (depth === 0) partStart = i;
@@ -753,10 +754,31 @@ function parseBodyStructureAttachments(bs: string): AttachmentPart[] {
     }
   }
   
-  // Check each top-level part for attachment indicators
   for (let idx = 0; idx < topParts.length; idx++) {
     const part = topParts[idx].content;
-    const partNum = String(idx + 1);
+    const partNum = prefix ? `${prefix}.${idx + 1}` : String(idx + 1);
+    
+    // Check if this part is itself a multipart (contains nested (...) groups at depth 1)
+    let innerDepth = 0;
+    let hasNestedParts = false;
+    for (let i = 1; i < part.length - 1; i++) {
+      if (part[i] === "(") {
+        if (innerDepth === 0) { hasNestedParts = true; break; }
+        innerDepth++;
+      } else if (part[i] === ")") {
+        innerDepth--;
+      }
+    }
+    
+    // Detect multipart container: starts with nested parens, has "mixed"/"alternative"/"related" etc
+    const isMultipart = hasNestedParts && /"\s*(?:mixed|alternative|related|signed|report)/i.test(part);
+    
+    if (isMultipart) {
+      // Recurse into nested multipart
+      const nested = parseBodyStructureAttachments(part, partNum);
+      results.push(...nested);
+      continue;
+    }
     
     // Look for filename in this part
     const nameMatch = part.match(/(?:"name"\s*"([^"]+)"|"filename"\s*"([^"]+)")/i);
