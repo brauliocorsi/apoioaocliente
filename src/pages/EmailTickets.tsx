@@ -82,6 +82,7 @@ export default function EmailTickets() {
   const [selectedPending, setSelectedPending] = useState<PendingEmail | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [tab, setTab] = useState("pending");
+  const [attachmentInfoMap, setAttachmentInfoMap] = useState<Record<string, { count: number; hasImages: boolean; hasVideos: boolean }>>({});
   const navigate = useNavigate();
   const { statusLabels } = useTicketStatuses();
   const { toast } = useToast();
