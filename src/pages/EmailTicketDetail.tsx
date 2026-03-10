@@ -453,5 +453,23 @@ export default function EmailTicketDetail() {
         </CardContent>
       </Card>
     </div>
+
+    <Dialog open={!!originalViewContent} onOpenChange={() => setOriginalViewContent(null)}>
+      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Email original completo</DialogTitle>
+        </DialogHeader>
+        {originalViewContent && (
+          isHtmlContent(originalViewContent) ? (
+            <div
+              className="prose prose-sm dark:prose-invert max-w-none [&_img]:max-w-full [&_img]:h-auto [&_a]:text-primary [&_a]:underline break-words"
+              dangerouslySetInnerHTML={{ __html: sanitizeForDisplay(originalViewContent) }}
+            />
+          ) : (
+            <p className="text-sm whitespace-pre-wrap">{originalViewContent}</p>
+          )
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
