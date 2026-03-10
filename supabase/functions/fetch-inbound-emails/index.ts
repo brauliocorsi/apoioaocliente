@@ -693,16 +693,17 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           continue;
         }
 
-        // Check if we have an existing open thread
+        // Check if we have an existing open thread OR ticket by client_email
         const { data: existingThread } = await adminClient
           .from("email_threads")
           .select("ticket_id")
           .eq("email_address", clientEmail.toLowerCase())
           .order("created_at", { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         let ticketId: string | null = null;
+        let threadExists = false;
 
         if (existingThread) {
           const { data: ticket } = await adminClient
@@ -719,6 +720,35 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
           if (ticket && !statusData?.is_closed) {
             ticketId = ticket.id;
+            threadExists = true;
+          }
+        }
+
+        // Fallback: check tickets table directly by client_email (covers manually created tickets)
+        if (!ticketId) {
+          const { data: openTickets } = await adminClient
+            .from("tickets")
+            .select("id, status")
+            .eq("client_email", clientEmail.toLowerCase())
+            .order("created_at", { ascending: false })
+            .limit(5);
+
+          if (openTickets) {
+            for (const t of openTickets) {
+              const { data: sd } = await adminClient
+                .from("ticket_statuses")
+                .select("is_closed")
+                .eq("id", t.status)
+                .single();
+              if (!sd?.is_closed) {
+                ticketId = t.id;
+                break;
+              }
+            }
+          }
+        }
+
+        if (ticketId) {
             const fullBody = msg.bodyHtml
               ? sanitizeHtml(msg.bodyHtml).substring(0, 10000)
               : (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
@@ -761,9 +791,20 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             if (msg.date) msgInsert.created_at = msg.date;
 
             await adminClient.from("ticket_messages").insert(msgInsert);
-            await adminClient.from("email_threads")
-              .update({ last_message_id: emailFingerprint })
-              .eq("ticket_id", existingThread.ticket_id);
+
+            // Create or update email thread
+            if (threadExists && existingThread) {
+              await adminClient.from("email_threads")
+                .update({ last_message_id: emailFingerprint })
+                .eq("ticket_id", existingThread.ticket_id);
+            } else {
+              // Create thread for ticket found via client_email fallback
+              await adminClient.from("email_threads").insert({
+                ticket_id: ticketId!,
+                email_address: clientEmail.toLowerCase(),
+                last_message_id: emailFingerprint,
+              });
+            }
 
             // Upload attachments to existing ticket
             if (msg.attachments.length > 0) {
@@ -907,7 +948,7 @@ Deno.serve(async (req) => {
         .eq("email_address", pe.from_address.toLowerCase())
         .order("created_at", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (existingThread) {
         const { data: existingTicket } = await adminClient
@@ -929,6 +970,30 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Fallback: check tickets table directly by client_email
+      if (!ticketId) {
+        const { data: openTickets } = await adminClient
+          .from("tickets")
+          .select("id, status")
+          .eq("client_email", pe.from_address.toLowerCase())
+          .order("created_at", { ascending: false })
+          .limit(5);
+
+        if (openTickets) {
+          for (const t of openTickets) {
+            const { data: sd } = await adminClient
+              .from("ticket_statuses")
+              .select("is_closed")
+              .eq("id", t.status)
+              .single();
+            if (!sd?.is_closed) {
+              ticketId = t.id;
+              break;
+            }
+          }
+        }
+      }
+
       if (ticketId) {
         // ── Append message to existing ticket instead of creating a duplicate ──
         await adminClient.from("ticket_messages").insert({
@@ -938,9 +1003,18 @@ Deno.serve(async (req) => {
           content: description,
         });
 
-        await adminClient.from("email_threads")
-          .update({ last_message_id: pe.message_id })
-          .eq("ticket_id", ticketId);
+        // Create or update email thread
+        if (existingThread) {
+          await adminClient.from("email_threads")
+            .update({ last_message_id: pe.message_id })
+            .eq("ticket_id", ticketId);
+        } else {
+          await adminClient.from("email_threads").insert({
+            ticket_id: ticketId,
+            email_address: pe.from_address.toLowerCase(),
+            last_message_id: pe.message_id,
+          });
+        }
 
         // Move attachments to existing ticket
         const attMeta = (pe.attachments_meta as any[]) || [];
