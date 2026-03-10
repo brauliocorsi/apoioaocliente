@@ -256,7 +256,7 @@ function decodeQuotedPrintable(str: string, charset = "utf-8"): string {
     // Fallback: try latin1 then raw
     try {
       return new TextDecoder("iso-8859-1", { fatal: false }).decode(new Uint8Array(byteChunks));
-    } catch {
+    } catch (_e2) {
       return input.replace(/=([0-9A-Fa-f]{2})/g, (_m, hex) => String.fromCharCode(parseInt(hex, 16)));
     }
   }
