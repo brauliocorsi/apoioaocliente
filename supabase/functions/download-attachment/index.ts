@@ -131,7 +131,7 @@ class MiniImap {
       if (m) {
         const litSize = parseInt(m[1]);
         const afterPos = header.indexOf(m[0]) + m[0].length;
-        const already = new Uint8Array([...header.substring(afterPos)].map(c => c.charCodeAt(0)));
+        const already = new TextEncoder().encode(header.substring(afterPos));
 
         let literalBytes: Uint8Array;
         if (already.length >= litSize) {
