@@ -2041,7 +2041,8 @@ Deno.serve(async (req) => {
             const bs = await imap.fetchBodyStructure(seqNum);
             const parts = parseBodyStructureAttachments(bs);
             if (parts.length > 0) {
-              attachmentJobs.push({ seqNum, parts: parts.filter(p => p.size <= 5 * 1024 * 1024) });
+              const uid = await imap.fetchUid(seqNum);
+              attachmentJobs.push({ uid, seqNum, parts: parts.filter(p => p.size <= 5 * 1024 * 1024) });
               attachmentPartsFound += parts.length;
             }
 
