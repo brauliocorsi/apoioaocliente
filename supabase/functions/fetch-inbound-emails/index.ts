@@ -901,6 +901,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
     try { await imap.logout(); } catch (_e) { /* */ }
     throw err;
   }
+  // end processEmails
 }
 
 Deno.serve(async (req) => {
