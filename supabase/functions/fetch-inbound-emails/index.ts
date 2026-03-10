@@ -1927,12 +1927,13 @@ Deno.serve(async (req) => {
         if (!loginRes.includes("OK")) throw new Error("IMAP login failed");
         await imap.select(imapCfg.imap_folder);
 
-        const rawPart = await imap.fetchMimePart(Number(seq_num), part_num);
+        // Use binary path to avoid string conversion overhead for large attachments
+        const rawBytes = await imap.fetchMimePartBinary(Number(seq_num), part_num);
         let data: Uint8Array;
         if (encoding === "base64") {
-          data = decodeBase64ToBytes(rawPart, 5 * 1024 * 1024);
+          data = decodeBase64BytesDirect(rawBytes, 5 * 1024 * 1024);
         } else {
-          data = new TextEncoder().encode(rawPart);
+          data = rawBytes;
         }
 
         await imap.logout();
