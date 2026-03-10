@@ -144,11 +144,12 @@ class ImapClient {
     date: string | null;
     size: number | null;
   }> {
-    const response = await this.command(`FETCH ${seqNum} BODY[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID DATE)]`);
+    const response = await this.command(`FETCH ${seqNum} (RFC822.SIZE BODY[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID DATE)])`);
     let from = "";
     let subject = "";
     let messageId = "";
     let date: string | null = null;
+    let size: number | null = null;
 
     const fromMatch = response.match(/^From:\s*(.+?)$/im);
     if (fromMatch) from = fromMatch[1].trim();
