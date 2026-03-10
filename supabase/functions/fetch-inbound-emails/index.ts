@@ -2149,17 +2149,16 @@ Deno.serve(async (req) => {
         });
       }
 
-      const parts = [];
-      if (contentUpdated) parts.push("conteúdo atualizado");
-      if (messagesAdded > 0) parts.push(`${messagesAdded} mensagem(ns) adicionada(s)`);
-      if (attachmentsImported > 0) parts.push(`${attachmentsImported} anexo(s) importado(s)`);
-      else if (attachmentPartsFound > 0) parts.push(`${attachmentPartsFound} anexo(s) encontrado(s), já existentes`);
-      if (parts.length === 0) parts.push("Nenhum conteúdo novo encontrado");
+      const msgParts = [];
+      if (contentUpdated) msgParts.push("conteúdo atualizado");
+      if (messagesAdded > 0) msgParts.push(`${messagesAdded} mensagem(ns) adicionada(s)`);
+      if (pendingAttachments.length > 0) msgParts.push(`${pendingAttachments.length} anexo(s) para importar`);
+      if (msgParts.length === 0) msgParts.push("Nenhum conteúdo novo encontrado");
 
       return new Response(JSON.stringify({
         success: true,
-        message: parts.join(", "),
-        attachments_imported: attachmentsImported,
+        message: msgParts.join(", "),
+        pending_attachments: pendingAttachments,
         content_updated: contentUpdated,
         messages_added: messagesAdded,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
