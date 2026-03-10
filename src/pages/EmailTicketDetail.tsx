@@ -266,33 +266,42 @@ export default function EmailTicketDetail() {
       toast({ title: "Re-importação concluída", description: data?.message || "Emails verificados" });
       fetchData();
 
-      // Download attachments one by one in separate function calls
+      // Fire all attachment downloads in background (non-blocking)
       const jobs = data?.attachment_jobs || [];
       if (jobs.length > 0) {
         setBgAttachments(jobs.length);
+        // Fire all requests without waiting
         for (const job of jobs) {
-          try {
-            const { data: attData, error: attError } = await supabase.functions.invoke("download-attachment", {
-              body: {
-                ticket_id: id,
-                agent_id: user.id,
-                seq_num: job.seqNum,
-                part_num: job.partNum,
-                filename: job.filename,
-                content_type: job.contentType,
-                encoding: job.encoding,
-              },
-            });
-            if (attError) console.error(`Attachment error: ${attError.message}`);
-            else if (attData?.uploaded) {
-              setBgAttachments(prev => Math.max(0, prev - 1));
-            }
-          } catch (err) {
-            console.error(`Attachment download error: ${(err as Error).message}`);
-          }
+          supabase.functions.invoke("download-attachment", {
+            body: {
+              ticket_id: id,
+              agent_id: user.id,
+              seq_num: job.seqNum,
+              part_num: job.partNum,
+              filename: job.filename,
+              content_type: job.contentType,
+              encoding: job.encoding,
+            },
+          }).catch(err => console.error(`Attachment fire error: ${(err as Error).message}`));
         }
-        setBgAttachments(0);
-        fetchData();
+        // Poll for completion every 5 seconds
+        const expectedNames = jobs.map((j: any) => j.filename);
+        const pollInterval = setInterval(async () => {
+          const { count } = await supabase
+            .from("ticket_attachments")
+            .select("id", { count: "exact", head: true })
+            .eq("ticket_id", id!)
+            .in("file_name", expectedNames);
+          const done = count || 0;
+          setBgAttachments(Math.max(0, expectedNames.length - done));
+          if (done >= expectedNames.length) {
+            clearInterval(pollInterval);
+            setBgAttachments(0);
+            fetchData();
+          }
+        }, 5000);
+        // Safety: stop polling after 2 minutes
+        setTimeout(() => { clearInterval(pollInterval); setBgAttachments(0); fetchData(); }, 120000);
       }
     } catch (err) {
       toast({ title: "Erro na re-importação", description: (err as Error).message, variant: "destructive" });
