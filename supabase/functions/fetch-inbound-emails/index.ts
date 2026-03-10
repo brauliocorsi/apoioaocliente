@@ -939,7 +939,7 @@ Deno.serve(async (req) => {
       const imap = new ImapClient();
       const port = Number(imapCfg.imap_port) || 993;
       const greeting = await imap.connect(imapCfg.imap_host, port);
-      if (port === 143) { try { await imap.startTls(imapCfg.imap_host); } catch { /* */ } }
+      if (port === 143) { try { await imap.startTls(imapCfg.imap_host); } catch (_e) { /* */ } }
       const loginRes = await imap.login(imapCfg.imap_user, imapCfg.imap_pass);
       await imap.logout();
       const ok = greeting.includes("OK") && loginRes.includes("OK");
