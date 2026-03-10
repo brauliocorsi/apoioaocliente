@@ -967,7 +967,10 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
         // ── IN-MEMORY dedup check (instant, no DB round-trip) ──
         if (emailFingerprint && knownFingerprints.has(emailFingerprint)) {
-          // Check if ticket is missing attachments — if so, fetch them now
+          // Check if ticket is missing attachments — if so, fetch them now (max 1 per batch)
+          if (!backfillDone) {
+            console.log(`Dup check: fp=${emailFingerprint.substring(0, 30)}... email=${clientEmail}`);
+          }
           try {
             // Find ticket via email_threads
             let backfillTicketId: string | null = null;
