@@ -175,7 +175,7 @@ Deno.serve(async (req) => {
           to: clientEmail,
           subject,
           content: plainText,
-          html: plainText,
+          html: htmlBody,
         });
 
         if (sendResult) {
