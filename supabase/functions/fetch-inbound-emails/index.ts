@@ -212,6 +212,65 @@ class ImapClient {
   }
 }
 
+function parseFetchedMessageResponse(response: string, forceFastParser = false): {
+  from: string;
+  subject: string;
+  bodyText: string;
+  bodyHtml: string;
+  messageId: string;
+  date: string | null;
+  attachments: { filename: string; contentType: string; data: Uint8Array }[];
+} {
+  // Strip IMAP FETCH wrapper for both full and partial fetches
+  let rawMessage = response;
+  const fetchStart = rawMessage.match(/\* \d+ FETCH \(BODY\[\](?:<\d+>)? \{\d+\}\r?\n/);
+  if (fetchStart) {
+    rawMessage = rawMessage.substring((fetchStart.index || 0) + fetchStart[0].length);
+  }
+  // Strip trailing IMAP tag response
+  rawMessage = rawMessage.replace(/\)\r?\n\s*A\d{4}\s+OK.*$/s, "").trim();
+
+  let from = "";
+  let subject = "";
+  let messageId = "";
+  let date: string | null = null;
+
+  const fromMatch = rawMessage.match(/^From:\s*(.+?)$/im);
+  if (fromMatch) from = fromMatch[1].trim();
+
+  subject = extractHeader(rawMessage, "Subject");
+  subject = decodeHeaderValue(subject);
+
+  const msgIdMatch = rawMessage.match(/^Message-ID:\s*(.+?)$/im);
+  if (msgIdMatch) messageId = msgIdMatch[1].trim();
+
+  const dateMatch = rawMessage.match(/^Date:\s*(.+?)$/im);
+  if (dateMatch) {
+    try {
+      const parsedDate = new Date(dateMatch[1].trim());
+      if (!isNaN(parsedDate.getTime())) {
+        date = parsedDate.toISOString();
+      }
+    } catch (_e) { /* keep null */ }
+  }
+
+  const LARGE_RAW_PARSE_THRESHOLD = 1500 * 1024;
+  const FAST_PARSE_SCAN_LIMIT = 900 * 1024;
+  const shouldFastParse = forceFastParser || rawMessage.length > LARGE_RAW_PARSE_THRESHOLD;
+  const parseInput = shouldFastParse ? rawMessage.substring(0, FAST_PARSE_SCAN_LIMIT) : rawMessage;
+  const parsed = shouldFastParse ? parseMimeMessageFast(parseInput) : parseMimeMessage(parseInput);
+
+  return {
+    from,
+    subject: subject || "Sem assunto",
+    bodyText: parsed.bodyText,
+    bodyHtml: parsed.bodyHtml,
+    messageId,
+    date,
+    attachments: parsed.attachments,
+  };
+}
+
 // Extract a header value, handling multi-line folded headers
 function extractHeader(raw: string, headerName: string): string {
   const regex = new RegExp(`^${headerName}:\\s*(.+)`, "im");
