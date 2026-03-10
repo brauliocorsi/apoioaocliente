@@ -449,6 +449,7 @@ export default function TicketDetail() {
 
     // Upload files
     const uploadedCount = replyFiles.length;
+    const uploadedFilePaths: string[] = [];
     for (const file of replyFiles) {
       const ext = file.name.split(".").pop();
       const filePath = `${id}/${uuidv4()}.${ext}`;
@@ -461,6 +462,7 @@ export default function TicketDetail() {
         continue;
       }
 
+      uploadedFilePaths.push(filePath);
       await supabase.from("ticket_attachments").insert({
         ticket_id: id,
         file_name: file.name,
