@@ -328,9 +328,15 @@ function decodeBase64(str: string, charset = "utf-8"): string {
   }
 }
 
-function decodeBase64ToBytes(str: string): Uint8Array {
+function decodeBase64ToBytes(str: string, maxBytes?: number): Uint8Array {
   try {
     const cleaned = str.replace(/\r?\n/g, "").trim();
+    if (maxBytes !== undefined) {
+      const estimatedBytes = Math.floor((cleaned.length * 3) / 4);
+      if (estimatedBytes > maxBytes) {
+        return new Uint8Array(0);
+      }
+    }
     return Uint8Array.from(atob(cleaned), c => c.charCodeAt(0));
   } catch (_e) {
     return new Uint8Array(0);
