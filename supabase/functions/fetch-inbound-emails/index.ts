@@ -252,7 +252,7 @@ function decodeQuotedPrintable(str: string, charset = "utf-8"): string {
     // Map common charset names to TextDecoder labels
     const decoderCharset = normalizeCharset(charset);
     return new TextDecoder(decoderCharset, { fatal: false }).decode(new Uint8Array(byteChunks));
-  } catch {
+  } catch (_e) {
     // Fallback: try latin1 then raw
     try {
       return new TextDecoder("iso-8859-1", { fatal: false }).decode(new Uint8Array(byteChunks));
