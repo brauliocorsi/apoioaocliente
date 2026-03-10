@@ -158,9 +158,10 @@ export default function EmailTickets() {
       const userId = sessionData?.session?.user?.id;
 
       // Loop until no remaining emails
+      let consecutiveSkipRounds = 0;
       while (true) {
         round++;
-        setPollProgress(`A importar... (lote ${round}, ${totalProcessed} processados)`);
+        setPollProgress(`A importar... (lote ${round}, ${totalProcessed} verificados)`);
 
         const { data } = await supabase.functions.invoke("fetch-inbound-emails", {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -173,23 +174,41 @@ export default function EmailTickets() {
         }
 
         const batchTotal = data?.total || 0;
-        totalProcessed += batchTotal;
         const remaining = data?.remaining || 0;
+        const newEmails = (data?.pending || 0) + (data?.updated || 0) + (data?.blocked || 0);
+        totalProcessed += batchTotal;
 
-        // Refresh lists after each batch
-        await Promise.all([fetchEmailTickets(), fetchPendingEmails(), fetchProcessedEmails()]);
+        // Track consecutive skip-only rounds
+        if (newEmails === 0 && batchTotal > 0) {
+          consecutiveSkipRounds++;
+        } else {
+          consecutiveSkipRounds = 0;
+        }
 
-        if (remaining <= 0 || batchTotal === 0) {
-          // Done - show final summary
+        // Refresh lists only when new emails were processed
+        if (newEmails > 0) {
+          await Promise.all([fetchEmailTickets(), fetchPendingEmails(), fetchProcessedEmails()]);
+        }
+
+        if (remaining <= 0) {
           toast({
-            title: "Importação concluída",
-            description: data?.message || `${totalProcessed} emails processados no total.`,
+            title: "Importacao concluida",
+            description: data?.message || `${totalProcessed} emails verificados.`,
+          });
+          break;
+        }
+
+        // Safety: stop after 50 rounds to prevent infinite loops
+        if (round >= 50) {
+          toast({
+            title: "Importacao parcial",
+            description: `${totalProcessed} emails verificados. Clique novamente para continuar.`,
           });
           break;
         }
 
         // Small delay between batches
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 300));
       }
     } catch (err) {
       console.error("Poll error:", err);

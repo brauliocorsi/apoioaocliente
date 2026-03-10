@@ -136,6 +136,41 @@ class ImapClient {
     return match[1].trim().split(/\s+/).map(Number).filter(function(n) { return !isNaN(n); });
   }
 
+  // Lightweight: fetch only headers (From, Subject, Message-ID, Date) without body
+  async fetchHeaders(seqNum: number): Promise<{
+    from: string;
+    subject: string;
+    messageId: string;
+    date: string | null;
+  }> {
+    const response = await this.command(`FETCH ${seqNum} BODY[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID DATE)]`);
+    let from = "";
+    let subject = "";
+    let messageId = "";
+    let date: string | null = null;
+
+    const fromMatch = response.match(/^From:\s*(.+?)$/im);
+    if (fromMatch) from = fromMatch[1].trim();
+
+    subject = extractHeader(response, "Subject");
+    subject = decodeHeaderValue(subject);
+
+    const msgIdMatch = response.match(/^Message-ID:\s*(.+?)$/im);
+    if (msgIdMatch) messageId = msgIdMatch[1].trim();
+
+    const dateMatch = response.match(/^Date:\s*(.+?)$/im);
+    if (dateMatch) {
+      try {
+        const parsed = new Date(dateMatch[1].trim());
+        if (!isNaN(parsed.getTime())) {
+          date = parsed.toISOString();
+        }
+      } catch (_e) { /* keep null */ }
+    }
+
+    return { from, subject: subject || "Sem assunto", messageId, date };
+  }
+
   async fetchMessage(seqNum: number): Promise<{
     from: string;
     subject: string;
@@ -653,35 +688,33 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
     }
 
     let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
-    // Process only 1 email per invocation to stay within CPU limits
-    // The frontend loop will keep calling until remaining == 0
-    const batch = emailIds.slice(0, 1);
+    let processed = 0;
 
-    for (const seqNum of batch) {
+    // Phase 1: Quick header-only scan to find non-duplicate emails
+    // Phase 2: Full fetch only for emails that pass dedup
+    for (const seqNum of emailIds) {
       try {
-        const msg = await imap.fetchMessage(seqNum);
-        const clientEmail = extractEmail(msg.from);
-        const clientName = extractName(msg.from);
+        // Lightweight: fetch only headers (no body download)
+        const headers = await imap.fetchHeaders(seqNum);
+        const clientEmail = extractEmail(headers.from);
 
         if (!clientEmail) {
           await imap.markAsSeen(seqNum);
+          skipped++;
           continue;
         }
 
-        // Generate a unique identifier for dedup
-        const bodySnippet = msg.bodyText || msg.bodyHtml || "";
-        const emailFingerprint = msg.messageId?.trim() || await generateFingerprint(clientEmail, msg.subject, bodySnippet);
+        // Generate fingerprint from headers only
+        const emailFingerprint = headers.messageId?.trim() || await generateFingerprint(clientEmail, headers.subject, "");
 
-        // Duplicate check: search email_threads, pending_emails, AND ticket descriptions
+        // Quick dedup check using fingerprint (DB queries only - cheap)
         if (emailFingerprint) {
-          // Check email_threads (any last_message_id match)
           const { data: dupThread } = await adminClient
             .from("email_threads")
             .select("id")
             .eq("last_message_id", emailFingerprint)
             .limit(1);
 
-          // Check pending_emails (message_id or fingerprint)
           const { data: dupPending } = await adminClient
             .from("pending_emails")
             .select("id")
@@ -694,6 +727,10 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             continue;
           }
         }
+
+        // This email is NOT a duplicate - now fetch the full message body
+        const msg = await imap.fetchMessage(seqNum);
+        const clientName = extractName(msg.from);
 
         // Check blocklist
         const blockCheck = await isBlocked(adminClient, clientEmail, msg.subject);
@@ -877,23 +914,29 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
         pending++;
         await imap.markAsSeen(seqNum);
+        processed++;
+        // Break after processing 1 new (non-skipped) email to stay within CPU limits
+        break;
       } catch (err) {
         console.error(`Email ${seqNum} error: ${(err as Error).message}`);
+        processed++;
+        break; // Also break on error to avoid CPU timeout
       }
     }
 
     await imap.logout();
 
-    const remaining = emailIds.length - batch.length;
+    const totalChecked = skipped + processed;
+    const remaining = emailIds.length - totalChecked;
     const parts = [];
-    if (pending > 0) parts.push(`${pending} para revisão`);
+    if (pending > 0) parts.push(`${pending} para revisao`);
     if (updated > 0) parts.push(`${updated} atualizados`);
     if (blocked > 0) parts.push(`${blocked} bloqueados`);
     if (skipped > 0) parts.push(`${skipped} duplicados`);
     if (parts.length === 0) parts.push("0 novos emails");
-    const message = parts.join(", ") + (remaining > 0 ? ". Restam " + remaining + " - clique novamente." : "");
+    const message = parts.join(", ") + (remaining > 0 ? `. Restam ${remaining}.` : "");
 
-    return { success: true, message, created, pending, updated, blocked, skipped, total: batch.length, remaining };
+    return { success: true, message, created, pending, updated, blocked, skipped, total: totalChecked, remaining };
   } catch (err) {
     try { await imap.logout(); } catch (_e) { /* */ }
     throw err;
