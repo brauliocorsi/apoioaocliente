@@ -458,7 +458,47 @@ function extractHeader(raw: string, headerName: string): string {
   return value;
 }
 
-function extractEmail(from: string): string {
+// Decode base64 from raw bytes (Uint8Array) without converting to JS string first
+// This is much more CPU-efficient than atob() for large payloads
+function decodeBase64BytesDirect(raw: Uint8Array, maxBytes?: number): Uint8Array {
+  // Build lookup table
+  const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const lookup = new Uint8Array(256).fill(255);
+  for (let i = 0; i < B64.length; i++) lookup[B64.charCodeAt(i)] = i;
+  lookup[61] = 0; // '='
+
+  // Count valid base64 chars (skip whitespace/newlines)
+  let validCount = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const b = raw[i];
+    if (lookup[b] < 255 || b === 61) validCount++;
+  }
+
+  const outputLen = Math.floor((validCount * 3) / 4);
+  if (maxBytes !== undefined && outputLen > maxBytes) return new Uint8Array(0);
+
+  const out = new Uint8Array(outputLen);
+  let outIdx = 0;
+  let acc = 0;
+  let bits = 0;
+
+  for (let i = 0; i < raw.length; i++) {
+    const b = raw[i];
+    if (b === 10 || b === 13 || b === 32) continue; // skip \n \r space
+    if (b === 61) break; // '=' padding
+    const val = lookup[b];
+    if (val === 255) continue;
+    acc = (acc << 6) | val;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out[outIdx++] = (acc >> bits) & 0xFF;
+    }
+  }
+
+  return outIdx === out.length ? out : out.slice(0, outIdx);
+}
+
   const match = from.match(/<(.+?)>/);
   return match ? match[1] : from.replace(/[<>]/g, "").trim();
 }
