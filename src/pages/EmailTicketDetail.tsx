@@ -258,12 +258,40 @@ export default function EmailTicketDetail() {
     if (!id || !user || refetching) return;
     setRefetching(true);
     try {
+      // Phase 1: Fetch messages/content + collect attachment metadata
       const { data, error } = await supabase.functions.invoke("fetch-inbound-emails", {
         body: { action: "refetch_ticket", ticket_id: id, agent_id: user.id },
       });
       if (error) throw error;
       if (data?.success === false) throw new Error(data.message);
-      toast({ title: "Re-importação concluída", description: data?.message || "Emails verificados" });
+
+      // Phase 2: Download each attachment separately (one IMAP session per file, avoids CPU limit)
+      const pending = data?.pending_attachments || [];
+      let imported = 0;
+      let failed = 0;
+      for (const att of pending) {
+        try {
+          const { data: attData, error: attErr } = await supabase.functions.invoke("fetch-inbound-emails", {
+            body: {
+              action: "download_single_attachment",
+              ticket_id: id,
+              agent_id: user.id,
+              seq_num: att.seq_num,
+              part_num: att.part_num,
+              filename: att.filename,
+              content_type: att.content_type,
+              encoding: att.encoding,
+            },
+          });
+          if (attErr) { failed++; continue; }
+          if (attData?.uploaded) imported++;
+        } catch (_e) { failed++; }
+      }
+
+      const msgParts = [data?.message || "Verificado"];
+      if (imported > 0) msgParts.push(`${imported} anexo(s) importado(s)`);
+      if (failed > 0) msgParts.push(`${failed} anexo(s) falharam`);
+      toast({ title: "Re-importação concluída", description: msgParts.join(", ") });
       fetchData();
     } catch (err) {
       toast({ title: "Erro na re-importação", description: (err as Error).message, variant: "destructive" });
