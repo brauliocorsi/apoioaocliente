@@ -210,13 +210,15 @@ export default function EmailTicketDetail() {
     if (!id || !user || !reply.trim()) return;
     setSending(true);
     try {
+      const attachmentPaths = replyAttachments.map(a => a.file_path);
       const { data, error } = await supabase.functions.invoke("reply-email-ticket", {
-        body: { ticket_id: id, content: reply.trim() },
+        body: { ticket_id: id, content: reply.trim(), attachment_paths: attachmentPaths.length > 0 ? attachmentPaths : undefined },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       toast({ title: "Email enviado com sucesso" });
       setReply("");
+      setReplyAttachments([]);
       fetchData();
     } catch (err) {
       toast({ title: "Erro ao enviar email", description: (err as Error).message, variant: "destructive" });
