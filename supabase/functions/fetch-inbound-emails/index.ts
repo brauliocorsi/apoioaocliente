@@ -633,7 +633,7 @@ async function storePendingAttachment(
   };
 }
 
-async function processEmails(params: { fetchRecent: boolean; maxEmails: number; agentId?: string }) {
+async function processEmails(params: { fetchRecent: boolean; maxEmails: number; agentId?: string; offset?: number }) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
@@ -684,15 +684,23 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
       const idSet = new Set(unseenIds);
       for (const id of sinceIds) idSet.add(id);
       emailIds = Array.from(idSet).sort((a, b) => a - b);
-      console.log(`Found ${unseenIds.length} unseen + ${sinceIds.length} since-24h = ${emailIds.length} unique emails to check`);
     }
 
-    let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
-    let processed = 0;
+    const totalEmails = emailIds.length;
+    const offset = params.offset || 0;
+    
+    // Only process a window of 5 emails per call to stay within CPU limits
+    const BATCH_SIZE = 5;
+    const batchIds = emailIds.slice(offset, offset + BATCH_SIZE);
+    const nextOffset = offset + BATCH_SIZE;
+    const hasMore = nextOffset < totalEmails;
 
-    // Phase 1: Quick header-only scan to find non-duplicate emails
-    // Phase 2: Full fetch only for emails that pass dedup
-    for (const seqNum of emailIds) {
+    console.log(`Batch: offset=${offset}, checking ${batchIds.length} of ${totalEmails} total emails`);
+
+    let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
+    let newEmailProcessed = false;
+
+    for (const seqNum of batchIds) {
       try {
         // Lightweight: fetch only headers (no body download)
         const headers = await imap.fetchHeaders(seqNum);
@@ -914,20 +922,20 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
         pending++;
         await imap.markAsSeen(seqNum);
-        processed++;
+        newEmailProcessed = true;
         // Break after processing 1 new (non-skipped) email to stay within CPU limits
         break;
       } catch (err) {
         console.error(`Email ${seqNum} error: ${(err as Error).message}`);
-        processed++;
+        newEmailProcessed = true;
         break; // Also break on error to avoid CPU timeout
       }
     }
 
     await imap.logout();
 
-    const totalChecked = skipped + processed;
-    const remaining = emailIds.length - totalChecked;
+    const totalChecked = skipped + (newEmailProcessed ? 1 : 0);
+    const remaining = hasMore ? (totalEmails - nextOffset) : 0;
     const parts = [];
     if (pending > 0) parts.push(`${pending} para revisao`);
     if (updated > 0) parts.push(`${updated} atualizados`);
@@ -936,7 +944,12 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
     if (parts.length === 0) parts.push("0 novos emails");
     const message = parts.join(", ") + (remaining > 0 ? `. Restam ${remaining}.` : "");
 
-    return { success: true, message, created, pending, updated, blocked, skipped, total: totalChecked, remaining };
+    return { 
+      success: true, message, created, pending, updated, blocked, skipped, 
+      total: totalChecked, remaining, 
+      next_offset: hasMore ? nextOffset : null,
+      new_email_processed: newEmailProcessed,
+    };
   } catch (err) {
     try { await imap.logout(); } catch (_e) { /* */ }
     throw err;
@@ -956,6 +969,7 @@ Deno.serve(async (req) => {
     let agentId: string | undefined;
     let action: string | undefined;
     let pendingId: string | undefined;
+    let offset: number | undefined;
     try {
       const body = await req.json();
       testOnly = body?.test_only === true;
@@ -964,6 +978,7 @@ Deno.serve(async (req) => {
       if (body?.agent_id) agentId = body.agent_id;
       action = body?.action;
       pendingId = body?.pending_id;
+      if (body?.offset !== undefined) offset = Number(body.offset);
     } catch (_e) { /* no body */ }
 
     // Test-only: quick connection check
@@ -1197,7 +1212,7 @@ Deno.serve(async (req) => {
     }
 
     // Process emails - 1 at a time, frontend loop handles iteration
-    const result = await processEmails({ fetchRecent, maxEmails: 1, agentId });
+    const result = await processEmails({ fetchRecent, maxEmails, agentId, offset });
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
