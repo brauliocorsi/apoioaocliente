@@ -966,6 +966,34 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
         // ── IN-MEMORY dedup check (instant, no DB round-trip) ──
         if (emailFingerprint && knownFingerprints.has(emailFingerprint)) {
+          // Check if ticket is missing attachments — if so, fetch them now
+          try {
+            // Find ticket via email_threads or pending_emails
+            const { data: threadRow } = await adminClient
+              .from("email_threads")
+              .select("ticket_id")
+              .eq("last_message_id", emailFingerprint)
+              .limit(1)
+              .maybeSingle();
+
+            if (threadRow?.ticket_id) {
+              const { count } = await adminClient
+                .from("ticket_attachments")
+                .select("id", { count: "exact", head: true })
+                .eq("ticket_id", threadRow.ticket_id);
+
+              if (count === 0) {
+                console.log(`Duplicate email but ticket ${threadRow.ticket_id} has 0 attachments — fetching via BODYSTRUCTURE`);
+                const uploaded = await fetchAttachmentsParts(imap, adminClient, seqNum, threadRow.ticket_id, createdBy!);
+                if (uploaded > 0) {
+                  console.log(`Imported ${uploaded} attachment(s) for ticket ${threadRow.ticket_id}`);
+                  newEmailProcessed = true;
+                }
+              }
+            }
+          } catch (err) {
+            console.error(`Attachment backfill error: ${(err as Error).message}`);
+          }
           skipped++;
           continue;
         }
