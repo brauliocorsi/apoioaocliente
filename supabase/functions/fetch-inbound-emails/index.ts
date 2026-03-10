@@ -968,7 +968,8 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         if (emailFingerprint && knownFingerprints.has(emailFingerprint)) {
           // Check if ticket is missing attachments — if so, fetch them now
           try {
-            // Find ticket via email_threads or pending_emails
+            // Find ticket via email_threads
+            let backfillTicketId: string | null = null;
             const { data: threadRow } = await adminClient
               .from("email_threads")
               .select("ticket_id")
@@ -977,17 +978,66 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
               .maybeSingle();
 
             if (threadRow?.ticket_id) {
+              backfillTicketId = threadRow.ticket_id;
+            } else {
+              // Also check pending_emails → ticket_id
+              const { data: pendingRow } = await adminClient
+                .from("pending_emails")
+                .select("ticket_id")
+                .eq("message_id", emailFingerprint)
+                .not("ticket_id", "is", null)
+                .limit(1)
+                .maybeSingle();
+              if (pendingRow?.ticket_id) backfillTicketId = pendingRow.ticket_id;
+            }
+
+            // Also try matching by client email if no direct fingerprint match
+            if (!backfillTicketId) {
+              const { data: threadByEmail } = await adminClient
+                .from("email_threads")
+                .select("ticket_id")
+                .eq("email_address", clientEmail.toLowerCase())
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (threadByEmail?.ticket_id) backfillTicketId = threadByEmail.ticket_id;
+            }
+
+            if (backfillTicketId) {
               const { count } = await adminClient
                 .from("ticket_attachments")
                 .select("id", { count: "exact", head: true })
-                .eq("ticket_id", threadRow.ticket_id);
+                .eq("ticket_id", backfillTicketId);
 
               if (count === 0) {
-                console.log(`Duplicate email but ticket ${threadRow.ticket_id} has 0 attachments — fetching via BODYSTRUCTURE`);
-                const uploaded = await fetchAttachmentsParts(imap, adminClient, seqNum, threadRow.ticket_id, createdBy!);
-                if (uploaded > 0) {
-                  console.log(`Imported ${uploaded} attachment(s) for ticket ${threadRow.ticket_id}`);
-                  newEmailProcessed = true;
+                console.log(`Duplicate email but ticket ${backfillTicketId} has 0 attachments — fetching full message`);
+                // Use full message fetch (more reliable than BODYSTRUCTURE parsing)
+                try {
+                  const fullMsg = (headers.size && headers.size > 5 * 1024 * 1024)
+                    ? await imap.fetchMessagePartial(seqNum, 900000)
+                    : await imap.fetchMessage(seqNum);
+                  
+                  let uploaded = 0;
+                  if (fullMsg.attachments.length > 0) {
+                    for (const att of fullMsg.attachments) {
+                      if (att.data.length > 0 && att.data.length <= 5 * 1024 * 1024) {
+                        await uploadAttachment(adminClient, backfillTicketId, att, createdBy!);
+                        uploaded++;
+                      }
+                    }
+                  }
+                  
+                  // Fallback to BODYSTRUCTURE if no attachments found in parsed body
+                  if (uploaded === 0) {
+                    uploaded = await fetchAttachmentsParts(imap, adminClient, seqNum, backfillTicketId, createdBy!);
+                  }
+                  
+                  if (uploaded > 0) {
+                    console.log(`Imported ${uploaded} attachment(s) for ticket ${backfillTicketId}`);
+                    newEmailProcessed = true;
+                  }
+                } catch (fetchErr) {
+                  console.error(`Full fetch for backfill error: ${(fetchErr as Error).message}`);
                 }
               }
             }
