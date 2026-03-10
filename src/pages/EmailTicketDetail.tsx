@@ -272,9 +272,8 @@ export default function EmailTicketDetail() {
         setBgAttachments(jobs.length);
         for (const job of jobs) {
           try {
-            const { data: attData, error: attError } = await supabase.functions.invoke("fetch-inbound-emails", {
+            const { data: attData, error: attError } = await supabase.functions.invoke("download-attachment", {
               body: {
-                action: "download_single_attachment",
                 ticket_id: id,
                 agent_id: user.id,
                 seq_num: job.seqNum,

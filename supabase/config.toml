@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.reply-email-ticket]
 verify_jwt = false
+
+[functions.download-attachment]
+verify_jwt = false
