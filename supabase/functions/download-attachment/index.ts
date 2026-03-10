@@ -115,61 +115,80 @@ class MiniImap {
     await this.cmd(`SELECT "${folder}"`);
   }
 
-  // Fetch entire MIME part as raw bytes using UID FETCH
-  async uidFetchFull(uid: number, partNum: string): Promise<Uint8Array> {
-    const tag = this.nextTag();
-    await this.write(`${tag} UID FETCH ${uid} BODY[${partNum}]\r\n`);
+  // Fetch MIME part as raw bytes — tries UID FETCH first, falls back to SEARCH + FETCH
+  async fetchPartByUid(uid: number, partNum: string): Promise<Uint8Array> {
+    // First, find the sequence number for this UID
+    const searchTag = this.nextTag();
+    await this.write(`${searchTag} UID SEARCH ${uid}\r\n`);
+    const searchRes = await this.cmd2(searchTag);
+    console.log(`UID SEARCH result: ${searchRes.substring(0, 200)}`);
+    
+    const searchMatch = searchRes.match(/\* SEARCH\s+(\d+)/);
+    if (!searchMatch) {
+      console.error(`UID ${uid} not found in mailbox`);
+      return new Uint8Array(0);
+    }
+    const seqNum = parseInt(searchMatch[1]);
+    console.log(`UID ${uid} → seq ${seqNum}`);
 
-    // Read chunks until we find the literal size marker {N}\r\n
-    // Keep accumulated data as raw bytes to avoid CPU-heavy string ops
-    const rawChunks: Uint8Array[] = [];
-    let totalLen = 0;
+    // Now fetch using sequence number (more reliable across servers)
+    return await this.fetchPartBySeq(seqNum, partNum);
+  }
+
+  // Fetch MIME part by sequence number
+  async fetchPartBySeq(seqNum: number, partNum: string): Promise<Uint8Array> {
+    const tag = this.nextTag();
+    await this.write(`${tag} FETCH ${seqNum} BODY[${partNum}]\r\n`);
+
+    // Read the initial response to find the literal size {N}
+    // Accumulate only enough to find the marker
+    let header = "";
+    const headerChunks: Uint8Array[] = [];
+    let headerTotalLen = 0;
     const start = Date.now();
 
     while (Date.now() - start < 15000) {
       const chunk = await this.readChunk();
       if (!chunk) break;
-      rawChunks.push(chunk);
-      totalLen += chunk.length;
+      headerChunks.push(chunk);
+      headerTotalLen += chunk.length;
 
-      // Only decode the first 512 bytes to find {SIZE}\r\n (it's always in the first line)
-      const checkLen = Math.min(totalLen, 512);
-      const checkBuf = new Uint8Array(checkLen);
-      let off = 0;
-      for (const c of rawChunks) {
-        const take = Math.min(c.length, checkLen - off);
-        if (take <= 0) break;
-        checkBuf.set(c.subarray(0, take), off);
-        off += take;
+      // Only decode and check the first 512 bytes for the literal marker
+      if (header.length < 512) {
+        header += this.decoder.decode(chunk);
+        if (header.length > 512) header = header.substring(0, 512);
       }
-      const headerStr = this.decoder.decode(checkBuf);
-      const m = headerStr.match(/\{(\d+)\}\r?\n/);
 
+      const m = header.match(/\{(\d+)\}\r?\n/);
       if (m) {
         const litSize = parseInt(m[1]);
-        // Find byte offset where literal data starts
-        const markerEnd = headerStr.indexOf(m[0]) + m[0].length;
-        const markerEndBytes = new TextEncoder().encode(headerStr.substring(0, markerEnd)).length;
+        console.log(`Found literal: ${litSize} bytes`);
 
-        // Merge all raw chunks into one buffer
-        const allData = new Uint8Array(totalLen);
-        let pos = 0;
-        for (const c of rawChunks) { allData.set(c, pos); pos += c.length; }
+        // Calculate how many bytes of literal data we already have
+        // Re-decode just the header portion to find exact byte boundary
+        const fullHeaderBytes = new Uint8Array(headerTotalLen);
+        let off = 0;
+        for (const c of headerChunks) { fullHeaderBytes.set(c, off); off += c.length; }
+        
+        const fullHeaderStr = this.decoder.decode(fullHeaderBytes.subarray(0, Math.min(headerTotalLen, 512)));
+        const markerStr = m[0];
+        const markerIdx = fullHeaderStr.indexOf(markerStr);
+        const markerEndStr = fullHeaderStr.substring(0, markerIdx + markerStr.length);
+        const markerEndBytes = new TextEncoder().encode(markerEndStr).length;
 
-        // Extract literal bytes already received
-        const alreadyHave = totalLen - markerEndBytes;
+        const alreadyHave = headerTotalLen - markerEndBytes;
         const remaining = litSize - alreadyHave;
 
         let literalBytes: Uint8Array;
         if (remaining <= 0) {
-          literalBytes = allData.slice(markerEndBytes, markerEndBytes + litSize);
+          literalBytes = fullHeaderBytes.slice(markerEndBytes, markerEndBytes + litSize);
           if (alreadyHave > litSize) {
-            this.buf = allData.slice(markerEndBytes + litSize);
+            this.buf = fullHeaderBytes.slice(markerEndBytes + litSize);
           }
         } else {
           const rest = await this.readBytes(remaining);
           literalBytes = new Uint8Array(litSize);
-          literalBytes.set(allData.subarray(markerEndBytes), 0);
+          literalBytes.set(fullHeaderBytes.subarray(markerEndBytes), 0);
           literalBytes.set(rest, alreadyHave);
         }
 
@@ -189,14 +208,32 @@ class MiniImap {
         return literalBytes;
       }
 
-      // Check for error/OK without literal
-      if (checkLen >= 20) {
-        const s = this.decoder.decode(checkBuf);
-        if (s.includes(`${tag} NO`) || s.includes(`${tag} BAD`)) return new Uint8Array(0);
-        if (s.includes(`${tag} OK`) && !s.includes("{")) return new Uint8Array(0);
+      // Check for error/no-data responses
+      if (header.includes(`${tag} NO`) || header.includes(`${tag} BAD`)) {
+        console.error(`IMAP error: ${header.substring(0, 200)}`);
+        return new Uint8Array(0);
+      }
+      if (header.includes(`${tag} OK`) && !header.includes("{")) {
+        console.error(`IMAP OK but no literal: ${header.substring(0, 200)}`);
+        return new Uint8Array(0);
       }
     }
+    console.error(`Timeout waiting for IMAP response. Header so far: ${header.substring(0, 200)}`);
     return new Uint8Array(0);
+  }
+
+  // Simple command that returns tagged response
+  private async cmd2(tag: string): Promise<string> {
+    let result = "";
+    const start = Date.now();
+    while (Date.now() - start < 10000) {
+      const tail = result.length > 300 ? result.substring(result.length - 300) : result;
+      if (tail.includes(`${tag} OK`) || tail.includes(`${tag} NO`) || tail.includes(`${tag} BAD`)) return result;
+      const chunk = await this.readChunk();
+      if (!chunk) break;
+      result += this.decoder.decode(chunk);
+    }
+    return result;
   }
 
   async logout() {
