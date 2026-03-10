@@ -206,6 +206,24 @@ class ImapClient {
     await this.command(`STORE ${seqNum} +FLAGS (\\Seen)`);
   }
 
+  // Fetch individual MIME part by section number (e.g. "2", "1.2")
+  async fetchMimePart(seqNum: number, partNum: string): Promise<string> {
+    const response = await this.command(`FETCH ${seqNum} BODY[${partNum}]`);
+    // Strip IMAP wrapper to get raw part content
+    const match = response.match(/\{(\d+)\}\r?\n/);
+    if (match) {
+      const start = (match.index || 0) + match[0].length;
+      const len = parseInt(match[1]);
+      return response.substring(start, start + len);
+    }
+    return response;
+  }
+
+  // Fetch BODYSTRUCTURE to identify attachments without downloading them
+  async fetchBodyStructure(seqNum: number): Promise<string> {
+    return await this.command(`FETCH ${seqNum} BODYSTRUCTURE`);
+  }
+
   async logout(): Promise<void> {
     try { await this.command("LOGOUT"); } catch (_e) { /* ignore */ }
     try { this.conn.close(); } catch (_e2) { /* ignore */ }
@@ -254,19 +272,22 @@ function parseFetchedMessageResponse(response: string, forceFastParser = false):
     } catch (_e) { /* keep null */ }
   }
 
-  const LARGE_RAW_PARSE_THRESHOLD = 1500 * 1024;
+  const LARGE_RAW_PARSE_THRESHOLD = 5 * 1024 * 1024; // 5MB — only use fast parse for very large emails
   const FAST_PARSE_SCAN_LIMIT = 900 * 1024;
   const shouldFastParse = forceFastParser || rawMessage.length > LARGE_RAW_PARSE_THRESHOLD;
 
   let parsed = shouldFastParse
-    ? parseMimeMessageFast(rawMessage.substring(0, FAST_PARSE_SCAN_LIMIT))
+    ? parseMimeMessageFast(rawMessage)
     : parseMimeMessage(rawMessage);
 
   if (shouldFastParse && !hasReadableEmailContent(parsed) && rawMessage.length > FAST_PARSE_SCAN_LIMIT) {
     const tailStart = Math.max(0, rawMessage.length - FAST_PARSE_SCAN_LIMIT);
     const tailParsed = parseMimeMessageFast(rawMessage.substring(tailStart));
     if (hasReadableEmailContent(tailParsed)) {
+      // Preserve attachments from first parse
+      const prevAttachments = parsed.attachments;
       parsed = tailParsed;
+      if (parsed.attachments.length === 0) parsed.attachments = prevAttachments;
     }
   }
 
@@ -550,16 +571,17 @@ function hasReadableEmailContent(parsed: MimeParsed): boolean {
 }
 
 function parseMimeMessageFast(raw: string): MimeParsed {
-  const limitedRaw = raw.substring(0, 900 * 1024);
-  const parsed = parseMimeMessage(limitedRaw);
+  // For text content, only scan first 900KB to save CPU
+  const textLimit = 900 * 1024;
+  const limitedRaw = raw.substring(0, textLimit);
+  const textParsed = parseMimeMessage(limitedRaw);
 
-  // In fast mode we prioritize body readability and skip attachment processing
-  parsed.attachments = [];
-  if (parsed.bodyText.length > 150000) parsed.bodyText = parsed.bodyText.substring(0, 150000);
-  if (parsed.bodyHtml.length > 250000) parsed.bodyHtml = parsed.bodyHtml.substring(0, 250000);
+  // Limit text sizes
+  if (textParsed.bodyText.length > 150000) textParsed.bodyText = textParsed.bodyText.substring(0, 150000);
+  if (textParsed.bodyHtml.length > 250000) textParsed.bodyHtml = textParsed.bodyHtml.substring(0, 250000);
 
-  if (!hasReadableEmailContent(parsed)) {
-    parsed.bodyText = limitedRaw
+  if (!hasReadableEmailContent(textParsed)) {
+    textParsed.bodyText = limitedRaw
       .split(/\r?\n/)
       .filter((line) => {
         const l = line.trim();
@@ -570,10 +592,17 @@ function parseMimeMessageFast(raw: string): MimeParsed {
       })
       .join("\n")
       .substring(0, 100000);
-    parsed.bodyHtml = "";
+    textParsed.bodyHtml = "";
   }
 
-  return parsed;
+  // For attachments, parse the FULL raw (attachments are already capped at 5MB each in parseMimeMessage)
+  // Only do this if the limited parse didn't find them and the full raw is bigger
+  if (textParsed.attachments.length === 0 && raw.length > textLimit) {
+    const fullParsed = parseMimeMessage(raw);
+    textParsed.attachments = fullParsed.attachments;
+  }
+
+  return textParsed;
 }
 
 function extractName(from: string): string {
@@ -682,6 +711,100 @@ async function generateFingerprint(from: string, subject: string, bodySnippet: s
   const data = new TextEncoder().encode(raw);
   const hash = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("").substring(0, 40);
+}
+// Parse BODYSTRUCTURE response to find attachment parts (part number, filename, content-type, size)
+interface AttachmentPart { partNum: string; filename: string; contentType: string; encoding: string; size: number; }
+
+function parseBodyStructureAttachments(bs: string): AttachmentPart[] {
+  const results: AttachmentPart[] = [];
+  // Match attachment patterns: look for "attachment" disposition or known binary types with filenames
+  // BODYSTRUCTURE is deeply nested parentheses — use regex for common patterns
+  const partRegex = /\("([^"]+)"\s+"([^"]+)"[^)]*?"([^"]*)"[^)]*?(\d+)\)/gi;
+  
+  // Simpler approach: find filename references with their part context
+  const lines = bs.split(/[\r\n]+/);
+  const fullText = bs;
+  
+  // Find all "name" "filename.ext" patterns
+  const nameMatches = [...fullText.matchAll(/(?:"name"\s*"([^"]+)"|"filename"\s*"([^"]+)")/gi)];
+  
+  for (const m of nameMatches) {
+    const filename = decodeHeaderValue(m[1] || m[2]);
+    if (!filename) continue;
+    
+    // Determine part number by counting opening parens before this match
+    const before = fullText.substring(0, m.index);
+    let depth = 0;
+    let partNum = "1";
+    const partNums: number[] = [0];
+    for (const ch of before) {
+      if (ch === "(") { depth++; partNums[depth] = (partNums[depth] || 0) + 1; }
+      if (ch === ")") { depth--; }
+    }
+    // Simple heuristic: use the top-level part counter
+    partNum = String(partNums[1] || 1);
+    
+    // Try to find content type and encoding near this match
+    const context = fullText.substring(Math.max(0, (m.index || 0) - 200), (m.index || 0) + 100);
+    const ctMatch = context.match(/"(image|application|audio|video|text)"\s+"([^"]+)"/i);
+    const contentType = ctMatch ? `${ctMatch[1]}/${ctMatch[2]}`.toLowerCase() : "application/octet-stream";
+    const encMatch = context.match(/"(base64|quoted-printable|7bit|8bit)"/i);
+    const encoding = encMatch ? encMatch[1].toLowerCase() : "base64";
+    const sizeMatch = context.match(/\s(\d{3,})\s/);
+    const size = sizeMatch ? parseInt(sizeMatch[1]) : 0;
+    
+    results.push({ partNum, filename, contentType, encoding, size });
+  }
+  
+  return results;
+}
+
+// Fetch attachments individually via MIME part numbers (CPU-efficient, no full email parsing)
+async function fetchAttachmentsParts(
+  imap: ImapClient,
+  adminClient: ReturnType<typeof createClient>,
+  seqNum: number,
+  ticketId: string,
+  agentId: string,
+): Promise<number> {
+  try {
+    const bs = await imap.fetchBodyStructure(seqNum);
+    const parts = parseBodyStructureAttachments(bs);
+    
+    if (parts.length === 0) return 0;
+    
+    let uploaded = 0;
+    for (const part of parts) {
+      // Skip very large attachments (> 5MB)
+      if (part.size > 5 * 1024 * 1024) continue;
+      
+      try {
+        const rawPart = await imap.fetchMimePart(seqNum, part.partNum);
+        let data: Uint8Array;
+        
+        if (part.encoding === "base64") {
+          data = decodeBase64ToBytes(rawPart, 5 * 1024 * 1024);
+        } else {
+          data = new TextEncoder().encode(rawPart);
+        }
+        
+        if (data.length > 0 && data.length <= 5 * 1024 * 1024) {
+          await uploadAttachment(adminClient, ticketId, {
+            filename: part.filename,
+            contentType: part.contentType,
+            data,
+          }, agentId);
+          uploaded++;
+        }
+      } catch (err) {
+        console.error(`Part ${part.partNum} fetch error: ${(err as Error).message}`);
+      }
+    }
+    return uploaded;
+  } catch (err) {
+    console.error(`BODYSTRUCTURE error: ${(err as Error).message}`);
+    return 0;
+  }
 }
 
 
@@ -867,7 +990,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         }
 
         // This email is NOT a duplicate - now fetch body (partial for large emails to avoid worker CPU limits)
-        const PARTIAL_FETCH_THRESHOLD = 1800 * 1024;
+        const PARTIAL_FETCH_THRESHOLD = 1800 * 1024; // Keep low for text parsing
         const msg = (headers.size && headers.size > PARTIAL_FETCH_THRESHOLD)
           ? await imap.fetchMessagePartial(seqNum, 900000)
           : await imap.fetchMessage(seqNum);
@@ -1015,6 +1138,9 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
                   console.error(`Attachment error: ${(err as Error).message}`);
                 }
               }
+            } else {
+              // No attachments from parsed body — try BODYSTRUCTURE for large/partial emails
+              await fetchAttachmentsParts(imap, adminClient, seqNum, ticketId, createdBy!);
             }
 
             updated++;
