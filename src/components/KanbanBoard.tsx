@@ -126,6 +126,19 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile
               <span className="text-[10px]">{callCount}</span>
             </span>
           )}
+          {attachmentInfo && attachmentInfo.count > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center gap-0.5 text-muted-foreground">
+                  {attachmentInfo.hasImages ? <Image className="h-3 w-3 text-blue-500" /> :
+                   attachmentInfo.hasVideos ? <Video className="h-3 w-3 text-purple-500" /> :
+                   <Paperclip className="h-3 w-3" />}
+                  <span className="text-[10px]">{attachmentInfo.count}</span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent><p className="text-xs">{attachmentInfo.count} anexo(s){attachmentInfo.hasImages ? " · fotos" : ""}{attachmentInfo.hasVideos ? " · vídeos" : ""}</p></TooltipContent>
+            </Tooltip>
+          )}
           <KanbanSlaIcon ticket={ticket} />
           <PriorityFlag priority={ticket.priority} size={14} />
         </div>
