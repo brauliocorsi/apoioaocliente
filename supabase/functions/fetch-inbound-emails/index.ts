@@ -1736,8 +1736,13 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Phase 1: Quick — fetch content/messages only (no large attachment downloads)
       const imap = new ImapClient();
       const port = Number(imapCfg.imap_port) || 993;
+      let messagesAdded = 0;
+      let contentUpdated = false;
+      let attachmentPartsFound = 0;
+      const attachmentJobs: { seqNum: number; parts: AttachmentPart[] }[] = [];
 
       try {
         const greeting = await imap.connect(imapCfg.imap_host, port);
@@ -1747,7 +1752,6 @@ Deno.serve(async (req) => {
         if (!loginRes.includes("OK")) throw new Error("Falha na autenticação IMAP");
         await imap.select(imapCfg.imap_folder);
 
-        // Search for emails FROM this client (last 30 days)
         const clientEmail = ticket.client_email.toLowerCase();
         const searchRes = await imap.command(`SEARCH FROM "${clientEmail}"`);
         const searchMatch = searchRes.match(/\* SEARCH([\d\s]*)/);
@@ -1757,11 +1761,6 @@ Deno.serve(async (req) => {
 
         console.log(`Refetch: found ${emailIds.length} emails from ${clientEmail}`);
 
-        let attachmentsImported = 0;
-        let contentUpdated = false;
-        let messagesAdded = 0;
-
-        // Get existing messages to avoid duplicates
         const { data: existingMsgs } = await adminClient
           .from("ticket_messages")
           .select("content")
@@ -1773,29 +1772,24 @@ Deno.serve(async (req) => {
 
         for (const seqNum of emailIds) {
           try {
-            // Fetch full message
             const headers = await imap.fetchHeaders(seqNum);
             const senderEmail = extractEmail(headers.from);
             if (senderEmail.toLowerCase() !== clientEmail) continue;
 
-            // Always try BODYSTRUCTURE for attachments first (lightweight)
-            const bsUploaded = await fetchAttachmentsParts(imap, adminClient, seqNum, ticketIdParam, agentId);
-            attachmentsImported += bsUploaded;
+            // Collect attachment part info (lightweight BODYSTRUCTURE only, no download)
+            const bs = await imap.fetchBodyStructure(seqNum);
+            const parts = parseBodyStructureAttachments(bs);
+            if (parts.length > 0) {
+              attachmentJobs.push({ seqNum, parts: parts.filter(p => p.size <= 5 * 1024 * 1024) });
+              attachmentPartsFound += parts.length;
+            }
 
-            // Now fetch full message for content
+            // Fetch text content only (use partial for large emails to save CPU)
             const msg = (headers.size && headers.size > 1800 * 1024)
               ? await imap.fetchMessagePartial(seqNum)
               : await imap.fetchMessage(seqNum);
 
-            // Upload any attachments from body parsing too
-            for (const att of msg.attachments) {
-              if (att.data.length > 0 && att.data.length <= 5 * 1024 * 1024) {
-                await uploadAttachment(adminClient, ticketIdParam, att, agentId);
-                attachmentsImported++;
-              }
-            }
-
-            // Check if ticket description is empty/placeholder and update it
+            // Update ticket description if empty/placeholder
             const hasContent = msg.bodyHtml || msg.bodyText;
             if (hasContent && (!ticket.description || ticket.description.includes("Conteúdo completo indisponível") || ticket.description === "(email sem conteúdo)")) {
               const descContent = msg.bodyHtml
@@ -1804,7 +1798,7 @@ Deno.serve(async (req) => {
               if (descContent.replace(/<[^>]+>/g, "").trim().length > 10) {
                 await adminClient.from("tickets").update({ description: descContent }).eq("id", ticketIdParam);
                 contentUpdated = true;
-                ticket.description = descContent; // prevent further updates
+                ticket.description = descContent;
               }
             }
 
@@ -1839,27 +1833,75 @@ Deno.serve(async (req) => {
         }
 
         await imap.logout();
-
-        const parts = [];
-        if (attachmentsImported > 0) parts.push(`${attachmentsImported} anexo(s) importado(s)`);
-        if (contentUpdated) parts.push("conteúdo atualizado");
-        if (messagesAdded > 0) parts.push(`${messagesAdded} mensagem(ns) adicionada(s)`);
-        if (parts.length === 0) parts.push("Nenhum conteúdo novo encontrado");
-
-        return new Response(JSON.stringify({
-          success: true,
-          message: parts.join(", "),
-          emails_found: emailIds.length,
-          attachments_imported: attachmentsImported,
-          content_updated: contentUpdated,
-          messages_added: messagesAdded,
-        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       } catch (err) {
         try { await imap.logout(); } catch (_e) { /* */ }
         return new Response(JSON.stringify({ success: false, message: (err as Error).message }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      // Phase 2: Background — download and upload attachments one by one
+      if (attachmentJobs.length > 0) {
+        const bgTask = async () => {
+          const bgImap = new ImapClient();
+          try {
+            const greeting = await bgImap.connect(imapCfg.imap_host, port);
+            if (!greeting.includes("OK")) throw new Error("BG IMAP connect failed");
+            if (port === 143) { try { await bgImap.startTls(imapCfg.imap_host); } catch (_e) { /* */ } }
+            const loginRes = await bgImap.login(imapCfg.imap_user, imapCfg.imap_pass);
+            if (!loginRes.includes("OK")) throw new Error("BG IMAP login failed");
+            await bgImap.select(imapCfg.imap_folder);
+
+            let totalUploaded = 0;
+            for (const job of attachmentJobs) {
+              for (const part of job.parts) {
+                try {
+                  const rawPart = await bgImap.fetchMimePart(job.seqNum, part.partNum);
+                  let data: Uint8Array;
+                  if (part.encoding === "base64") {
+                    data = decodeBase64ToBytes(rawPart, 5 * 1024 * 1024);
+                  } else {
+                    data = new TextEncoder().encode(rawPart);
+                  }
+                  if (data.length > 0 && data.length <= 5 * 1024 * 1024) {
+                    await uploadAttachment(adminClient, ticketIdParam, {
+                      filename: part.filename,
+                      contentType: part.contentType,
+                      data,
+                    }, agentId);
+                    totalUploaded++;
+                    console.log(`BG: uploaded ${part.filename} (${data.length} bytes)`);
+                  }
+                } catch (err) {
+                  console.error(`BG part ${part.partNum} error: ${(err as Error).message}`);
+                }
+              }
+            }
+            await bgImap.logout();
+            console.log(`BG: finished, uploaded ${totalUploaded} attachments for ticket ${ticketIdParam}`);
+          } catch (err) {
+            console.error(`BG refetch error: ${(err as Error).message}`);
+            try { await bgImap.logout(); } catch (_e) { /* */ }
+          }
+        };
+
+        // Use EdgeRuntime.waitUntil to run in background after response
+        (globalThis as any).EdgeRuntime?.waitUntil?.(bgTask());
+      }
+
+      const parts = [];
+      if (contentUpdated) parts.push("conteúdo atualizado");
+      if (messagesAdded > 0) parts.push(`${messagesAdded} mensagem(ns) adicionada(s)`);
+      if (attachmentPartsFound > 0) parts.push(`${attachmentPartsFound} anexo(s) a importar em segundo plano`);
+      if (parts.length === 0) parts.push("Nenhum conteúdo novo encontrado");
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: parts.join(", "),
+        attachments_background: attachmentPartsFound,
+        content_updated: contentUpdated,
+        messages_added: messagesAdded,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Process emails - 1 at a time, frontend loop handles iteration
