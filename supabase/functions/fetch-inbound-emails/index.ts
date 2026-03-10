@@ -837,9 +837,11 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         }
 
         if (ticketId) {
+            const htmlPreview = msg.bodyHtml ? msg.bodyHtml.substring(0, 20000) : "";
+            const textPreview = (msg.bodyText || "(email sem conteúdo)").substring(0, 10000);
             const fullBody = msg.bodyHtml
-              ? sanitizeHtml(msg.bodyHtml).substring(0, 10000)
-              : (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
+              ? sanitizeHtml(htmlPreview).substring(0, 10000)
+              : textPreview.substring(0, 5000);
             const strippedBody = msg.bodyHtml
               ? stripQuotedHtml(fullBody).substring(0, 10000)
               : stripQuotedText(fullBody).substring(0, 5000);
