@@ -717,41 +717,54 @@ interface AttachmentPart { partNum: string; filename: string; contentType: strin
 
 function parseBodyStructureAttachments(bs: string): AttachmentPart[] {
   const results: AttachmentPart[] = [];
-  // Match attachment patterns: look for "attachment" disposition or known binary types with filenames
-  // BODYSTRUCTURE is deeply nested parentheses — use regex for common patterns
-  const partRegex = /\("([^"]+)"\s+"([^"]+)"[^)]*?"([^"]*)"[^)]*?(\d+)\)/gi;
   
-  // Simpler approach: find filename references with their part context
-  const lines = bs.split(/[\r\n]+/);
-  const fullText = bs;
+  // Extract the BODYSTRUCTURE content between the outer FETCH parens
+  const bsMatch = bs.match(/BODYSTRUCTURE\s+(\(.*\))\s*\)\s*\n/s);
+  if (!bsMatch) return results;
+  const struct = bsMatch[1];
   
-  // Find all "name" "filename.ext" patterns
-  const nameMatches = [...fullText.matchAll(/(?:"name"\s*"([^"]+)"|"filename"\s*"([^"]+)")/gi)];
+  // Parse top-level parts by tracking parenthesis depth
+  // In multipart, each top-level ( ) group is a part numbered 1, 2, 3...
+  const topParts: { content: string; index: number }[] = [];
+  let depth = 0;
+  let partStart = -1;
   
-  for (const m of nameMatches) {
-    const filename = decodeHeaderValue(m[1] || m[2]);
+  // Skip the outermost parens
+  for (let i = 1; i < struct.length - 1; i++) {
+    if (struct[i] === "(") {
+      if (depth === 0) partStart = i;
+      depth++;
+    } else if (struct[i] === ")") {
+      depth--;
+      if (depth === 0 && partStart >= 0) {
+        topParts.push({ content: struct.substring(partStart, i + 1), index: topParts.length });
+      }
+    }
+  }
+  
+  // Check each top-level part for attachment indicators
+  for (let idx = 0; idx < topParts.length; idx++) {
+    const part = topParts[idx].content;
+    const partNum = String(idx + 1);
+    
+    // Look for filename in this part
+    const nameMatch = part.match(/(?:"name"\s*"([^"]+)"|"filename"\s*"([^"]+)")/i);
+    if (!nameMatch) continue;
+    
+    const filename = decodeHeaderValue(nameMatch[1] || nameMatch[2]);
     if (!filename) continue;
     
-    // Determine part number by counting opening parens before this match
-    const before = fullText.substring(0, m.index);
-    let depth = 0;
-    let partNum = "1";
-    const partNums: number[] = [0];
-    for (const ch of before) {
-      if (ch === "(") { depth++; partNums[depth] = (partNums[depth] || 0) + 1; }
-      if (ch === ")") { depth--; }
-    }
-    // Simple heuristic: use the top-level part counter
-    partNum = String(partNums[1] || 1);
+    // Skip text parts without attachment disposition
+    const ctMatch = part.match(/"(image|application|audio|video)"\s+"([^"]+)"/i);
+    if (!ctMatch && !part.toLowerCase().includes('"attachment"')) continue;
     
-    // Try to find content type and encoding near this match
-    const context = fullText.substring(Math.max(0, (m.index || 0) - 200), (m.index || 0) + 100);
-    const ctMatch = context.match(/"(image|application|audio|video|text)"\s+"([^"]+)"/i);
     const contentType = ctMatch ? `${ctMatch[1]}/${ctMatch[2]}`.toLowerCase() : "application/octet-stream";
-    const encMatch = context.match(/"(base64|quoted-printable|7bit|8bit)"/i);
+    const encMatch = part.match(/"(base64|quoted-printable|7bit|8bit)"/i);
     const encoding = encMatch ? encMatch[1].toLowerCase() : "base64";
-    const sizeMatch = context.match(/\s(\d{3,})\s/);
-    const size = sizeMatch ? parseInt(sizeMatch[1]) : 0;
+    
+    // Find size - look for the large number after encoding
+    const sizeMatches = [...part.matchAll(/\b(\d{4,})\b/g)];
+    const size = sizeMatches.length > 0 ? parseInt(sizeMatches[0][1]) : 0;
     
     results.push({ partNum, filename, contentType, encoding, size });
   }
