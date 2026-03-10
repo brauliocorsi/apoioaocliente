@@ -1155,28 +1155,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Process emails in background
-    const resultPromise = processEmails({ fetchRecent, maxEmails, agentId });
-
-    if (typeof (globalThis as any).EdgeRuntime !== "undefined" && (globalThis as any).EdgeRuntime.waitUntil) {
-      const sharedResult: { value?: any } = {};
-      const promise = resultPromise.then(r => { sharedResult.value = r; }).catch(err => {
-        sharedResult.value = { success: false, error: err.message };
-      });
-      (globalThis as any).EdgeRuntime.waitUntil(promise);
-
-      const deadline = Date.now() + 8000;
-      while (!sharedResult.value && Date.now() < deadline) {
-        await new Promise(r => setTimeout(r, 200));
-      }
-
-      const result = sharedResult.value || { success: true, message: "A processar em segundo plano..." };
-      return new Response(JSON.stringify(result), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const result = await resultPromise;
+    // Process emails - limit batch to 3 to stay within CPU limits
+    const safeBatchSize = Math.min(maxEmails, 3);
+    const result = await processEmails({ fetchRecent, maxEmails: safeBatchSize, agentId });
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
