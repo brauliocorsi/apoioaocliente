@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Minimal IMAP client — full UID FETCH (no partial)
+// Minimal IMAP client with safe stream handling
 class MiniImap {
   private conn!: Deno.TlsConn | Deno.Conn;
   private reader!: ReadableStreamDefaultReader<Uint8Array>;
@@ -13,6 +13,8 @@ class MiniImap {
   private decoder = new TextDecoder("latin1");
   private tagN = 0;
   private buf = new Uint8Array(0);
+  // Track pending read to avoid data loss on timeout
+  private pendingRead: Promise<ReadableStreamReadResult<Uint8Array>> | null = null;
 
   async connect(host: string, port: number): Promise<boolean> {
     this.conn = port === 993
@@ -37,8 +39,8 @@ class MiniImap {
   private async readLine(): Promise<string> {
     let s = "";
     const start = Date.now();
-    while (Date.now() - start < 5000) {
-      const chunk = await this.readChunk();
+    while (Date.now() - start < 15000) {
+      const chunk = await this.readChunk(15000);
       if (!chunk) break;
       s += this.decoder.decode(chunk);
       if (s.includes("\r\n")) return s;
@@ -46,16 +48,32 @@ class MiniImap {
     return s;
   }
 
-  private async readChunk(): Promise<Uint8Array | null> {
+  // Safe readChunk: preserves pending read promise so no data is lost on timeout
+  private async readChunk(timeoutMs = 15000): Promise<Uint8Array | null> {
     if (this.buf.length > 0) {
       const b = this.buf;
       this.buf = new Uint8Array(0);
       return b;
     }
     try {
-      const p = this.reader.read();
-      const t = new Promise<{ value: undefined; done: true }>(r => setTimeout(() => r({ value: undefined, done: true }), 5000));
-      const { value, done } = await Promise.race([p, t]);
+      // Reuse pending read if one was abandoned by a previous timeout
+      const readPromise = this.pendingRead || this.reader.read();
+      this.pendingRead = null;
+
+      let timedOut = false;
+      const timer = setTimeout(() => { timedOut = true; }, timeoutMs);
+      const timeoutPromise = new Promise<null>(r => setTimeout(() => r(null), timeoutMs));
+
+      const result = await Promise.race([readPromise, timeoutPromise]);
+      clearTimeout(timer);
+
+      if (timedOut || result === null) {
+        // Timeout won — save the read promise so data isn't lost
+        this.pendingRead = readPromise as Promise<ReadableStreamReadResult<Uint8Array>>;
+        return null;
+      }
+
+      const { value, done } = result as ReadableStreamReadResult<Uint8Array>;
       if (done || !value) return null;
       return value;
     } catch { return null; }
@@ -75,8 +93,8 @@ class MiniImap {
       this.buf = new Uint8Array(0);
     }
     const start = Date.now();
-    while (got < n && Date.now() - start < 30000) {
-      const chunk = await this.readChunk();
+    while (got < n && Date.now() - start < 60000) {
+      const chunk = await this.readChunk(30000);
       if (!chunk) break;
       const need = n - got;
       if (chunk.length > need) {
@@ -99,10 +117,10 @@ class MiniImap {
     await this.write(`${tag} ${c}\r\n`);
     let result = "";
     const start = Date.now();
-    while (Date.now() - start < 10000) {
+    while (Date.now() - start < 30000) {
       const tail = result.length > 300 ? result.substring(result.length - 300) : result;
       if (tail.includes(`${tag} OK`) || tail.includes(`${tag} NO`) || tail.includes(`${tag} BAD`)) return result;
-      const chunk = await this.readChunk();
+      const chunk = await this.readChunk(15000);
       if (!chunk) break;
       result += this.decoder.decode(chunk);
     }
@@ -118,93 +136,70 @@ class MiniImap {
     await this.cmd(`SELECT "${folder}"`);
   }
 
-  // Fetch MIME part as raw bytes — tries UID FETCH first, falls back to SEARCH + FETCH
-  async fetchPartByUid(uid: number, partNum: string): Promise<Uint8Array> {
-    // First, find the sequence number for this UID
-    const searchTag = this.nextTag();
-    await this.write(`${searchTag} UID SEARCH ${uid}\r\n`);
-    const searchRes = await this.cmd2(searchTag);
-    console.log(`UID SEARCH result: ${searchRes.substring(0, 200)}`);
-    
-    const searchMatch = searchRes.match(/\* SEARCH\s+(\d+)/);
-    if (!searchMatch) {
-      console.error(`UID ${uid} not found in mailbox`);
-      return new Uint8Array(0);
-    }
-    const seqNum = parseInt(searchMatch[1]);
-    console.log(`UID ${uid} → seq ${seqNum}`);
-
-    // Now fetch using sequence number (more reliable across servers)
-    return await this.fetchPartBySeq(seqNum, partNum);
-  }
-
   // Fetch MIME part by sequence number
   async fetchPartBySeq(seqNum: number, partNum: string): Promise<Uint8Array> {
     const tag = this.nextTag();
     await this.write(`${tag} FETCH ${seqNum} BODY[${partNum}]\r\n`);
 
-    // Read the initial response to find the literal size {N}
-    // Accumulate only enough to find the marker
-    let header = "";
+    // Accumulate chunks and look for the {N}\r\n literal marker
+    // We work at the BYTE level to avoid latin1↔UTF-8 offset mismatches
     const headerChunks: Uint8Array[] = [];
     let headerTotalLen = 0;
     const start = Date.now();
 
-    while (Date.now() - start < 15000) {
-      const chunk = await this.readChunk();
-      if (!chunk) break;
+    while (Date.now() - start < 30000) {
+      const chunk = await this.readChunk(15000);
+      if (!chunk) {
+        console.error(`readChunk returned null after ${Date.now() - start}ms`);
+        break;
+      }
       headerChunks.push(chunk);
       headerTotalLen += chunk.length;
 
-      // Only decode and check the first 512 bytes for the literal marker
-      if (header.length < 512) {
-        header += this.decoder.decode(chunk);
-        if (header.length > 512) header = header.substring(0, 512);
-      }
+      // Decode only enough bytes to find the literal marker (latin1 = 1 byte per char)
+      const checkLen = Math.min(headerTotalLen, 512);
+      const allBytes = new Uint8Array(headerTotalLen);
+      let off = 0;
+      for (const c of headerChunks) { allBytes.set(c, off); off += c.length; }
 
-      const m = header.match(/\{(\d+)\}\r?\n/);
+      const headerStr = this.decoder.decode(allBytes.subarray(0, checkLen));
+
+      const m = headerStr.match(/\{(\d+)\}\r?\n/);
       if (m) {
         const litSize = parseInt(m[1]);
-        console.log(`Found literal: ${litSize} bytes`);
+        console.log(`Found literal: ${litSize} bytes for part ${partNum}`);
 
-        // Calculate how many bytes of literal data we already have
-        // Re-decode just the header portion to find exact byte boundary
-        const fullHeaderBytes = new Uint8Array(headerTotalLen);
-        let off = 0;
-        for (const c of headerChunks) { fullHeaderBytes.set(c, off); off += c.length; }
-        
-        const fullHeaderStr = this.decoder.decode(fullHeaderBytes.subarray(0, Math.min(headerTotalLen, 512)));
-        const markerStr = m[0];
-        const markerIdx = fullHeaderStr.indexOf(markerStr);
-        const markerEndStr = fullHeaderStr.substring(0, markerIdx + markerStr.length);
-        const markerEndBytes = new TextEncoder().encode(markerEndStr).length;
+        // Find the byte offset where literal data starts
+        // In latin1, char index === byte index, so we can use string indexOf directly
+        const markerEnd = headerStr.indexOf(m[0]) + m[0].length;
+        // markerEnd is both char offset and byte offset in latin1
 
-        const alreadyHave = headerTotalLen - markerEndBytes;
+        const alreadyHave = headerTotalLen - markerEnd;
         const remaining = litSize - alreadyHave;
 
         let literalBytes: Uint8Array;
         if (remaining <= 0) {
-          literalBytes = fullHeaderBytes.slice(markerEndBytes, markerEndBytes + litSize);
+          literalBytes = allBytes.slice(markerEnd, markerEnd + litSize);
           if (alreadyHave > litSize) {
-            this.buf = fullHeaderBytes.slice(markerEndBytes + litSize);
+            this.buf = allBytes.slice(markerEnd + litSize);
           }
         } else {
           const rest = await this.readBytes(remaining);
           literalBytes = new Uint8Array(litSize);
-          literalBytes.set(fullHeaderBytes.subarray(markerEndBytes), 0);
+          literalBytes.set(allBytes.subarray(markerEnd), 0);
           literalBytes.set(rest, alreadyHave);
         }
 
         // Drain trailing tag response
         let trail = "";
         const drainStart = Date.now();
-        while (Date.now() - drainStart < 5000) {
+        while (Date.now() - drainStart < 10000) {
           if (this.buf.length > 0) {
             trail += this.decoder.decode(this.buf);
             this.buf = new Uint8Array(0);
           }
           if (trail.includes(`${tag} `)) break;
-          const c = await this.readChunk();
+          const c = await this.readChunk(5000);
           if (!c) break;
           trail += this.decoder.decode(c);
         }
@@ -212,16 +207,22 @@ class MiniImap {
       }
 
       // Check for error/no-data responses
-      if (header.includes(`${tag} NO`) || header.includes(`${tag} BAD`)) {
-        console.error(`IMAP error: ${header.substring(0, 200)}`);
+      if (headerStr.includes(`${tag} NO`) || headerStr.includes(`${tag} BAD`)) {
+        console.error(`IMAP error: ${headerStr.substring(0, 200)}`);
         return new Uint8Array(0);
       }
-      if (header.includes(`${tag} OK`) && !header.includes("{")) {
-        console.error(`IMAP OK but no literal: ${header.substring(0, 200)}`);
+      if (headerStr.includes(`${tag} OK`) && !headerStr.includes("{")) {
+        console.error(`IMAP OK but no literal: ${headerStr.substring(0, 200)}`);
         return new Uint8Array(0);
       }
     }
-    console.error(`Timeout waiting for IMAP response. Header so far: ${header.substring(0, 200)}`);
+
+    // Build header for error logging
+    const allBytes = new Uint8Array(headerTotalLen);
+    let off2 = 0;
+    for (const c of headerChunks) { allBytes.set(c, off2); off2 += c.length; }
+    const headerDbg = this.decoder.decode(allBytes.subarray(0, Math.min(headerTotalLen, 200)));
+    console.error(`Timeout waiting for IMAP response (${headerTotalLen} bytes). Header: ${headerDbg}`);
     return new Uint8Array(0);
   }
 
@@ -229,10 +230,10 @@ class MiniImap {
   private async cmd2(tag: string): Promise<string> {
     let result = "";
     const start = Date.now();
-    while (Date.now() - start < 10000) {
+    while (Date.now() - start < 15000) {
       const tail = result.length > 300 ? result.substring(result.length - 300) : result;
       if (tail.includes(`${tag} OK`) || tail.includes(`${tag} NO`) || tail.includes(`${tag} BAD`)) return result;
-      const chunk = await this.readChunk();
+      const chunk = await this.readChunk(10000);
       if (!chunk) break;
       result += this.decoder.decode(chunk);
     }
@@ -247,14 +248,12 @@ class MiniImap {
 
 // Native base64 decode — uses fetch+data URL for zero-JS-loop decoding
 async function fastB64Decode(raw: Uint8Array): Promise<Uint8Array> {
-  // Strip whitespace bytes in-place (single pass)
   let j = 0;
   for (let i = 0; i < raw.length; i++) {
     const b = raw[i];
-    if (b > 32) raw[j++] = b; // skip control chars, spaces, newlines
+    if (b > 32) raw[j++] = b;
   }
   const b64 = new TextDecoder('ascii').decode(raw.subarray(0, j));
-  // Use native fetch with data URL — base64 decode happens in native C++ code
   const res = await fetch(`data:application/octet-stream;base64,${b64}`);
   return new Uint8Array(await res.arrayBuffer());
 }
@@ -312,10 +311,11 @@ Deno.serve(async (req) => {
     if (!loggedIn) throw new Error("IMAP login failed");
     await imap.select(cfg.imap_folder || "INBOX");
 
+    console.log(`IMAP connected, fetching part ${part_num}`);
+
     let rawBytes = new Uint8Array(0);
 
     if (seq_num) {
-      // Direct fetch using sequence number from refetch phase
       console.log(`Direct fetch seq=${seq_num} part=${part_num}`);
       rawBytes = await imap.fetchPartBySeq(seq_num, part_num);
       console.log(`Direct fetch result: ${rawBytes.length} bytes`);
@@ -359,7 +359,6 @@ Deno.serve(async (req) => {
     if (encoding === "base64") {
       fileBytes = await fastB64Decode(rawBytes);
     } else {
-      // 7bit, 8bit, quoted-printable — raw bytes are the file
       fileBytes = rawBytes;
     }
 
@@ -376,7 +375,6 @@ Deno.serve(async (req) => {
       });
     if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
 
-    // Insert attachment record (use service role — bypasses RLS)
     const { error: dbErr } = await admin.from("ticket_attachments").insert({
       ticket_id,
       file_name: filename,
@@ -387,7 +385,6 @@ Deno.serve(async (req) => {
     });
     if (dbErr) {
       console.error(`DB insert error: ${dbErr.message}`);
-      // Try to clean up the uploaded file
       await admin.storage.from("ticket-attachments").remove([filePath]);
       throw new Error(`DB insert failed: ${dbErr.message}`);
     }
