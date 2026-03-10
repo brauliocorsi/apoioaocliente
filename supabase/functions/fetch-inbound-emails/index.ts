@@ -2088,6 +2088,12 @@ Deno.serve(async (req) => {
             const parts = parseBodyStructureAttachments(bs);
             const validParts = parts.filter(p => p.size <= 5 * 1024 * 1024);
 
+            // Get UID for this message (needed for download-attachment function)
+            let uid = 0;
+            if (validParts.length > 0) {
+              uid = await imap.fetchUid(seqNum);
+            }
+
             for (const part of validParts) {
               const { count } = await adminClient.from("ticket_attachments")
                 .select("id", { count: "exact", head: true })
@@ -2098,7 +2104,7 @@ Deno.serve(async (req) => {
                 continue;
               }
               pendingAttachments.push({
-                seq_num: seqNum,
+                uid,
                 part_num: part.partNum,
                 filename: part.filename,
                 content_type: part.contentType || "application/octet-stream",

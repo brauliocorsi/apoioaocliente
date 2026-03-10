@@ -175,41 +175,18 @@ class MiniImap {
   }
 }
 
-// Fast base64 decode using lookup table — works on Uint8Array directly
-function fastB64Decode(raw: Uint8Array): Uint8Array {
-  // Build lookup table
-  const lut = new Uint8Array(256).fill(255);
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  for (let i = 0; i < 64; i++) lut[chars.charCodeAt(i)] = i;
-
-  // Strip whitespace and count valid chars
-  const clean = new Uint8Array(raw.length);
-  let len = 0;
+// Native base64 decode — uses fetch+data URL for zero-JS-loop decoding
+async function fastB64Decode(raw: Uint8Array): Promise<Uint8Array> {
+  // Strip whitespace bytes in-place (single pass)
+  let j = 0;
   for (let i = 0; i < raw.length; i++) {
     const b = raw[i];
-    if (lut[b] < 64 || b === 61) { // valid b64 char or '='
-      clean[len++] = b;
-    }
+    if (b > 32) raw[j++] = b; // skip control chars, spaces, newlines
   }
-
-  // Calculate output size
-  let padding = 0;
-  if (len > 0 && clean[len - 1] === 61) padding++;
-  if (len > 1 && clean[len - 2] === 61) padding++;
-  const outLen = Math.floor(len * 3 / 4) - padding;
-  const out = new Uint8Array(outLen);
-
-  let j = 0;
-  for (let i = 0; i < len; i += 4) {
-    const a = lut[clean[i]];
-    const b = lut[clean[i + 1]];
-    const c = lut[clean[i + 2]];
-    const d = lut[clean[i + 3]];
-    if (j < outLen) out[j++] = (a << 2) | (b >> 4);
-    if (j < outLen) out[j++] = ((b & 15) << 4) | (c >> 2);
-    if (j < outLen) out[j++] = ((c & 3) << 6) | d;
-  }
-  return out;
+  const b64 = new TextDecoder('ascii').decode(raw.subarray(0, j));
+  // Use native fetch with data URL — base64 decode happens in native C++ code
+  const res = await fetch(`data:application/octet-stream;base64,${b64}`);
+  return new Uint8Array(await res.arrayBuffer());
 }
 
 Deno.serve(async (req) => {
@@ -281,7 +258,7 @@ Deno.serve(async (req) => {
     // Decode based on encoding
     let fileBytes: Uint8Array;
     if (encoding === "base64") {
-      fileBytes = fastB64Decode(rawBytes);
+      fileBytes = await fastB64Decode(rawBytes);
     } else {
       // 7bit, 8bit, quoted-printable — raw bytes are the file
       fileBytes = rawBytes;

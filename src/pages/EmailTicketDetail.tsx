@@ -265,26 +265,24 @@ export default function EmailTicketDetail() {
       if (error) throw error;
       if (data?.success === false) throw new Error(data.message);
 
-      // Phase 2: Download each attachment separately (one IMAP session per file, avoids CPU limit)
+      // Phase 2: Download each attachment via dedicated lightweight function (avoids CPU limit)
       const pending = data?.pending_attachments || [];
       let imported = 0;
       let failed = 0;
       for (const att of pending) {
         try {
-          const { data: attData, error: attErr } = await supabase.functions.invoke("fetch-inbound-emails", {
+          const { data: attData, error: attErr } = await supabase.functions.invoke("download-attachment", {
             body: {
-              action: "download_single_attachment",
-              ticket_id: id,
-              agent_id: user.id,
-              seq_num: att.seq_num,
+              uid: att.uid,
               part_num: att.part_num,
+              ticket_id: id,
               filename: att.filename,
               content_type: att.content_type,
               encoding: att.encoding,
             },
           });
           if (attErr) { failed++; continue; }
-          if (attData?.uploaded) imported++;
+          if (attData?.success) imported++;
         } catch (_e) { failed++; }
       }
 
