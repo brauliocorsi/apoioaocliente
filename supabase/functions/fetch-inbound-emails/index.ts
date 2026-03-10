@@ -136,18 +136,20 @@ class ImapClient {
     return match[1].trim().split(/\s+/).map(Number).filter(function(n) { return !isNaN(n); });
   }
 
-  // Lightweight: fetch only headers (From, Subject, Message-ID, Date) without body
+  // Lightweight: fetch only headers + RFC822 size (no body)
   async fetchHeaders(seqNum: number): Promise<{
     from: string;
     subject: string;
     messageId: string;
     date: string | null;
+    size: number | null;
   }> {
-    const response = await this.command(`FETCH ${seqNum} BODY[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID DATE)]`);
+    const response = await this.command(`FETCH ${seqNum} (RFC822.SIZE BODY[HEADER.FIELDS (FROM SUBJECT MESSAGE-ID DATE)])`);
     let from = "";
     let subject = "";
     let messageId = "";
     let date: string | null = null;
+    let size: number | null = null;
 
     const fromMatch = response.match(/^From:\s*(.+?)$/im);
     if (fromMatch) from = fromMatch[1].trim();
@@ -168,7 +170,10 @@ class ImapClient {
       } catch (_e) { /* keep null */ }
     }
 
-    return { from, subject: subject || "Sem assunto", messageId, date };
+    const sizeMatch = response.match(/RFC822\.SIZE\s+(\d+)/i);
+    if (sizeMatch) size = Number(sizeMatch[1]);
+
+    return { from, subject: subject || "Sem assunto", messageId, date, size };
   }
 
   async fetchMessage(seqNum: number): Promise<{
@@ -328,9 +333,15 @@ function decodeBase64(str: string, charset = "utf-8"): string {
   }
 }
 
-function decodeBase64ToBytes(str: string): Uint8Array {
+function decodeBase64ToBytes(str: string, maxBytes?: number): Uint8Array {
   try {
     const cleaned = str.replace(/\r?\n/g, "").trim();
+    if (maxBytes !== undefined) {
+      const estimatedBytes = Math.floor((cleaned.length * 3) / 4);
+      if (estimatedBytes > maxBytes) {
+        return new Uint8Array(0);
+      }
+    }
     return Uint8Array.from(atob(cleaned), c => c.charCodeAt(0));
   } catch (_e) {
     return new Uint8Array(0);
@@ -410,11 +421,18 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
       if (isAttachment && filename) {
         let attachData: Uint8Array;
         if (transferEncoding === "base64") {
-          attachData = decodeBase64ToBytes(partBody);
+          const estimatedBytes = Math.floor((partBody.replace(/\r?\n/g, "").trim().length * 3) / 4);
+          if (estimatedBytes > 5 * 1024 * 1024) {
+            continue;
+          }
+          attachData = decodeBase64ToBytes(partBody, 5 * 1024 * 1024);
         } else {
+          if (partBody.length > 5 * 1024 * 1024) {
+            continue;
+          }
           attachData = new TextEncoder().encode(partBody);
         }
-        if (attachData.length <= 5 * 1024 * 1024) {
+        if (attachData.length > 0 && attachData.length <= 5 * 1024 * 1024) {
           result.attachments.push({ filename, contentType: fullContentType.split(";")[0].trim(), data: attachData });
         }
         continue;
@@ -716,6 +734,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
     // ── BATCH: check up to 10 headers if they're all duplicates, but only fetch 1 full body ──
     const MAX_HEADER_CHECKS = 10;
+    const MAX_INLINE_EMAIL_SIZE = 1200 * 1024; // >1.2MB falls back to header-only pending import
     let headersChecked = 0;
     let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
     let newEmailProcessed = false;
@@ -743,6 +762,25 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         if (emailFingerprint && knownFingerprints.has(emailFingerprint)) {
           skipped++;
           continue;
+        }
+
+        // Very large emails can exceed edge CPU limits when parsing full MIME + attachments.
+        // Fallback: import as pending with header metadata so the inbox doesn't block.
+        if (headers.size && headers.size > MAX_INLINE_EMAIL_SIZE) {
+          const clientName = extractName(headers.from);
+          await adminClient.from("pending_emails").insert({
+            from_address: clientEmail.toLowerCase(),
+            from_name: clientName,
+            subject: headers.subject.substring(0, 500),
+            body_text: `Email recebido (${Math.round(headers.size / 1024)} KB). Conteúdo completo indisponível neste modo de importação.`,
+            body_html: "",
+            message_id: emailFingerprint,
+            status: "pending",
+          });
+          pending++;
+          await imap.markAsSeen(seqNum);
+          newEmailProcessed = true;
+          break;
         }
 
         // This email is NOT a duplicate - now fetch the full message body
@@ -824,9 +862,11 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         }
 
         if (ticketId) {
+            const htmlPreview = msg.bodyHtml ? msg.bodyHtml.substring(0, 20000) : "";
+            const textPreview = (msg.bodyText || "(email sem conteúdo)").substring(0, 10000);
             const fullBody = msg.bodyHtml
-              ? sanitizeHtml(msg.bodyHtml).substring(0, 10000)
-              : (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
+              ? sanitizeHtml(htmlPreview).substring(0, 10000)
+              : textPreview.substring(0, 5000);
             const strippedBody = msg.bodyHtml
               ? stripQuotedHtml(fullBody).substring(0, 10000)
               : stripQuotedText(fullBody).substring(0, 5000);
@@ -895,12 +935,13 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         }
 
         // New email from unknown/closed thread → pending review queue
+        const pendingHtmlPreview = msg.bodyHtml ? msg.bodyHtml.substring(0, 20000) : "";
         const pendingInsert: any = {
           from_address: clientEmail.toLowerCase(),
           from_name: clientName,
           subject: msg.subject.substring(0, 500),
           body_text: (msg.bodyText || "").substring(0, 5000),
-          body_html: (msg.bodyHtml ? sanitizeHtml(msg.bodyHtml) : "").substring(0, 10000),
+          body_html: pendingHtmlPreview ? sanitizeHtml(pendingHtmlPreview).substring(0, 10000) : "",
           message_id: emailFingerprint,
           status: "pending",
         };
