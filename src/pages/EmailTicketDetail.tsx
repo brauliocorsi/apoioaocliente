@@ -15,11 +15,6 @@ import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import { formatDistanceToNow, format } from "date-fns";
 import { pt } from "date-fns/locale";
 import FileUpload from "@/components/FileUpload";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useTicketStatuses } from "@/hooks/useTicketStatuses";
-import { formatDistanceToNow, format } from "date-fns";
-import { pt } from "date-fns/locale";
 
 // Check if content looks like HTML
 function isHtmlContent(text: string): boolean {
