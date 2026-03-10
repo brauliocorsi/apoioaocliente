@@ -769,7 +769,9 @@ async function fetchAttachmentsParts(
 ): Promise<number> {
   try {
     const bs = await imap.fetchBodyStructure(seqNum);
+    console.log(`BODYSTRUCTURE raw (first 500): ${bs.substring(0, 500)}`);
     const parts = parseBodyStructureAttachments(bs);
+    console.log(`BODYSTRUCTURE found ${parts.length} attachment parts: ${JSON.stringify(parts.map(p => ({ partNum: p.partNum, filename: p.filename, size: p.size })))}`);
     
     if (parts.length === 0) return 0;
     
