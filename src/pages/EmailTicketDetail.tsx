@@ -42,10 +42,22 @@ function cleanEmailText(text: string): string {
   cleaned = cleaned.replace(/=([0-9A-Fa-f]{2})/g, (_match: string, hex: string) => {
     return String.fromCharCode(parseInt(hex, 16));
   });
-  try {
-    const bytes = new Uint8Array([...cleaned].map(c => c.charCodeAt(0)));
-    cleaned = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
-  } catch { /* keep as-is */ }
+  // Only attempt byte→UTF-8 re-decode if the text contains high bytes (likely latin1/windows-1252 raw bytes)
+  // Skip if text is already valid UTF-8 (no replacement characters after a test decode)
+  const hasHighBytes = /[\x80-\xff]/.test(cleaned);
+  if (hasHighBytes) {
+    try {
+      const bytes = new Uint8Array([...cleaned].map(c => c.charCodeAt(0)));
+      const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      cleaned = decoded;
+    } catch {
+      // Not valid UTF-8 bytes, try windows-1252
+      try {
+        const bytes = new Uint8Array([...cleaned].map(c => c.charCodeAt(0)));
+        cleaned = new TextDecoder("windows-1252", { fatal: false }).decode(bytes);
+      } catch { /* keep as-is */ }
+    }
+  }
   cleaned = cleaned.replace(/--[0-9a-f]{20,}--?/g, "");
   cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
   return cleaned;

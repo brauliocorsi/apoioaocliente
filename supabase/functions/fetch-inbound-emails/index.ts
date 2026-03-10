@@ -520,11 +520,16 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
       body = decodeQuotedPrintable(body, singleCharset);
     } else if (transferEncoding === "base64") {
       body = decodeBase64(body, singleCharset);
-    } else if (singleCharset && singleCharset.toLowerCase() !== "utf-8" && singleCharset.toLowerCase() !== "us-ascii") {
-      try {
-        const bytes = new Uint8Array([...body].map(c => c.charCodeAt(0)));
-        body = new TextDecoder(normalizeCharset(singleCharset), { fatal: false }).decode(bytes);
-      } catch (_e) { /* keep as-is */ }
+    } else {
+      const hasHighBytes = /[\x80-\xff]/.test(body);
+      const normalizedCharset = normalizeCharset(singleCharset);
+      if (hasHighBytes || (normalizedCharset !== "utf-8")) {
+        try {
+          const bytes = new Uint8Array([...body].map(c => c.charCodeAt(0)));
+          const targetCharset = (normalizedCharset === "utf-8" && hasHighBytes) ? "windows-1252" : normalizedCharset;
+          body = new TextDecoder(targetCharset, { fatal: false }).decode(bytes);
+        } catch (_e) { /* keep as-is */ }
+      }
     }
 
     const contentTypeMatch = headerSection.match(/Content-Type:\s*([^;\r\n]+)/i);
