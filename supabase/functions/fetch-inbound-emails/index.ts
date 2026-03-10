@@ -170,7 +170,10 @@ class ImapClient {
       } catch (_e) { /* keep null */ }
     }
 
-    return { from, subject: subject || "Sem assunto", messageId, date };
+    const sizeMatch = response.match(/RFC822\.SIZE\s+(\d+)/i);
+    if (sizeMatch) size = Number(sizeMatch[1]);
+
+    return { from, subject: subject || "Sem assunto", messageId, date, size };
   }
 
   async fetchMessage(seqNum: number): Promise<{
