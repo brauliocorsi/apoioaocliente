@@ -1,0 +1,1 @@
+DELETE FROM ticket_attachments WHERE ticket_id = 'a9b0ed8a-1b46-4e84-9123-2d7b2f2f9a7c' AND file_size = 0;
