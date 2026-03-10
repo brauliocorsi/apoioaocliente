@@ -795,9 +795,17 @@ function parseBodyStructureAttachments(bs: string, prefix = ""): AttachmentPart[
     const encMatch = part.match(/"(base64|quoted-printable|7bit|8bit)"/i);
     const encoding = encMatch ? encMatch[1].toLowerCase() : "base64";
     
-    // Find size - look for the large number after encoding
-    const sizeMatches = [...part.matchAll(/\b(\d{4,})\b/g)];
-    const size = sizeMatches.length > 0 ? parseInt(sizeMatches[0][1]) : 0;
+    // Find size: prefer "size" "NNN" in disposition params, then RFC822 size after encoding
+    let size = 0;
+    const dispositionSizeMatch = part.match(/"size"\s+"(\d+)"/i);
+    if (dispositionSizeMatch) {
+      size = parseInt(dispositionSizeMatch[1]);
+    } else if (encMatch) {
+      // The number right after encoding string is the RFC822 encoded size
+      const afterEnc = part.substring((encMatch.index || 0) + encMatch[0].length);
+      const rfcSizeMatch = afterEnc.match(/\s+(\d+)/);
+      if (rfcSizeMatch) size = parseInt(rfcSizeMatch[1]);
+    }
     
     results.push({ partNum, filename, contentType, encoding, size });
   }
