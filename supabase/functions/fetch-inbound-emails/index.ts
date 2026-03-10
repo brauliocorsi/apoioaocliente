@@ -522,6 +522,55 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
   return result;
 }
 
+function parseMimeMessageFast(raw: string): MimeParsed {
+  const result: MimeParsed = { bodyText: "", bodyHtml: "", attachments: [] };
+  const limitedRaw = raw.substring(0, 900 * 1024);
+
+  // Fast scan for top-level/nested text parts without walking full attachment trees
+  const partRegex = /Content-Type:\s*(text\/plain|text\/html)[^\r\n]*(?:\r?\n[^\r\n]*)*\r?\n\r?\n([\s\S]*?)(?=\r?\n--[^\r\n]+(?:--)?)/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = partRegex.exec(limitedRaw)) !== null) {
+    const contentType = match[1].toLowerCase();
+    const block = match[0];
+    const headerEnd = block.search(/\r?\n\r?\n/);
+    if (headerEnd === -1) continue;
+
+    const headerSection = block.substring(0, headerEnd);
+    let body = block.substring(headerEnd).trim();
+    if (body.length > 250000) body = body.substring(0, 250000);
+
+    const fullContentType = (headerSection.match(/Content-Type:\s*([^\r\n]+)/i)?.[1]) || contentType;
+    const charset = extractCharset(fullContentType);
+    const transferEncodingMatch = headerSection.match(/Content-Transfer-Encoding:\s*(\S+)/i);
+    const transferEncoding = transferEncodingMatch ? transferEncodingMatch[1].trim().toLowerCase() : "";
+
+    if (transferEncoding === "quoted-printable") {
+      body = decodeQuotedPrintable(body, charset);
+    } else if (transferEncoding === "base64") {
+      body = decodeBase64(body, charset);
+    }
+
+    const cleaned = body.trim();
+    if (!cleaned) continue;
+
+    if (contentType === "text/plain" && !result.bodyText) result.bodyText = cleaned;
+    if (contentType === "text/html" && !result.bodyHtml) result.bodyHtml = cleaned;
+    if (result.bodyText && result.bodyHtml) break;
+  }
+
+  if (!result.bodyText && !result.bodyHtml) {
+    result.bodyText = limitedRaw
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\r?\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+      .substring(0, 100000);
+  }
+
+  return result;
+}
+
 function extractName(from: string): string {
   const name = from.replace(/<.+?>/, "").replace(/"/g, "").trim();
   return name || extractEmail(from);
