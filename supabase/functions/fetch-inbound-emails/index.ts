@@ -897,12 +897,15 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
     let emailIds: number[];
     const searchDays = params.searchDays || 1;
-    if (params.fetchRecent) {
+    if (searchDays > 1) {
+      // Extended search: get all emails from last N days
+      emailIds = await imap.searchSince(searchDays);
+    } else if (params.fetchRecent) {
       const allIds = await imap.searchAll();
       emailIds = allIds.slice(-params.maxEmails);
     } else {
-      // Search emails from last N days (includes read and unread)
-      emailIds = await imap.searchSince(searchDays);
+      // Default: last 24h
+      emailIds = await imap.searchSince(1);
     }
 
     // ── NEWEST FIRST: reverse so most recent emails are at offset 0 ──
