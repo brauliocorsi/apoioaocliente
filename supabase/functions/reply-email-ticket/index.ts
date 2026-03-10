@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
     try {
       if (useResend) {
         const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.resend_from_email || cfg.smtp_from_email || "noreply@upmoveis.pt"}>`;
-        const result = await sendViaResend(fromAddr, clientEmail, subject, plainText);
+        const result = await sendViaResend(fromAddr, clientEmail, subject, plainText, htmlBody);
         deliveryStatus = "delivered";
         deliveryDetails = "Enviado via Resend API";
         smtpResponse = JSON.stringify(result);
