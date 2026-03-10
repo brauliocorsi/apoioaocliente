@@ -1097,10 +1097,10 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
                       console.log(`No attachments found for ticket ${backfillTicketId}`);
                     }
                     newEmailProcessed = true;
-                    backfillDone = true;
+                    backfillCount++;
                   } catch (fetchErr) {
                     console.error(`Backfill fetch error: ${(fetchErr as Error).message}`);
-                    backfillDone = true;
+                    backfillCount++;
                   }
                 }
               }
