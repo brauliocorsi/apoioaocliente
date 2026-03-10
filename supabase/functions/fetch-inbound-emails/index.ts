@@ -861,8 +861,11 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           break;
         }
 
-        // This email is NOT a duplicate - now fetch the full message body
-        const msg = await imap.fetchMessage(seqNum);
+        // This email is NOT a duplicate - now fetch body (partial for large emails to avoid worker CPU limits)
+        const PARTIAL_FETCH_THRESHOLD = 1800 * 1024;
+        const msg = (headers.size && headers.size > PARTIAL_FETCH_THRESHOLD)
+          ? await imap.fetchMessagePartial(seqNum, 900000)
+          : await imap.fetchMessage(seqNum);
         const clientName = extractName(msg.from);
 
         // Check blocklist
