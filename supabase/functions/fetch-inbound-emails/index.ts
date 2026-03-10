@@ -693,16 +693,17 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           continue;
         }
 
-        // Check if we have an existing open thread
+        // Check if we have an existing open thread OR ticket by client_email
         const { data: existingThread } = await adminClient
           .from("email_threads")
           .select("ticket_id")
           .eq("email_address", clientEmail.toLowerCase())
           .order("created_at", { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         let ticketId: string | null = null;
+        let threadExists = false;
 
         if (existingThread) {
           const { data: ticket } = await adminClient
@@ -719,6 +720,35 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
           if (ticket && !statusData?.is_closed) {
             ticketId = ticket.id;
+            threadExists = true;
+          }
+        }
+
+        // Fallback: check tickets table directly by client_email (covers manually created tickets)
+        if (!ticketId) {
+          const { data: openTickets } = await adminClient
+            .from("tickets")
+            .select("id, status")
+            .eq("client_email", clientEmail.toLowerCase())
+            .order("created_at", { ascending: false })
+            .limit(5);
+
+          if (openTickets) {
+            for (const t of openTickets) {
+              const { data: sd } = await adminClient
+                .from("ticket_statuses")
+                .select("is_closed")
+                .eq("id", t.status)
+                .single();
+              if (!sd?.is_closed) {
+                ticketId = t.id;
+                break;
+              }
+            }
+          }
+        }
+
+        if (ticketId) {
             const fullBody = msg.bodyHtml
               ? sanitizeHtml(msg.bodyHtml).substring(0, 10000)
               : (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
