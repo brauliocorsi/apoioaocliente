@@ -125,6 +125,17 @@ class ImapClient {
     return match[1].trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
   }
 
+  async searchSince(daysAgo: number): Promise<number[]> {
+    const d = new Date();
+    d.setDate(d.getDate() - daysAgo);
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const dateStr = `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear()}`;
+    const response = await this.command(`SEARCH SINCE ${dateStr}`);
+    const match = response.match(/\* SEARCH([\d\s]*)/);
+    if (!match || !match[1].trim()) return [];
+    return match[1].trim().split(/\s+/).map(Number).filter(n => !isNaN(n));
+  }
+
   async fetchMessage(seqNum: number): Promise<{
     from: string;
     subject: string;
