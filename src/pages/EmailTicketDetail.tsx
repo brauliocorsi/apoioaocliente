@@ -254,6 +254,73 @@ export default function EmailTicketDetail() {
     window.open(data.publicUrl, "_blank");
   };
 
+  // Download a single attachment via chunked IMAP partial fetches
+  const downloadAttachmentChunked = async (job: any) => {
+    const CHUNK_SIZE = 300000; // 300KB per chunk (safe for CPU limit)
+    const chunks: string[] = [];
+    let offset = 0;
+    let done = false;
+
+    while (!done) {
+      const { data: chunkData, error: chunkErr } = await supabase.functions.invoke("download-attachment", {
+        body: {
+          seq_num: job.seqNum,
+          part_num: job.partNum,
+          offset,
+          chunk_size: CHUNK_SIZE,
+          total_size: job.size || 0,
+        },
+      });
+      if (chunkErr) throw new Error(`Chunk error at offset ${offset}: ${chunkErr.message}`);
+      if (!chunkData?.success) throw new Error(chunkData?.message || "Chunk failed");
+
+      chunks.push(chunkData.data); // base64-encoded chunk
+      offset += chunkData.bytes_read;
+      done = chunkData.done || chunkData.bytes_read === 0;
+    }
+
+    // Combine all base64 chunks → decode the raw base64 content from IMAP
+    const fullBase64Raw = chunks.map(c => atob(c)).join("");
+
+    // The raw content from IMAP is base64-encoded attachment data
+    // Decode it to get the actual binary file
+    let fileBytes: Uint8Array;
+    if (job.encoding === "base64") {
+      // fullBase64Raw contains the base64 text from the email - decode it
+      const cleanB64 = fullBase64Raw.replace(/[\r\n\s]/g, "");
+      const binaryStr = atob(cleanB64);
+      fileBytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        fileBytes[i] = binaryStr.charCodeAt(i);
+      }
+    } else {
+      fileBytes = new Uint8Array(fullBase64Raw.length);
+      for (let i = 0; i < fullBase64Raw.length; i++) {
+        fileBytes[i] = fullBase64Raw.charCodeAt(i);
+      }
+    }
+
+    // Upload to storage
+    const safeName = job.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const filePath = `${id}/${Date.now()}_${safeName}`;
+    const { error: upErr } = await supabase.storage
+      .from("ticket-attachments")
+      .upload(filePath, fileBytes, { contentType: job.contentType || "application/octet-stream", upsert: false });
+    if (upErr) throw new Error(`Upload failed: ${upErr.message}`);
+
+    // Create attachment record
+    await supabase.from("ticket_attachments").insert({
+      ticket_id: id,
+      file_name: job.filename,
+      file_path: filePath,
+      file_type: job.contentType || "application/octet-stream",
+      file_size: fileBytes.length,
+      uploaded_by: user!.id,
+    });
+
+    console.log(`Imported ${job.filename} (${fileBytes.length} bytes) via ${chunks.length} chunks`);
+  };
+
   const refetchEmails = async () => {
     if (!id || !user || refetching) return;
     setRefetching(true);
@@ -266,42 +333,31 @@ export default function EmailTicketDetail() {
       toast({ title: "Re-importação concluída", description: data?.message || "Emails verificados" });
       fetchData();
 
-      // Fire all attachment downloads in background (non-blocking)
+      // Download attachments sequentially via chunked fetch
       const jobs = data?.attachment_jobs || [];
       if (jobs.length > 0) {
         setBgAttachments(jobs.length);
-        // Fire all requests without waiting
         for (const job of jobs) {
-          supabase.functions.invoke("download-attachment", {
-            body: {
-              ticket_id: id,
-              agent_id: user.id,
-              seq_num: job.seqNum,
-              part_num: job.partNum,
-              filename: job.filename,
-              content_type: job.contentType,
-              encoding: job.encoding,
-            },
-          }).catch(err => console.error(`Attachment fire error: ${(err as Error).message}`));
-        }
-        // Poll for completion every 5 seconds
-        const expectedNames = jobs.map((j: any) => j.filename);
-        const pollInterval = setInterval(async () => {
-          const { count } = await supabase
-            .from("ticket_attachments")
-            .select("id", { count: "exact", head: true })
-            .eq("ticket_id", id!)
-            .in("file_name", expectedNames);
-          const done = count || 0;
-          setBgAttachments(Math.max(0, expectedNames.length - done));
-          if (done >= expectedNames.length) {
-            clearInterval(pollInterval);
-            setBgAttachments(0);
-            fetchData();
+          try {
+            // Check if already exists
+            const { count } = await supabase
+              .from("ticket_attachments")
+              .select("id", { count: "exact", head: true })
+              .eq("ticket_id", id!)
+              .eq("file_name", job.filename);
+            if (count && count > 0) {
+              setBgAttachments(prev => Math.max(0, prev - 1));
+              continue;
+            }
+            await downloadAttachmentChunked(job);
+            setBgAttachments(prev => Math.max(0, prev - 1));
+          } catch (err) {
+            console.error(`Attachment error for ${job.filename}: ${(err as Error).message}`);
+            toast({ title: `Erro no anexo ${job.filename}`, description: (err as Error).message, variant: "destructive" });
           }
-        }, 5000);
-        // Safety: stop polling after 2 minutes
-        setTimeout(() => { clearInterval(pollInterval); setBgAttachments(0); fetchData(); }, 120000);
+        }
+        setBgAttachments(0);
+        fetchData();
       }
     } catch (err) {
       toast({ title: "Erro na re-importação", description: (err as Error).message, variant: "destructive" });
