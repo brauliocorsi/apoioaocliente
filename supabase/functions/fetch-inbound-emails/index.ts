@@ -971,82 +971,95 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           if (!backfillDone) {
             console.log(`Dup check: fp=${emailFingerprint.substring(0, 30)}... email=${clientEmail}`);
           }
-          try {
-            // Find ticket via email_threads
-            let backfillTicketId: string | null = null;
-            const { data: threadRow } = await adminClient
-              .from("email_threads")
-              .select("ticket_id")
-              .eq("last_message_id", emailFingerprint)
-              .limit(1)
-              .maybeSingle();
-
-            if (threadRow?.ticket_id) {
-              backfillTicketId = threadRow.ticket_id;
-            } else {
-              // Also check pending_emails → ticket_id
-              const { data: pendingRow } = await adminClient
-                .from("pending_emails")
-                .select("ticket_id")
-                .eq("message_id", emailFingerprint)
-                .not("ticket_id", "is", null)
-                .limit(1)
-                .maybeSingle();
-              if (pendingRow?.ticket_id) backfillTicketId = pendingRow.ticket_id;
-            }
-
-            // Also try matching by client email if no direct fingerprint match
-            if (!backfillTicketId) {
-              const { data: threadByEmail } = await adminClient
+          if (!backfillDone) {
+            try {
+              // Find ticket via email_threads
+              let backfillTicketId: string | null = null;
+              const { data: threadRow } = await adminClient
                 .from("email_threads")
                 .select("ticket_id")
-                .eq("email_address", clientEmail.toLowerCase())
-                .order("created_at", { ascending: false })
+                .eq("last_message_id", emailFingerprint)
                 .limit(1)
                 .maybeSingle();
-              if (threadByEmail?.ticket_id) backfillTicketId = threadByEmail.ticket_id;
-            }
 
-            if (backfillTicketId) {
-              const { count } = await adminClient
-                .from("ticket_attachments")
-                .select("id", { count: "exact", head: true })
-                .eq("ticket_id", backfillTicketId);
+              if (threadRow?.ticket_id) {
+                backfillTicketId = threadRow.ticket_id;
+              } else {
+                // Also check pending_emails → ticket_id
+                const { data: pendingRow } = await adminClient
+                  .from("pending_emails")
+                  .select("ticket_id")
+                  .eq("message_id", emailFingerprint)
+                  .not("ticket_id", "is", null)
+                  .limit(1)
+                  .maybeSingle();
+                if (pendingRow?.ticket_id) backfillTicketId = pendingRow.ticket_id;
+              }
 
-              if (count === 0) {
-                console.log(`Duplicate email but ticket ${backfillTicketId} has 0 attachments — fetching full message`);
-                // Use full message fetch (more reliable than BODYSTRUCTURE parsing)
-                try {
-                  const fullMsg = (headers.size && headers.size > 5 * 1024 * 1024)
-                    ? await imap.fetchMessagePartial(seqNum, 900000)
-                    : await imap.fetchMessage(seqNum);
-                  
-                  let uploaded = 0;
-                  if (fullMsg.attachments.length > 0) {
-                    for (const att of fullMsg.attachments) {
-                      if (att.data.length > 0 && att.data.length <= 5 * 1024 * 1024) {
-                        await uploadAttachment(adminClient, backfillTicketId, att, createdBy!);
-                        uploaded++;
+              // Also try matching by client email if no direct fingerprint match
+              if (!backfillTicketId) {
+                const { data: threadByEmail } = await adminClient
+                  .from("email_threads")
+                  .select("ticket_id")
+                  .eq("email_address", clientEmail.toLowerCase())
+                  .order("created_at", { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+                if (threadByEmail?.ticket_id) backfillTicketId = threadByEmail.ticket_id;
+              }
+
+              console.log(`Backfill lookup: fp=${emailFingerprint.substring(0, 40)}... ticket=${backfillTicketId || 'NOT_FOUND'}`);
+
+              if (backfillTicketId) {
+                const { count } = await adminClient
+                  .from("ticket_attachments")
+                  .select("id", { count: "exact", head: true })
+                  .eq("ticket_id", backfillTicketId);
+
+                console.log(`Ticket ${backfillTicketId} has ${count} attachments`);
+
+                if (count === 0) {
+                  console.log(`Fetching full message for attachment backfill...`);
+                  try {
+                    const fullMsg = (headers.size && headers.size > 5 * 1024 * 1024)
+                      ? await imap.fetchMessagePartial(seqNum, 900000)
+                      : await imap.fetchMessage(seqNum);
+                    
+                    console.log(`Parsed ${fullMsg.attachments.length} attachment(s) from MIME body`);
+                    
+                    let uploaded = 0;
+                    if (fullMsg.attachments.length > 0) {
+                      for (const att of fullMsg.attachments) {
+                        console.log(`Attachment: ${att.filename} (${att.data.length} bytes, ${att.contentType})`);
+                        if (att.data.length > 0 && att.data.length <= 5 * 1024 * 1024) {
+                          await uploadAttachment(adminClient, backfillTicketId, att, createdBy!);
+                          uploaded++;
+                        }
                       }
                     }
-                  }
-                  
-                  // Fallback to BODYSTRUCTURE if no attachments found in parsed body
-                  if (uploaded === 0) {
-                    uploaded = await fetchAttachmentsParts(imap, adminClient, seqNum, backfillTicketId, createdBy!);
-                  }
-                  
-                  if (uploaded > 0) {
-                    console.log(`Imported ${uploaded} attachment(s) for ticket ${backfillTicketId}`);
+                    
+                    // Fallback to BODYSTRUCTURE if no attachments found in parsed body
+                    if (uploaded === 0) {
+                      console.log(`No attachments from MIME — trying BODYSTRUCTURE fallback`);
+                      uploaded = await fetchAttachmentsParts(imap, adminClient, seqNum, backfillTicketId, createdBy!);
+                    }
+                    
+                    if (uploaded > 0) {
+                      console.log(`Imported ${uploaded} attachment(s) for ticket ${backfillTicketId}`);
+                    } else {
+                      console.log(`No attachments found for ticket ${backfillTicketId}`);
+                    }
                     newEmailProcessed = true;
+                    backfillDone = true; // Only 1 backfill per batch
+                  } catch (fetchErr) {
+                    console.error(`Full fetch for backfill error: ${(fetchErr as Error).message}`);
+                    backfillDone = true;
                   }
-                } catch (fetchErr) {
-                  console.error(`Full fetch for backfill error: ${(fetchErr as Error).message}`);
                 }
               }
+            } catch (err) {
+              console.error(`Attachment backfill error: ${(err as Error).message}`);
             }
-          } catch (err) {
-            console.error(`Attachment backfill error: ${(err as Error).message}`);
           }
           skipped++;
           continue;
