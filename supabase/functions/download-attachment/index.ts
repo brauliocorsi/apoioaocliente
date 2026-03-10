@@ -311,7 +311,7 @@ Deno.serve(async (req) => {
     await imap.select(cfg.imap_folder || "INBOX");
 
     // Fetch entire MIME part at once
-    const rawBytes = await imap.uidFetchFull(Number(uid), part_num);
+    const rawBytes = await imap.fetchPartByUid(Number(uid), part_num);
     console.log(`Raw IMAP data: ${rawBytes.length} bytes`);
 
     await imap.logout();
