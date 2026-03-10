@@ -121,27 +121,57 @@ class MiniImap {
     const cmd = `UID FETCH ${uid} BODY[${partNum}]`;
     await this.write(`${tag} ${cmd}\r\n`);
 
-    let header = "";
+    // Phase 1: Read ONLY the header line to find {SIZE}\r\n
+    // Accumulate raw bytes, only decode enough to find the literal marker
+    const headerChunks: Uint8Array[] = [];
+    let headerLen = 0;
+    let literalSize = -1;
+    let literalStartOffset = 0; // byte offset where literal data begins
     const start = Date.now();
+
     while (Date.now() - start < 15000) {
       const chunk = await this.readChunk();
       if (!chunk) break;
-      header += this.decoder.decode(chunk);
-      const m = header.match(/\{(\d+)\}\r?\n/);
-      if (m) {
-        const litSize = parseInt(m[1]);
-        const afterPos = header.indexOf(m[0]) + m[0].length;
-        const already = new TextEncoder().encode(header.substring(afterPos));
+      headerChunks.push(chunk);
+      headerLen += chunk.length;
 
+      // Only decode last portion to check for literal marker (avoid decoding entire buffer)
+      // The {SIZE}\r\n pattern is small, so checking the last 100 bytes suffices
+      const checkSize = Math.min(headerLen, 200);
+      const tail = new Uint8Array(checkSize);
+      let pos = checkSize;
+      for (let i = headerChunks.length - 1; i >= 0 && pos > 0; i--) {
+        const c = headerChunks[i];
+        const take = Math.min(c.length, pos);
+        tail.set(c.subarray(c.length - take), pos - take);
+        pos -= take;
+      }
+      const tailStr = this.decoder.decode(tail);
+      const m = tailStr.match(/\{(\d+)\}\r?\n/);
+      if (m) {
+        literalSize = parseInt(m[1]);
+        // Find the exact byte position of the end of {SIZE}\r\n in full buffer
+        const fullHeader = new Uint8Array(headerLen);
+        let off = 0;
+        for (const c of headerChunks) { fullHeader.set(c, off); off += c.length; }
+        const fullStr = this.decoder.decode(fullHeader);
+        const matchIdx = fullStr.indexOf(m[0]);
+        literalStartOffset = new TextEncoder().encode(fullStr.substring(0, matchIdx + m[0].length)).length;
+        
+        // Extract bytes already read that belong to the literal
+        const alreadyRead = fullHeader.subarray(literalStartOffset);
+        
         let literalBytes: Uint8Array;
-        if (already.length >= litSize) {
-          literalBytes = already.slice(0, litSize);
-          if (already.length > litSize) this.buf = already.slice(litSize);
+        if (alreadyRead.length >= literalSize) {
+          literalBytes = alreadyRead.slice(0, literalSize);
+          if (alreadyRead.length > literalSize) {
+            this.buf = alreadyRead.slice(literalSize);
+          }
         } else {
-          const rest = await this.readBytes(litSize - already.length);
-          literalBytes = new Uint8Array(already.length + rest.length);
-          literalBytes.set(already, 0);
-          literalBytes.set(rest, already.length);
+          const rest = await this.readBytes(literalSize - alreadyRead.length);
+          literalBytes = new Uint8Array(alreadyRead.length + rest.length);
+          literalBytes.set(alreadyRead, 0);
+          literalBytes.set(rest, alreadyRead.length);
         }
 
         // Drain trailing response
@@ -159,10 +189,12 @@ class MiniImap {
         }
         return literalBytes;
       }
-      if (header.includes(`${tag} NO`) || header.includes(`${tag} BAD`)) {
+
+      // Check for error responses (only need to check small tail)
+      if (tailStr.includes(`${tag} NO`) || tailStr.includes(`${tag} BAD`)) {
         return new Uint8Array(0);
       }
-      if (header.includes(`${tag} OK`) && !header.includes("{")) {
+      if (tailStr.includes(`${tag} OK`) && !tailStr.includes("{")) {
         return new Uint8Array(0);
       }
     }
