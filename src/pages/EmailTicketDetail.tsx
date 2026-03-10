@@ -472,5 +472,6 @@ export default function EmailTicketDetail() {
         )}
       </DialogContent>
     </Dialog>
+    </>
   );
 }
