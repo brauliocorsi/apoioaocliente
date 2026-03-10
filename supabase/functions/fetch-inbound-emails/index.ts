@@ -254,19 +254,22 @@ function parseFetchedMessageResponse(response: string, forceFastParser = false):
     } catch (_e) { /* keep null */ }
   }
 
-  const LARGE_RAW_PARSE_THRESHOLD = 1500 * 1024;
+  const LARGE_RAW_PARSE_THRESHOLD = 5 * 1024 * 1024; // 5MB — only use fast parse for very large emails
   const FAST_PARSE_SCAN_LIMIT = 900 * 1024;
   const shouldFastParse = forceFastParser || rawMessage.length > LARGE_RAW_PARSE_THRESHOLD;
 
   let parsed = shouldFastParse
-    ? parseMimeMessageFast(rawMessage.substring(0, FAST_PARSE_SCAN_LIMIT))
+    ? parseMimeMessageFast(rawMessage)
     : parseMimeMessage(rawMessage);
 
   if (shouldFastParse && !hasReadableEmailContent(parsed) && rawMessage.length > FAST_PARSE_SCAN_LIMIT) {
     const tailStart = Math.max(0, rawMessage.length - FAST_PARSE_SCAN_LIMIT);
     const tailParsed = parseMimeMessageFast(rawMessage.substring(tailStart));
     if (hasReadableEmailContent(tailParsed)) {
+      // Preserve attachments from first parse
+      const prevAttachments = parsed.attachments;
       parsed = tailParsed;
+      if (parsed.attachments.length === 0) parsed.attachments = prevAttachments;
     }
   }
 
