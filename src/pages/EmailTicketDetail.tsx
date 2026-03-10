@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Send, Mail, User, Clock, Paperclip, Download, FileText, Image } from "lucide-react";
+import { ArrowLeft, Loader2, Send, Mail, User, Clock, Paperclip, Download, FileText, Image, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import { formatDistanceToNow, format } from "date-fns";
@@ -139,6 +140,7 @@ export default function EmailTicketDetail() {
   const [agents, setAgents] = useState<Record<string, { full_name: string; avatar_url?: string | null }>>({});
   const [emailThread, setEmailThread] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [originalViewContent, setOriginalViewContent] = useState<string | null>(null);
 
   const fetchData = async () => {
     if (!id) return;
@@ -238,6 +240,7 @@ export default function EmailTicketDetail() {
   if (!ticket) return <div className="text-center py-20 text-muted-foreground">Ticket não encontrado</div>;
 
   return (
+    <>
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
@@ -402,6 +405,14 @@ export default function EmailTicketDetail() {
                       isLastClientMsg ? "bg-blue-200 dark:bg-blue-800/50 ring-2 ring-blue-400/50" : "bg-muted"
                     }`}>
                       <EmailBody content={msg.content} />
+                      {(msg as any).original_content && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setOriginalViewContent((msg as any).original_content); }}
+                          className="text-[10px] mt-1 underline opacity-60 hover:opacity-100 transition-opacity"
+                        >
+                          Ver email original completo
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -443,5 +454,24 @@ export default function EmailTicketDetail() {
         </CardContent>
       </Card>
     </div>
+
+    <Dialog open={!!originalViewContent} onOpenChange={() => setOriginalViewContent(null)}>
+      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Email original completo</DialogTitle>
+        </DialogHeader>
+        {originalViewContent && (
+          isHtmlContent(originalViewContent) ? (
+            <div
+              className="prose prose-sm dark:prose-invert max-w-none [&_img]:max-w-full [&_img]:h-auto [&_a]:text-primary [&_a]:underline break-words"
+              dangerouslySetInnerHTML={{ __html: sanitizeForDisplay(originalViewContent) }}
+            />
+          ) : (
+            <p className="text-sm whitespace-pre-wrap">{originalViewContent}</p>
+          )
+        )}
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

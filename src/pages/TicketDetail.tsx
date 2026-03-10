@@ -925,6 +925,14 @@ export default function TicketDetail() {
                               )}
                             </div>
                             <RichContent content={msg.content} onViewFull={() => setFullViewContent(msg.content)} />
+                            {(msg as any).original_content && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setFullViewContent((msg as any).original_content); }}
+                                className="text-[10px] mt-1 underline opacity-60 hover:opacity-100 transition-opacity"
+                              >
+                                Ver email original completo
+                              </button>
+                            )}
                             <p className="text-xs mt-1 opacity-70">
                               {new Date(msg.created_at).toLocaleString("pt-PT")}
                             </p>

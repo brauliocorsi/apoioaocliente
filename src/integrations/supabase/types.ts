@@ -1038,6 +1038,7 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          original_content: string | null
           sender_id: string
           sender_type: string
           ticket_id: string
@@ -1046,6 +1047,7 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          original_content?: string | null
           sender_id: string
           sender_type: string
           ticket_id: string
@@ -1054,6 +1056,7 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          original_content?: string | null
           sender_id?: string
           sender_type?: string
           ticket_id?: string
