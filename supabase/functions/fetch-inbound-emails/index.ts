@@ -902,6 +902,39 @@ async function generateFingerprint(from: string, subject: string, bodySnippet: s
   const hash = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("").substring(0, 40);
 }
+
+// Fast base64 decode using lookup table — works on Uint8Array directly
+function fastB64Decode(raw: Uint8Array): Uint8Array {
+  const lut = new Uint8Array(256).fill(255);
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  for (let i = 0; i < 64; i++) lut[chars.charCodeAt(i)] = i;
+
+  const clean = new Uint8Array(raw.length);
+  let len = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const b = raw[i];
+    if (lut[b] < 64 || b === 61) { clean[len++] = b; }
+  }
+
+  let padding = 0;
+  if (len > 0 && clean[len - 1] === 61) padding++;
+  if (len > 1 && clean[len - 2] === 61) padding++;
+  const outLen = Math.floor(len * 3 / 4) - padding;
+  const out = new Uint8Array(outLen);
+
+  let j = 0;
+  for (let i = 0; i < len; i += 4) {
+    const a = lut[clean[i]];
+    const b = lut[clean[i + 1]];
+    const c = lut[clean[i + 2]];
+    const d = lut[clean[i + 3]];
+    if (j < outLen) out[j++] = (a << 2) | (b >> 4);
+    if (j < outLen) out[j++] = ((b & 15) << 4) | (c >> 2);
+    if (j < outLen) out[j++] = ((c & 3) << 6) | d;
+  }
+  return out;
+}
+
 // Parse BODYSTRUCTURE response to find attachment parts (part number, filename, content-type, size)
 interface AttachmentPart { partNum: string; filename: string; contentType: string; encoding: string; size: number; }
 
