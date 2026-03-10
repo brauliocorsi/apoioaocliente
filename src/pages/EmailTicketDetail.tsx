@@ -294,6 +294,12 @@ export default function EmailTicketDetail() {
             {emailThread ? ` · Thread: ${emailThread.email_address}` : ""}
           </p>
         </div>
+        {ticket.client_email && (
+          <Button variant="outline" size="sm" onClick={refetchEmails} disabled={refetching} className="shrink-0 gap-1.5">
+            <RefreshCw className={`h-3.5 w-3.5 ${refetching ? "animate-spin" : ""}`} />
+            {refetching ? "A importar..." : "Re-importar emails"}
+          </Button>
+        )}
       </div>
 
       {/* Controls */}
