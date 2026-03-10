@@ -944,8 +944,13 @@ function parseBodyStructureAttachments(bs: string, prefix = ""): AttachmentPart[
   // Extract the BODYSTRUCTURE content between the outer FETCH parens
   let struct = bs;
   if (!prefix) {
-    const bsMatch = bs.match(/BODYSTRUCTURE\s+(\(.*\))\s*\)\s*\n/s);
-    if (!bsMatch) return results;
+    // Try multiple patterns — IMAP servers format this differently
+    const bsMatch = bs.match(/BODYSTRUCTURE\s+(\(.*\))\s*\)\s*$/ms)
+      || bs.match(/BODYSTRUCTURE\s+(\(.*\))/s);
+    if (!bsMatch) {
+      console.log(`BODYSTRUCTURE regex failed on: ${bs.substring(0, 300)}`);
+      return results;
+    }
     struct = bsMatch[1];
   }
   
@@ -2085,14 +2090,10 @@ Deno.serve(async (req) => {
 
             // Collect attachment metadata — don't download inline (CPU limit)
             const bs = await imap.fetchBodyStructure(seqNum);
+            console.log(`Refetch BODYSTRUCTURE seq=${seqNum} (first 800): ${bs.substring(0, 800)}`);
             const parts = parseBodyStructureAttachments(bs);
+            console.log(`Refetch parsed ${parts.length} attachment parts: ${JSON.stringify(parts.map(p => ({ partNum: p.partNum, filename: p.filename, size: p.size })))}`);
             const validParts = parts.filter(p => p.size <= 5 * 1024 * 1024);
-
-            // Get UID for this message (needed for download-attachment function)
-            let uid = 0;
-            if (validParts.length > 0) {
-              uid = await imap.fetchUid(seqNum);
-            }
 
             for (const part of validParts) {
               const { count } = await adminClient.from("ticket_attachments")
@@ -2104,7 +2105,7 @@ Deno.serve(async (req) => {
                 continue;
               }
               pendingAttachments.push({
-                uid,
+                seq_num: seqNum,
                 part_num: part.partNum,
                 filename: part.filename,
                 content_type: part.contentType || "application/octet-stream",

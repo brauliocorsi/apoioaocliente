@@ -273,6 +273,7 @@ export default function EmailTicketDetail() {
         try {
           const { data: attData, error: attErr } = await supabase.functions.invoke("download-attachment", {
             body: {
+              seq_num: att.seq_num,
               part_num: att.part_num,
               ticket_id: id,
               filename: att.filename,
