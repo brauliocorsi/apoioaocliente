@@ -898,7 +898,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
     return { success: true, message, created, pending, updated, blocked, skipped, total: batch.length, remaining };
   } catch (err) {
-    try { await imap.logout(); } catch { /* */ }
+    try { await imap.logout(); } catch (_e) { /* */ }
     throw err;
   }
 }
