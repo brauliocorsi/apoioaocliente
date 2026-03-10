@@ -104,6 +104,15 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile
               <Mail className="h-3 w-3" />
               {emailUnreadCount}
             </Badge>
+          ) : agentReplied ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center">
+                  <MailCheck className="h-3.5 w-3.5 text-success" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent><p className="text-xs">Cliente respondido</p></TooltipContent>
+            </Tooltip>
           ) : unreadCount && unreadCount > 0 ? (
             <Badge variant="destructive" className="text-[10px] h-4 min-w-[16px] justify-center px-1">
               {unreadCount}
