@@ -2093,7 +2093,7 @@ Deno.serve(async (req) => {
             console.log(`Refetch BODYSTRUCTURE seq=${seqNum} (first 800): ${bs.substring(0, 800)}`);
             const parts = parseBodyStructureAttachments(bs);
             console.log(`Refetch parsed ${parts.length} attachment parts: ${JSON.stringify(parts.map(p => ({ partNum: p.partNum, filename: p.filename, size: p.size })))}`);
-            const validParts = parts.filter(p => p.size <= 5 * 1024 * 1024);
+            const validParts = parts.filter(p => p.size <= 10 * 1024 * 1024);
 
             for (const part of validParts) {
               const { count } = await adminClient.from("ticket_attachments")
