@@ -263,8 +263,13 @@ export default function EmailTicketDetail() {
       });
       if (error) throw error;
       if (data?.success === false) throw new Error(data.message);
+      const bgCount = data?.attachments_background || 0;
+      setBgAttachments(bgCount);
       toast({ title: "Re-importação concluída", description: data?.message || "Emails verificados" });
       fetchData();
+      if (bgCount > 0) {
+        setTimeout(() => { fetchData(); setBgAttachments(0); }, 15000);
+      }
     } catch (err) {
       toast({ title: "Erro na re-importação", description: (err as Error).message, variant: "destructive" });
     }
