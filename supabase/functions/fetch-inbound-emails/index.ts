@@ -734,7 +734,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
     // ── BATCH: check up to 10 headers if they're all duplicates, but only fetch 1 full body ──
     const MAX_HEADER_CHECKS = 10;
-    const MAX_INLINE_EMAIL_SIZE = 1200 * 1024; // >1.2MB falls back to header-only pending import
+    const MAX_INLINE_EMAIL_SIZE = 10 * 1024 * 1024; // 10MB — attachments are already capped individually at 5MB
     let headersChecked = 0;
     let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
     let newEmailProcessed = false;
