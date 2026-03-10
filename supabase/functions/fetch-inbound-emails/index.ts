@@ -1328,6 +1328,7 @@ Deno.serve(async (req) => {
     let action: string | undefined;
     let pendingId: string | undefined;
     let offset: number | undefined;
+    let searchDays: number | undefined;
     try {
       const body = await req.json();
       testOnly = body?.test_only === true;
