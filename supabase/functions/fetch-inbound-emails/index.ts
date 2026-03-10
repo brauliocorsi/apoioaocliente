@@ -2035,8 +2035,7 @@ Deno.serve(async (req) => {
       const port = Number(imapCfg.imap_port) || 993;
       let messagesAdded = 0;
       let contentUpdated = false;
-      let attachmentPartsFound = 0;
-      let attachmentsImported = 0;
+      const pendingAttachments: { seq_num: number; part_num: string; filename: string; content_type: string; encoding: string; size: number }[] = [];
 
       try {
         const greeting = await imap.connect(imapCfg.imap_host, port);
