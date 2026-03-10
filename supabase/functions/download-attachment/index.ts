@@ -266,7 +266,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { part_num, ticket_id, filename, content_type, encoding, client_email } = body;
+    const { part_num, ticket_id, filename, content_type, encoding, client_email, seq_num } = body;
 
     if (!part_num || !ticket_id || !filename || !client_email) {
       return new Response(JSON.stringify({ success: false, message: "Missing params" }), {
