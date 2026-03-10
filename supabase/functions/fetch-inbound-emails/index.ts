@@ -914,16 +914,22 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
         pending++;
         await imap.markAsSeen(seqNum);
+        processed++;
+        // Break after processing 1 new (non-skipped) email to stay within CPU limits
+        break;
       } catch (err) {
         console.error(`Email ${seqNum} error: ${(err as Error).message}`);
+        processed++;
+        break; // Also break on error to avoid CPU timeout
       }
     }
 
     await imap.logout();
 
-    const remaining = emailIds.length - batch.length;
+    const totalChecked = skipped + processed;
+    const remaining = emailIds.length - totalChecked;
     const parts = [];
-    if (pending > 0) parts.push(`${pending} para revisão`);
+    if (pending > 0) parts.push(`${pending} para revisao`);
     if (updated > 0) parts.push(`${updated} atualizados`);
     if (blocked > 0) parts.push(`${blocked} bloqueados`);
     if (skipped > 0) parts.push(`${skipped} duplicados`);
