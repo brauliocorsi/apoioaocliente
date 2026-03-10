@@ -158,15 +158,25 @@ export default function ClientsTab() {
                           <TableCell className="text-sm">{client.email}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{client.phone || "–"}</TableCell>
                           <TableCell>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 gap-1 text-xs"
-                              onClick={() => setSelectedClient({ id: client.id, full_name: client.full_name, email: client.email })}
-                            >
-                              <KeyRound className="h-3 w-3" />
-                              Senha
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => setSelectedClient({ id: client.id, full_name: client.full_name, email: client.email })}
+                              >
+                                <KeyRound className="h-3 w-3" />
+                                Senha
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+                                onClick={() => setClientToDelete({ id: client.id, full_name: client.full_name })}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
