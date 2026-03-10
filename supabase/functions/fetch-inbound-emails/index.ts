@@ -1212,7 +1212,7 @@ Deno.serve(async (req) => {
     }
 
     // Process emails - 1 at a time, frontend loop handles iteration
-    const result = await processEmails({ fetchRecent, maxEmails: 1, agentId });
+    const result = await processEmails({ fetchRecent, maxEmails, agentId, offset });
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
