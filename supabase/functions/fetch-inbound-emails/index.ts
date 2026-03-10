@@ -419,17 +419,20 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
         contentType.includes("video/");
 
       if (isAttachment && filename) {
+        // Quick size estimate BEFORE any decoding — saves CPU on large attachments
+        const rawLen = partBody.length;
+        const estimatedBytes = transferEncoding === "base64"
+          ? Math.floor((rawLen * 3) / 4)
+          : rawLen;
+        if (estimatedBytes > 5 * 1024 * 1024) {
+          // Still record attachment metadata but skip data
+          result.attachments.push({ filename, contentType: fullContentType.split(";")[0].trim(), data: new Uint8Array(0) });
+          continue;
+        }
         let attachData: Uint8Array;
         if (transferEncoding === "base64") {
-          const estimatedBytes = Math.floor((partBody.replace(/\r?\n/g, "").trim().length * 3) / 4);
-          if (estimatedBytes > 5 * 1024 * 1024) {
-            continue;
-          }
           attachData = decodeBase64ToBytes(partBody, 5 * 1024 * 1024);
         } else {
-          if (partBody.length > 5 * 1024 * 1024) {
-            continue;
-          }
           attachData = new TextEncoder().encode(partBody);
         }
         if (attachData.length > 0 && attachData.length <= 5 * 1024 * 1024) {
@@ -734,7 +737,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
     // ── BATCH: check up to 10 headers if they're all duplicates, but only fetch 1 full body ──
     const MAX_HEADER_CHECKS = 10;
-    const MAX_INLINE_EMAIL_SIZE = 1200 * 1024; // >1.2MB falls back to header-only pending import
+    const MAX_INLINE_EMAIL_SIZE = 10 * 1024 * 1024; // 10MB — attachments are already capped individually at 5MB
     let headersChecked = 0;
     let created = 0, pending = 0, blocked = 0, updated = 0, skipped = 0;
     let newEmailProcessed = false;
