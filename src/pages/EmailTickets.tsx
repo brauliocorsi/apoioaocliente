@@ -152,20 +152,19 @@ export default function EmailTickets() {
     setPollProgress("");
     let totalProcessed = 0;
     let round = 0;
+    let currentOffset = 0;
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
       const userId = sessionData?.session?.user?.id;
 
-      // Loop until no remaining emails
-      let consecutiveSkipRounds = 0;
       while (true) {
         round++;
         setPollProgress(`A importar... (lote ${round}, ${totalProcessed} verificados)`);
 
         const { data } = await supabase.functions.invoke("fetch-inbound-emails", {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
-          body: { fetch_recent: fetchRecent, max_emails: 1, agent_id: userId },
+          body: { fetch_recent: fetchRecent, max_emails: 5, agent_id: userId, offset: currentOffset },
         });
 
         if (data?.error) {
@@ -173,41 +172,39 @@ export default function EmailTickets() {
           break;
         }
 
-        const batchTotal = data?.total || 0;
-        const remaining = data?.remaining || 0;
         const newEmails = (data?.pending || 0) + (data?.updated || 0) + (data?.blocked || 0);
-        totalProcessed += batchTotal;
+        totalProcessed += (data?.total || 0);
 
-        // Track consecutive skip-only rounds
-        if (newEmails === 0 && batchTotal > 0) {
-          consecutiveSkipRounds++;
-        } else {
-          consecutiveSkipRounds = 0;
-        }
-
-        // Refresh lists only when new emails were processed
+        // Refresh lists when new emails were processed
         if (newEmails > 0) {
           await Promise.all([fetchEmailTickets(), fetchPendingEmails(), fetchProcessedEmails()]);
         }
 
-        if (remaining <= 0) {
+        // If a new email was processed within this batch, re-run same offset
+        // (because we broke out of the loop early after 1 new email)
+        if (data?.new_email_processed) {
+          // Don't advance offset - there may be more in this batch
+          // But do count it
+        } else if (data?.next_offset !== null && data?.next_offset !== undefined) {
+          currentOffset = data.next_offset;
+        } else {
+          // No more emails
           toast({
-            title: "Importacao concluida",
+            title: "Importação concluída",
             description: data?.message || `${totalProcessed} emails verificados.`,
           });
           break;
         }
 
-        // Safety: stop after 50 rounds to prevent infinite loops
-        if (round >= 50) {
+        // Safety: stop after 100 rounds
+        if (round >= 100) {
           toast({
-            title: "Importacao parcial",
+            title: "Importação parcial",
             description: `${totalProcessed} emails verificados. Clique novamente para continuar.`,
           });
           break;
         }
 
-        // Small delay between batches
         await new Promise(r => setTimeout(r, 300));
       }
     } catch (err) {
