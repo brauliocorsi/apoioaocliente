@@ -254,27 +254,6 @@ export default function EmailTicketDetail() {
     window.open(data.publicUrl, "_blank");
   };
 
-  // Download a single attachment via server-side edge function (full fetch + upload)
-  const downloadAttachmentServerSide = async (job: any) => {
-    const { data, error } = await supabase.functions.invoke("download-attachment", {
-      body: {
-        uid: job.uid,
-        part_num: job.partNum,
-        ticket_id: id,
-        filename: job.filename,
-        content_type: job.contentType,
-        encoding: job.encoding,
-      },
-    });
-    if (error) throw new Error(`Download error: ${error.message}`);
-    if (!data?.success) throw new Error(data?.message || "Download failed");
-    if (data?.skipped) {
-      console.log(`Skipped ${job.filename} (already exists)`);
-      return;
-    }
-    console.log(`Imported ${job.filename} (${data.file_size} bytes) server-side`);
-  };
-
   const refetchEmails = async () => {
     if (!id || !user || refetching) return;
     setRefetching(true);
@@ -286,23 +265,6 @@ export default function EmailTicketDetail() {
       if (data?.success === false) throw new Error(data.message);
       toast({ title: "Re-importação concluída", description: data?.message || "Emails verificados" });
       fetchData();
-
-      // Download attachments server-side (edge function handles full fetch + upload)
-      const jobs = data?.attachment_jobs || [];
-      if (jobs.length > 0) {
-        setBgAttachments(jobs.length);
-        for (const job of jobs) {
-          try {
-            await downloadAttachmentServerSide(job);
-            setBgAttachments(prev => Math.max(0, prev - 1));
-          } catch (err) {
-            console.error(`Attachment error for ${job.filename}: ${(err as Error).message}`);
-            toast({ title: `Erro no anexo ${job.filename}`, description: (err as Error).message, variant: "destructive" });
-          }
-        }
-        setBgAttachments(0);
-        fetchData();
-      }
     } catch (err) {
       toast({ title: "Erro na re-importação", description: (err as Error).message, variant: "destructive" });
     }

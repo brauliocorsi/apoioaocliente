@@ -902,6 +902,39 @@ async function generateFingerprint(from: string, subject: string, bodySnippet: s
   const hash = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("").substring(0, 40);
 }
+
+// Fast base64 decode using lookup table — works on Uint8Array directly
+function fastB64Decode(raw: Uint8Array): Uint8Array {
+  const lut = new Uint8Array(256).fill(255);
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  for (let i = 0; i < 64; i++) lut[chars.charCodeAt(i)] = i;
+
+  const clean = new Uint8Array(raw.length);
+  let len = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const b = raw[i];
+    if (lut[b] < 64 || b === 61) { clean[len++] = b; }
+  }
+
+  let padding = 0;
+  if (len > 0 && clean[len - 1] === 61) padding++;
+  if (len > 1 && clean[len - 2] === 61) padding++;
+  const outLen = Math.floor(len * 3 / 4) - padding;
+  const out = new Uint8Array(outLen);
+
+  let j = 0;
+  for (let i = 0; i < len; i += 4) {
+    const a = lut[clean[i]];
+    const b = lut[clean[i + 1]];
+    const c = lut[clean[i + 2]];
+    const d = lut[clean[i + 3]];
+    if (j < outLen) out[j++] = (a << 2) | (b >> 4);
+    if (j < outLen) out[j++] = ((b & 15) << 4) | (c >> 2);
+    if (j < outLen) out[j++] = ((c & 3) << 6) | d;
+  }
+  return out;
+}
+
 // Parse BODYSTRUCTURE response to find attachment parts (part number, filename, content-type, size)
 interface AttachmentPart { partNum: string; filename: string; contentType: string; encoding: string; size: number; }
 
@@ -2003,7 +2036,7 @@ Deno.serve(async (req) => {
       let messagesAdded = 0;
       let contentUpdated = false;
       let attachmentPartsFound = 0;
-      const attachmentJobs: { uid: number; seqNum: number; parts: AttachmentPart[] }[] = [];
+      let attachmentsImported = 0;
 
       try {
         const greeting = await imap.connect(imapCfg.imap_host, port);
@@ -2037,13 +2070,71 @@ Deno.serve(async (req) => {
             const senderEmail = extractEmail(headers.from);
             if (senderEmail.toLowerCase() !== clientEmail) continue;
 
-            // Collect attachment part info (lightweight BODYSTRUCTURE only, no download)
+            // Find and download attachments inline (reuses existing IMAP session — no extra TLS)
             const bs = await imap.fetchBodyStructure(seqNum);
             const parts = parseBodyStructureAttachments(bs);
-            if (parts.length > 0) {
-              const uid = await imap.fetchUid(seqNum);
-              attachmentJobs.push({ uid, seqNum, parts: parts.filter(p => p.size <= 5 * 1024 * 1024) });
-              attachmentPartsFound += parts.length;
+            const validParts = parts.filter(p => p.size <= 5 * 1024 * 1024);
+            attachmentPartsFound += validParts.length;
+
+            for (const part of validParts) {
+              try {
+                // Check if already exists in DB
+                const { count } = await adminClient.from("ticket_attachments")
+                  .select("id", { count: "exact", head: true })
+                  .eq("ticket_id", ticketIdParam)
+                  .eq("file_name", part.filename);
+                if (count && count > 0) {
+                  console.log(`Attachment ${part.filename} already exists, skipping`);
+                  continue;
+                }
+
+                // Fetch the MIME part body using the existing IMAP session
+                console.log(`Fetching attachment: ${part.filename} part=${part.partNum} encoding=${part.encoding} size=${part.size}`);
+                const rawBytes = await imap.fetchMimePartBinary(seqNum, part.partNum);
+                console.log(`Got ${rawBytes.length} raw bytes for ${part.filename}`);
+
+                if (rawBytes.length === 0) {
+                  console.error(`Empty data for attachment ${part.filename}`);
+                  continue;
+                }
+
+                // Decode base64 if needed
+                let fileBytes: Uint8Array;
+                if (part.encoding === "base64") {
+                  fileBytes = fastB64Decode(rawBytes);
+                } else {
+                  fileBytes = rawBytes;
+                }
+                console.log(`Decoded ${part.filename}: ${fileBytes.length} bytes`);
+
+                // Upload to storage
+                const safeName = part.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+                const filePath = `${ticketIdParam}/${Date.now()}_${safeName}`;
+                const { error: upErr } = await adminClient.storage
+                  .from("ticket-attachments")
+                  .upload(filePath, fileBytes, {
+                    contentType: part.contentType || "application/octet-stream",
+                    upsert: false,
+                  });
+                if (upErr) {
+                  console.error(`Storage upload error for ${part.filename}: ${upErr.message}`);
+                  continue;
+                }
+
+                // Insert DB record
+                await adminClient.from("ticket_attachments").insert({
+                  ticket_id: ticketIdParam,
+                  file_name: part.filename,
+                  file_path: filePath,
+                  file_type: part.contentType || "application/octet-stream",
+                  file_size: fileBytes.length,
+                  uploaded_by: "00000000-0000-0000-0000-000000000000",
+                });
+                attachmentsImported++;
+                console.log(`✓ Imported ${part.filename} (${fileBytes.length} bytes)`);
+              } catch (attErr) {
+                console.error(`Attachment ${part.filename} error: ${(attErr as Error).message}`);
+              }
             }
 
             // Fetch text content only (use partial for large emails to save CPU)
@@ -2102,32 +2193,17 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Return attachment jobs info so frontend can call download-attachment per part (using UID for stability)
-      const attachmentJobsForClient: { uid: number; partNum: string; filename: string; contentType: string; encoding: string; size: number }[] = [];
-      for (const job of attachmentJobs) {
-        for (const part of job.parts) {
-          attachmentJobsForClient.push({
-            uid: job.uid,
-            partNum: part.partNum,
-            filename: part.filename,
-            contentType: part.contentType,
-            encoding: part.encoding,
-            size: part.size,
-          });
-        }
-      }
-
       const parts = [];
       if (contentUpdated) parts.push("conteúdo atualizado");
       if (messagesAdded > 0) parts.push(`${messagesAdded} mensagem(ns) adicionada(s)`);
-      if (attachmentPartsFound > 0) parts.push(`${attachmentPartsFound} anexo(s) a importar`);
+      if (attachmentsImported > 0) parts.push(`${attachmentsImported} anexo(s) importado(s)`);
+      else if (attachmentPartsFound > 0) parts.push(`${attachmentPartsFound} anexo(s) encontrado(s), já existentes`);
       if (parts.length === 0) parts.push("Nenhum conteúdo novo encontrado");
 
       return new Response(JSON.stringify({
         success: true,
         message: parts.join(", "),
-        attachments_background: attachmentPartsFound,
-        attachment_jobs: attachmentJobsForClient,
+        attachments_imported: attachmentsImported,
         content_updated: contentUpdated,
         messages_added: messagesAdded,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
