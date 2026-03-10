@@ -24,12 +24,15 @@ class MiniImap {
   }
 
   private nextTag() { return `T${++this.tagN}`; }
+  getNextTag() { return this.nextTag(); }
 
   private async write(s: string) {
     const w = this.conn.writable.getWriter();
     await w.write(this.encoder.encode(s));
     w.releaseLock();
   }
+  async writeCmd(s: string) { await this.write(s); }
+  async readTagged(tag: string): Promise<string> { return await this.cmd2(tag); }
 
   private async readLine(): Promise<string> {
     let s = "";
