@@ -186,13 +186,14 @@ Deno.serve(async (req) => {
     }
 
     const plainText = stripHtmlToText(body);
+    const htmlEmail = wrapEmailHtml(body);
 
     try {
       if (useResend) {
         const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.resend_from_email || cfg.smtp_from_email || "noreply@upmoveis.pt"}>`;
-        await sendViaResend(fromAddr, clientEmail, subject, plainText);
+        await sendViaResend(fromAddr, clientEmail, subject, plainText, htmlEmail);
       } else {
-        await sendViaSmtp(cfg, clientEmail, subject, plainText);
+        await sendViaSmtp(cfg, clientEmail, subject, plainText, htmlEmail);
       }
       await adminClient.from("email_logs").insert({
         recipient: clientEmail, subject, status: "sent", source: "send-ticket-email", ticket_id, template_id,
