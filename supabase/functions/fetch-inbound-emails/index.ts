@@ -186,53 +186,20 @@ class ImapClient {
     attachments: { filename: string; contentType: string; data: Uint8Array }[];
   }> {
     const response = await this.command(`FETCH ${seqNum} BODY[]`);
+    return parseFetchedMessageResponse(response, false);
+  }
 
-    // Strip IMAP FETCH wrapper: "* N FETCH (BODY[] {size}\r\n" prefix
-    let rawMessage = response;
-    const fetchStart = rawMessage.match(/\* \d+ FETCH \(BODY\[\] \{\d+\}\r?\n/);
-    if (fetchStart) {
-      rawMessage = rawMessage.substring((fetchStart.index || 0) + fetchStart[0].length);
-    }
-    // Strip trailing IMAP tag response
-    rawMessage = rawMessage.replace(/\)\r?\n\s*A\d{4}\s+OK.*$/s, "").trim();
-
-    let from = "";
-    let subject = "";
-    let messageId = "";
-    let date: string | null = null;
-
-    const fromMatch = rawMessage.match(/^From:\s*(.+?)$/im);
-    if (fromMatch) from = fromMatch[1].trim();
-
-    // Handle multi-line folded Subject headers
-    subject = extractHeader(rawMessage, "Subject");
-    subject = decodeHeaderValue(subject);
-
-    const msgIdMatch = rawMessage.match(/^Message-ID:\s*(.+?)$/im);
-    if (msgIdMatch) messageId = msgIdMatch[1].trim();
-
-    // Extract the Date header for exact email timestamp
-    const dateMatch = rawMessage.match(/^Date:\s*(.+?)$/im);
-    if (dateMatch) {
-      try {
-        const parsed = new Date(dateMatch[1].trim());
-        if (!isNaN(parsed.getTime())) {
-          date = parsed.toISOString();
-        }
-      } catch (_e) { /* keep null */ }
-    }
-
-    const parsed = parseMimeMessage(rawMessage);
-
-    return {
-      from,
-      subject: subject || "Sem assunto",
-      bodyText: parsed.bodyText,
-      bodyHtml: parsed.bodyHtml,
-      messageId,
-      date,
-      attachments: parsed.attachments,
-    };
+  async fetchMessagePartial(seqNum: number, maxBytes = 900000): Promise<{
+    from: string;
+    subject: string;
+    bodyText: string;
+    bodyHtml: string;
+    messageId: string;
+    date: string | null;
+    attachments: { filename: string; contentType: string; data: Uint8Array }[];
+  }> {
+    const response = await this.command(`FETCH ${seqNum} BODY[]<0.${maxBytes}>`);
+    return parseFetchedMessageResponse(response, true);
   }
 
   async markAsSeen(seqNum: number): Promise<void> {
@@ -243,6 +210,75 @@ class ImapClient {
     try { await this.command("LOGOUT"); } catch (_e) { /* ignore */ }
     try { this.conn.close(); } catch (_e2) { /* ignore */ }
   }
+}
+
+function parseFetchedMessageResponse(response: string, forceFastParser = false): {
+  from: string;
+  subject: string;
+  bodyText: string;
+  bodyHtml: string;
+  messageId: string;
+  date: string | null;
+  attachments: { filename: string; contentType: string; data: Uint8Array }[];
+} {
+  // Strip IMAP FETCH wrapper for both full and partial fetches
+  let rawMessage = response;
+  const fetchStart = rawMessage.match(/\* \d+ FETCH \(BODY\[\](?:<\d+>)? \{\d+\}\r?\n/);
+  if (fetchStart) {
+    rawMessage = rawMessage.substring((fetchStart.index || 0) + fetchStart[0].length);
+  }
+  // Strip trailing IMAP tag response
+  rawMessage = rawMessage.replace(/\)\r?\n\s*A\d{4}\s+OK.*$/s, "").trim();
+
+  let from = "";
+  let subject = "";
+  let messageId = "";
+  let date: string | null = null;
+
+  const fromMatch = rawMessage.match(/^From:\s*(.+?)$/im);
+  if (fromMatch) from = fromMatch[1].trim();
+
+  subject = extractHeader(rawMessage, "Subject");
+  subject = decodeHeaderValue(subject);
+
+  const msgIdMatch = rawMessage.match(/^Message-ID:\s*(.+?)$/im);
+  if (msgIdMatch) messageId = msgIdMatch[1].trim();
+
+  const dateMatch = rawMessage.match(/^Date:\s*(.+?)$/im);
+  if (dateMatch) {
+    try {
+      const parsedDate = new Date(dateMatch[1].trim());
+      if (!isNaN(parsedDate.getTime())) {
+        date = parsedDate.toISOString();
+      }
+    } catch (_e) { /* keep null */ }
+  }
+
+  const LARGE_RAW_PARSE_THRESHOLD = 1500 * 1024;
+  const FAST_PARSE_SCAN_LIMIT = 900 * 1024;
+  const shouldFastParse = forceFastParser || rawMessage.length > LARGE_RAW_PARSE_THRESHOLD;
+
+  let parsed = shouldFastParse
+    ? parseMimeMessageFast(rawMessage.substring(0, FAST_PARSE_SCAN_LIMIT))
+    : parseMimeMessage(rawMessage);
+
+  if (shouldFastParse && !hasReadableEmailContent(parsed) && rawMessage.length > FAST_PARSE_SCAN_LIMIT) {
+    const tailStart = Math.max(0, rawMessage.length - FAST_PARSE_SCAN_LIMIT);
+    const tailParsed = parseMimeMessageFast(rawMessage.substring(tailStart));
+    if (hasReadableEmailContent(tailParsed)) {
+      parsed = tailParsed;
+    }
+  }
+
+  return {
+    from,
+    subject: subject || "Sem assunto",
+    bodyText: parsed.bodyText,
+    bodyHtml: parsed.bodyHtml,
+    messageId,
+    date,
+    attachments: parsed.attachments,
+  };
 }
 
 // Extract a header value, handling multi-line folded headers
@@ -494,6 +530,39 @@ function parseMimeMessage(raw: string, depth = 0): MimeParsed {
   }
 
   return result;
+}
+
+function hasReadableEmailContent(parsed: MimeParsed): boolean {
+  const plain = (parsed.bodyText || "").replace(/\s+/g, " ").trim();
+  const htmlAsText = (parsed.bodyHtml || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return plain.length > 20 || htmlAsText.length > 20;
+}
+
+function parseMimeMessageFast(raw: string): MimeParsed {
+  const limitedRaw = raw.substring(0, 900 * 1024);
+  const parsed = parseMimeMessage(limitedRaw);
+
+  // In fast mode we prioritize body readability and skip attachment processing
+  parsed.attachments = [];
+  if (parsed.bodyText.length > 150000) parsed.bodyText = parsed.bodyText.substring(0, 150000);
+  if (parsed.bodyHtml.length > 250000) parsed.bodyHtml = parsed.bodyHtml.substring(0, 250000);
+
+  if (!hasReadableEmailContent(parsed)) {
+    parsed.bodyText = limitedRaw
+      .split(/\r?\n/)
+      .filter((line) => {
+        const l = line.trim();
+        if (!l) return false;
+        if (l.startsWith("--")) return false;
+        if (/^(content-type|content-transfer-encoding|mime-version|content-disposition):/i.test(l)) return false;
+        return true;
+      })
+      .join("\n")
+      .substring(0, 100000);
+    parsed.bodyHtml = "";
+  }
+
+  return parsed;
 }
 
 function extractName(from: string): string {
@@ -786,8 +855,11 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           break;
         }
 
-        // This email is NOT a duplicate - now fetch the full message body
-        const msg = await imap.fetchMessage(seqNum);
+        // This email is NOT a duplicate - now fetch body (partial for large emails to avoid worker CPU limits)
+        const PARTIAL_FETCH_THRESHOLD = 1800 * 1024;
+        const msg = (headers.size && headers.size > PARTIAL_FETCH_THRESHOLD)
+          ? await imap.fetchMessagePartial(seqNum, 900000)
+          : await imap.fetchMessage(seqNum);
         const clientName = extractName(msg.from);
 
         // Check blocklist
@@ -867,15 +939,18 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         if (ticketId) {
             const htmlPreview = msg.bodyHtml ? msg.bodyHtml.substring(0, 20000) : "";
             const textPreview = (msg.bodyText || "(email sem conteúdo)").substring(0, 10000);
-            const fullBody = msg.bodyHtml
-              ? sanitizeHtml(htmlPreview).substring(0, 10000)
-              : textPreview.substring(0, 5000);
-            const strippedBody = msg.bodyHtml
-              ? stripQuotedHtml(fullBody).substring(0, 10000)
-              : stripQuotedText(fullBody).substring(0, 5000);
-            const body = strippedBody;
+
+            const htmlFull = htmlPreview ? sanitizeHtml(htmlPreview).substring(0, 10000) : "";
+            const htmlStripped = htmlFull ? stripQuotedHtml(htmlFull).substring(0, 10000) : "";
+            const textFull = textPreview.substring(0, 5000);
+            const textStripped = stripQuotedText(textFull).substring(0, 5000);
 
             const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+            const hasReadableHtml = htmlStripped && stripHtml(htmlStripped).length > 0;
+            const fullBody = hasReadableHtml ? htmlFull : textFull;
+            const strippedBody = hasReadableHtml ? htmlStripped : textStripped;
+            const body = strippedBody;
+
             const contentSnippet = stripHtml(body).substring(0, 200).trim().toLowerCase();
             const { data: existingMsgs } = await adminClient
               .from("ticket_messages")
