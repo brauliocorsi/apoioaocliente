@@ -93,6 +93,7 @@ export default function Tickets() {
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [emailUnreadCounts, setEmailUnreadCounts] = useState<Record<string, number>>({});
   const [agentRepliedMap, setAgentRepliedMap] = useState<Record<string, boolean>>({});
+  const [attachmentInfoMap, setAttachmentInfoMap] = useState<Record<string, AttachmentInfo>>({});
   const [fetchKey, setFetchKey] = useState(0);
   const navigate = useNavigate();
   const { statuses, statusLabels } = useTicketStatuses();
