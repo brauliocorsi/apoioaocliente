@@ -746,6 +746,216 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         }
 
         // This email is NOT a duplicate - now fetch the full message body
+        const msg = await imap.fetchMessage(seqNum);
+        const clientName = extractName(msg.from);
+
+        // Check blocklist
+        const blockCheck = await isBlocked(adminClient, clientEmail, msg.subject);
+        if (blockCheck.blocked) {
+          await adminClient.from("pending_emails").insert({
+            from_address: clientEmail.toLowerCase(),
+            from_name: clientName,
+            subject: msg.subject.substring(0, 500),
+            body_text: (msg.bodyText || "").substring(0, 5000),
+            body_html: (msg.bodyHtml ? sanitizeHtml(msg.bodyHtml) : "").substring(0, 10000),
+            message_id: msg.messageId,
+            status: "blocked",
+            rejection_reason: blockCheck.reason,
+          });
+          blocked++;
+          await imap.markAsSeen(seqNum);
+          newEmailProcessed = true;
+          break;
+        }
+
+        // Check if we have an existing open thread OR ticket by client_email
+        const { data: existingThread } = await adminClient
+          .from("email_threads")
+          .select("ticket_id")
+          .eq("email_address", clientEmail.toLowerCase())
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        let ticketId: string | null = null;
+        let threadExists = false;
+
+        if (existingThread) {
+          const { data: ticket } = await adminClient
+            .from("tickets")
+            .select("id, status")
+            .eq("id", existingThread.ticket_id)
+            .single();
+
+          const { data: statusData } = ticket ? await adminClient
+            .from("ticket_statuses")
+            .select("is_closed")
+            .eq("id", ticket.status)
+            .single() : { data: null };
+
+          if (ticket && !statusData?.is_closed) {
+            ticketId = ticket.id;
+            threadExists = true;
+          }
+        }
+
+        // Fallback: check tickets table directly by client_email
+        if (!ticketId) {
+          const { data: openTickets } = await adminClient
+            .from("tickets")
+            .select("id, status")
+            .eq("client_email", clientEmail.toLowerCase())
+            .order("created_at", { ascending: false })
+            .limit(5);
+
+          if (openTickets) {
+            for (const t of openTickets) {
+              const { data: sd } = await adminClient
+                .from("ticket_statuses")
+                .select("is_closed")
+                .eq("id", t.status)
+                .single();
+              if (!sd?.is_closed) {
+                ticketId = t.id;
+                break;
+              }
+            }
+          }
+        }
+
+        if (ticketId) {
+            const fullBody = msg.bodyHtml
+              ? sanitizeHtml(msg.bodyHtml).substring(0, 10000)
+              : (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
+            const strippedBody = msg.bodyHtml
+              ? stripQuotedHtml(fullBody).substring(0, 10000)
+              : stripQuotedText(fullBody).substring(0, 5000);
+            const body = strippedBody;
+
+            const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+            const contentSnippet = stripHtml(body).substring(0, 200).trim().toLowerCase();
+            const { data: existingMsgs } = await adminClient
+              .from("ticket_messages")
+              .select("id, content")
+              .eq("ticket_id", ticketId)
+              .eq("sender_type", "client")
+              .order("created_at", { ascending: false })
+              .limit(10);
+
+            const isDuplicateContent = existingMsgs?.some(
+              (m: any) => stripHtml(m.content).substring(0, 200).trim().toLowerCase() === contentSnippet
+            );
+
+            if (isDuplicateContent) {
+              skipped++;
+              await imap.markAsSeen(seqNum);
+              newEmailProcessed = true;
+              break;
+            }
+
+            const hasQuotedContent = stripHtml(fullBody).length !== stripHtml(strippedBody).length;
+
+            const msgInsert: any = {
+              ticket_id: ticketId,
+              sender_id: "00000000-0000-0000-0000-000000000000",
+              sender_type: "client",
+              content: body,
+              ...(hasQuotedContent ? { original_content: fullBody } : {}),
+            };
+            if (msg.date) msgInsert.created_at = msg.date;
+
+            await adminClient.from("ticket_messages").insert(msgInsert);
+
+            if (threadExists && existingThread) {
+              await adminClient.from("email_threads")
+                .update({ last_message_id: emailFingerprint })
+                .eq("ticket_id", existingThread.ticket_id);
+            } else {
+              await adminClient.from("email_threads").insert({
+                ticket_id: ticketId!,
+                email_address: clientEmail.toLowerCase(),
+                last_message_id: emailFingerprint,
+              });
+            }
+
+            if (msg.attachments.length > 0) {
+              for (const att of msg.attachments) {
+                try {
+                  await uploadAttachment(adminClient, ticketId, att, createdBy!);
+                } catch (err) {
+                  console.error(`Attachment error: ${(err as Error).message}`);
+                }
+              }
+            }
+
+            updated++;
+            await imap.markAsSeen(seqNum);
+            newEmailProcessed = true;
+            break;
+        }
+
+        // New email from unknown/closed thread → pending review queue
+        const pendingInsert: any = {
+          from_address: clientEmail.toLowerCase(),
+          from_name: clientName,
+          subject: msg.subject.substring(0, 500),
+          body_text: (msg.bodyText || "").substring(0, 5000),
+          body_html: (msg.bodyHtml ? sanitizeHtml(msg.bodyHtml) : "").substring(0, 10000),
+          message_id: emailFingerprint,
+          status: "pending",
+        };
+        if (msg.date) pendingInsert.created_at = msg.date;
+
+        const { data: pendingEmail } = await adminClient.from("pending_emails").insert(pendingInsert).select("id").single();
+
+        if (pendingEmail && msg.attachments.length > 0) {
+          const attMeta = [];
+          for (const att of msg.attachments) {
+            try {
+              const meta = await storePendingAttachment(adminClient, pendingEmail.id, att);
+              attMeta.push(meta);
+            } catch (err) {
+              console.error(`Pending attachment error: ${(err as Error).message}`);
+            }
+          }
+          if (attMeta.length > 0) {
+            await adminClient.from("pending_emails")
+              .update({ attachments_meta: attMeta })
+              .eq("id", pendingEmail.id);
+          }
+        }
+
+        pending++;
+        await imap.markAsSeen(seqNum);
+        newEmailProcessed = true;
+        break; // Only 1 new email per call
+      } catch (err) {
+        console.error(`Email ${seqNum} error: ${(err as Error).message}`);
+        newEmailProcessed = true;
+        break;
+      }
+    }
+
+    await imap.logout();
+
+    const nextOffset = offset + headersChecked;
+    const hasMore = nextOffset < totalEmails;
+    const totalChecked = headersChecked;
+    const remaining = hasMore ? (totalEmails - nextOffset) : 0;
+    const parts = [];
+    if (pending > 0) parts.push(`${pending} para revisao`);
+    if (updated > 0) parts.push(`${updated} atualizados`);
+    if (blocked > 0) parts.push(`${blocked} bloqueados`);
+    if (skipped > 0) parts.push(`${skipped} duplicados`);
+    if (parts.length === 0) parts.push("0 novos emails");
+    const message = parts.join(", ") + (remaining > 0 ? `. Restam ${remaining}.` : "");
+
+    return { 
+      success: true, message, created, pending, updated, blocked, skipped, 
+      total: totalChecked, remaining, 
+      next_offset: hasMore ? nextOffset : null,
+      new_email_processed: newEmailProcessed,
+    };
   } catch (err) {
     try { await imap.logout(); } catch (_e) { /* */ }
     throw err;
