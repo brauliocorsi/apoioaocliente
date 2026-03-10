@@ -306,7 +306,7 @@ function InlineStatusHeader({
   );
 }
 
-export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, callCounts, agentProfiles, unreadCounts, emailUnreadCounts, ticketTagsMap, allTags }: KanbanBoardProps) {
+export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, callCounts, agentProfiles, unreadCounts, emailUnreadCounts, ticketTagsMap, allTags, agentRepliedMap }: KanbanBoardProps) {
   const { toast } = useToast();
   const { statuses, statusLabels, refetch: refetchStatuses } = useTicketStatuses();
   const [activeTicket, setActiveTicket] = useState<TicketRow | null>(null);
@@ -318,8 +318,24 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, cal
 
   const statusIds = statuses.map((s) => s.id);
 
+  // Group tickets and sort: unread emails first, then unread portal msgs, then rest
   const grouped = statuses.reduce((acc, s) => {
-    acc[s.id] = tickets.filter((t) => t.status === s.id);
+    const columnTickets = tickets.filter((t) => t.status === s.id);
+    columnTickets.sort((a, b) => {
+      const aEmail = emailUnreadCounts?.[a.id] || 0;
+      const bEmail = emailUnreadCounts?.[b.id] || 0;
+      const aUnread = unreadCounts?.[a.id] || 0;
+      const bUnread = unreadCounts?.[b.id] || 0;
+      // Tickets with unread emails first
+      if (aEmail > 0 && bEmail === 0) return -1;
+      if (bEmail > 0 && aEmail === 0) return 1;
+      // Then tickets with unread portal messages
+      if (aUnread > 0 && bUnread === 0) return -1;
+      if (bUnread > 0 && aUnread === 0) return 1;
+      // Keep original order (most recent first)
+      return 0;
+    });
+    acc[s.id] = columnTickets;
     return acc;
   }, {} as Record<string, TicketRow[]>);
 
