@@ -1057,7 +1057,6 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
                   }
                 }
               }
-              }
             } catch (err) {
               console.error(`Attachment backfill error: ${(err as Error).message}`);
             }
