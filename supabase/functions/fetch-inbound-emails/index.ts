@@ -206,6 +206,24 @@ class ImapClient {
     await this.command(`STORE ${seqNum} +FLAGS (\\Seen)`);
   }
 
+  // Fetch individual MIME part by section number (e.g. "2", "1.2")
+  async fetchMimePart(seqNum: number, partNum: string): Promise<string> {
+    const response = await this.command(`FETCH ${seqNum} BODY[${partNum}]`);
+    // Strip IMAP wrapper to get raw part content
+    const match = response.match(/\{(\d+)\}\r?\n/);
+    if (match) {
+      const start = (match.index || 0) + match[0].length;
+      const len = parseInt(match[1]);
+      return response.substring(start, start + len);
+    }
+    return response;
+  }
+
+  // Fetch BODYSTRUCTURE to identify attachments without downloading them
+  async fetchBodyStructure(seqNum: number): Promise<string> {
+    return await this.command(`FETCH ${seqNum} BODYSTRUCTURE`);
+  }
+
   async logout(): Promise<void> {
     try { await this.command("LOGOUT"); } catch (_e) { /* ignore */ }
     try { this.conn.close(); } catch (_e2) { /* ignore */ }
