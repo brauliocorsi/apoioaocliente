@@ -642,10 +642,12 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
       emailIds = allIds.slice(-params.maxEmails);
     } else {
       emailIds = await imap.searchUnseen();
-      // Fallback: if no unseen emails, search last 7 days to catch already-read emails
+      // Fallback: if no unseen emails, search last 3 days to catch already-read emails
       if (emailIds.length === 0) {
-        console.log("No unseen emails found, falling back to SEARCH SINCE (7 days)");
-        emailIds = await imap.searchSince(7);
+        console.log("No unseen emails found, falling back to SEARCH SINCE (3 days)");
+        const sinceIds = await imap.searchSince(3);
+        // Only take the most recent ones to avoid CPU timeout
+        emailIds = sinceIds.slice(-params.maxEmails);
       }
     }
 
