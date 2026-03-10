@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, Loader2, Mail, RefreshCw, ArrowRight, Check, X, Ban, Eye, Clock, Shield, RotateCw, History, FileCheck, FileX } from "lucide-react";
+import { Search, Loader2, Mail, RefreshCw, ArrowRight, Check, X, Ban, Eye, Clock, Shield, RotateCw, History, FileCheck, FileX, Paperclip, Image, Video } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
