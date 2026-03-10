@@ -164,7 +164,7 @@ export default function EmailTickets() {
 
         const { data } = await supabase.functions.invoke("fetch-inbound-emails", {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
-          body: { fetch_recent: fetchRecent, max_emails: 5, agent_id: userId, offset: currentOffset },
+          body: { fetch_recent: fetchRecent, max_emails: 5, agent_id: userId, offset: currentOffset, search_days: fetchRecent ? 7 : 1 },
         });
 
         if (data?.error) {
