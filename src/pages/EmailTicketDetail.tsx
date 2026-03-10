@@ -407,20 +407,35 @@ export default function EmailTicketDetail() {
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {attachments.map((att) => (
-                <button
+                <div
                   key={att.id}
-                  onClick={() => downloadAttachment(att)}
                   className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors text-left w-full group"
                 >
-                  <div className="shrink-0 h-9 w-9 rounded-md bg-primary/10 text-primary flex items-center justify-center">
-                    {getFileIcon(att.file_type)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">{att.file_name}</p>
-                    <p className="text-xs text-muted-foreground">{formatFileSize(att.file_size)}</p>
-                  </div>
-                  <Download className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                </button>
+                  <button onClick={() => downloadAttachment(att)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                    <div className="shrink-0 h-9 w-9 rounded-md bg-primary/10 text-primary flex items-center justify-center">
+                      {getFileIcon(att.file_type)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">{att.file_name}</p>
+                      <p className="text-xs text-muted-foreground">{formatFileSize(att.file_size)}</p>
+                    </div>
+                    <Download className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                  </button>
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!confirm("Eliminar este anexo?")) return;
+                      await supabase.storage.from("ticket-attachments").remove([att.file_path]);
+                      await supabase.from("ticket_attachments").delete().eq("id", att.id);
+                      toast({ title: "Anexo eliminado" });
+                      fetchData();
+                    }}
+                    className="shrink-0 p-1.5 rounded-md text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Eliminar anexo"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               ))}
             </div>
           </CardContent>
