@@ -434,6 +434,64 @@ function extractName(from: string): string {
   return name || extractEmail(from);
 }
 
+// Strip quoted/previous email content from replies
+function stripQuotedText(text: string): string {
+  if (!text) return text;
+  const lines = text.split(/\r?\n/);
+  const cutPatterns = [
+    /^-{2,}\s*Original\s*Message/i,
+    /^-{2,}\s*Mensagem\s*Original/i,
+    /^-{2,}\s*Forwarded/i,
+    /^On\s.+wrote:$/i,
+    /^Em\s.+escreveu:$/i,
+    /^De:\s/i,
+    /^From:\s/i,
+    /^Enviado:\s/i,
+    /^Sent:\s/i,
+    /^>{2,}/,
+  ];
+  let cutIndex = lines.length;
+  // Also detect consecutive ">" quoted lines
+  let consecutiveQuoted = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (cutPatterns.some(p => p.test(line))) {
+      cutIndex = i;
+      break;
+    }
+    if (line.startsWith(">")) {
+      consecutiveQuoted++;
+      if (consecutiveQuoted >= 2) {
+        cutIndex = i - 1;
+        break;
+      }
+    } else {
+      consecutiveQuoted = 0;
+    }
+  }
+  const result = lines.slice(0, cutIndex).join("\n").trim();
+  return result || text; // fallback to original if stripping removes everything
+}
+
+function stripQuotedHtml(html: string): string {
+  if (!html) return html;
+  // Remove Gmail-style quoted content
+  let cleaned = html.replace(/<div\s+class="gmail_quote"[\s\S]*$/i, "");
+  // Remove Outlook-style quoted content
+  cleaned = cleaned.replace(/<div\s+id="divRplyFwdMsg"[\s\S]*$/i, "");
+  cleaned = cleaned.replace(/<div\s+id="appendonsend"[\s\S]*$/i, "");
+  // Remove blockquote elements (common in replies)
+  cleaned = cleaned.replace(/<blockquote[\s\S]*$/i, "");
+  // Remove "---Original Message---" style markers and everything after
+  cleaned = cleaned.replace(/<hr\s*\/?>[\s\S]*?(?:Original\s*Message|Mensagem\s*Original)[\s\S]*$/i, "");
+  cleaned = cleaned.replace(/(?:<p[^>]*>|<div[^>]*>)?\s*-{2,}\s*(?:Original\s*Message|Mensagem\s*Original)[\s\S]*$/i, "");
+  // Remove "On ... wrote:" pattern
+  cleaned = cleaned.replace(/(?:<p[^>]*>|<div[^>]*>)?\s*(?:On|Em)\s.+?(?:wrote|escreveu)\s*:[\s\S]*$/i, "");
+  // Clean up trailing empty tags
+  cleaned = cleaned.replace(/(<br\s*\/?\s*>|\s|&nbsp;)*$/i, "").trim();
+  return cleaned || html; // fallback to original
+}
+
 function sanitizeHtml(html: string): string {
   let safe = html;
   safe = safe.replace(/<script[\s\S]*?<\/script>/gi, "");
