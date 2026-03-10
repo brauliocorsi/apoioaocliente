@@ -1280,10 +1280,9 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
                   console.error(`Attachment error: ${(err as Error).message}`);
                 }
               }
-            } else {
-              // No attachments from parsed body — try BODYSTRUCTURE for large/partial emails
-              await fetchAttachmentsParts(imap, adminClient, seqNum, ticketId, createdBy!);
             }
+            // Always try BODYSTRUCTURE to catch attachments missed by body parsing (partial fetches, nested MIME)
+            await fetchAttachmentsParts(imap, adminClient, seqNum, ticketId, createdBy!);
 
             updated++;
             await imap.markAsSeen(seqNum);
