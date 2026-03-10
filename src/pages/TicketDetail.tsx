@@ -933,6 +933,39 @@ export default function TicketDetail() {
                                 Ver email original completo
                               </button>
                             )}
+                            {/* Inline attachments matched by timestamp proximity */}
+                            {(() => {
+                              const msgTime = new Date(msg.created_at).getTime();
+                              const msgAtts = attachments.filter((att: any) => {
+                                const attTime = new Date(att.created_at).getTime();
+                                return Math.abs(attTime - msgTime) < 30000; // within 30 seconds
+                              });
+                              if (msgAtts.length === 0) return null;
+                              return (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {msgAtts.map((att: any) => {
+                                    const { data: urlData } = supabase.storage.from("ticket-attachments").getPublicUrl(att.file_path);
+                                    const isImg = att.file_type?.startsWith("image/");
+                                    return (
+                                      <a
+                                        key={att.id}
+                                        href={urlData.publicUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-1.5 rounded border bg-background/50 px-2 py-1 text-xs hover:bg-muted transition-colors"
+                                      >
+                                        {isImg ? (
+                                          <img src={urlData.publicUrl} alt={att.file_name} className="h-10 w-10 object-cover rounded" />
+                                        ) : (
+                                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                        )}
+                                        <span className="truncate max-w-[100px]">{att.file_name}</span>
+                                      </a>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()}
                             <p className="text-xs mt-1 opacity-70">
                               {new Date(msg.created_at).toLocaleString("pt-PT")}
                             </p>
