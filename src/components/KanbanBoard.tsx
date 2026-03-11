@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import { getTicketSlaStatus, calcRemaining, type SlaStatus } from "@/components/ticket/SlaDashboard";
-import { AlertTriangle, Clock, CheckCircle, Timer, Pencil, Check, X, Phone, Mail, MailCheck, Paperclip, Image, Video } from "lucide-react";
+import { AlertTriangle, Clock, CheckCircle, Timer, Pencil, Check, X, Phone, Mail, MailCheck, Paperclip, Image, Video, Plus } from "lucide-react";
 import type { AttachmentInfo } from "@/pages/Tickets";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
