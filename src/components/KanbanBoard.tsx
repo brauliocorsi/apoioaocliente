@@ -411,18 +411,28 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, cal
     }
   };
 
-  const handleRenameStatus = async (id: string, newName: string) => {
+  const handleCreateStatus = useCallback(async () => {
+    const trimmed = newColumnName.trim();
+    if (!trimmed) return;
+    const newId = trimmed.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    const maxSort = statuses.length > 0 ? Math.max(...statuses.map(s => s.sort_order)) : 0;
     const { error } = await supabase
       .from("ticket_statuses")
-      .update({ name: newName })
-      .eq("id", id);
+      .insert({ id: newId, name: trimmed, color: newColumnColor, sort_order: maxSort + 1 } as any);
     if (error) {
-      toast({ title: "Erro ao renomear status", description: error.message, variant: "destructive" });
+      toast({ title: "Erro ao criar estado", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: `Status renomeado → ${newName}` });
+      toast({ title: `Estado "${trimmed}" criado` });
+      setNewColumnName("");
+      setNewColumnColor("#6b7280");
+      setAddingColumn(false);
       refetchStatuses();
     }
-  };
+  }, [newColumnName, newColumnColor, statuses, refetchStatuses, toast]);
+
+  useEffect(() => {
+    if (addingColumn) newColumnInputRef.current?.focus();
+  }, [addingColumn]);
 
   return (
     <TooltipProvider>
