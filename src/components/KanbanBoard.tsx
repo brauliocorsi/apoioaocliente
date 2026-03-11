@@ -479,8 +479,50 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, cal
             </ScrollArea>
           </DroppableColumn>
         ))}
-      </div>
-
+          {/* Add new column button */}
+          <div className="flex-shrink-0 w-64">
+            {addingColumn ? (
+              <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 space-y-2">
+                <Input
+                  ref={newColumnInputRef}
+                  placeholder="Nome do estado..."
+                  value={newColumnName}
+                  onChange={(e) => setNewColumnName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleCreateStatus();
+                    if (e.key === "Escape") { setAddingColumn(false); setNewColumnName(""); }
+                  }}
+                  className="h-8 text-sm"
+                />
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground">Cor:</label>
+                  <input
+                    type="color"
+                    value={newColumnColor}
+                    onChange={(e) => setNewColumnColor(e.target.value)}
+                    className="h-6 w-8 rounded border cursor-pointer"
+                  />
+                </div>
+                <div className="flex gap-1">
+                  <Button size="sm" className="h-7 text-xs flex-1" onClick={handleCreateStatus}>
+                    <Check className="h-3 w-3 mr-1" /> Criar
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setAddingColumn(false); setNewColumnName(""); }}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setAddingColumn(true)}
+                className="w-full h-24 rounded-lg border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-colors flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary"
+              >
+                <Plus className="h-5 w-5" />
+                <span className="text-xs font-medium">Novo Estado</span>
+              </button>
+            )}
+          </div>
+        </div>
       <DragOverlay>
         {activeTicket && <TicketCard ticket={activeTicket} isDragging categoryNames={categoryNames} callCount={callCounts?.[activeTicket.id]} agentProfile={activeTicket.assigned_to ? agentProfiles?.[activeTicket.assigned_to] : undefined} unreadCount={unreadCounts?.[activeTicket.id]} emailUnreadCount={emailUnreadCounts?.[activeTicket.id]} ticketTags={ticketTagsMap?.[activeTicket.id]} allTags={allTags} agentReplied={agentRepliedMap?.[activeTicket.id]} attachmentInfo={attachmentInfoMap?.[activeTicket.id]} />}
       </DragOverlay>
