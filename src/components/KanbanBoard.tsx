@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import { getTicketSlaStatus, calcRemaining, type SlaStatus } from "@/components/ticket/SlaDashboard";
-import { AlertTriangle, Clock, CheckCircle, Timer, Pencil, Check, X, Phone, Mail, MailCheck, Paperclip, Image, Video } from "lucide-react";
+import { AlertTriangle, Clock, CheckCircle, Timer, Pencil, Check, X, Phone, Mail, MailCheck, Paperclip, Image, Video, Plus } from "lucide-react";
 import type { AttachmentInfo } from "@/pages/Tickets";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -326,6 +326,10 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, cal
   const { statuses, statusLabels, refetch: refetchStatuses } = useTicketStatuses();
   const [activeTicket, setActiveTicket] = useState<TicketRow | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
+  const [addingColumn, setAddingColumn] = useState(false);
+  const [newColumnName, setNewColumnName] = useState("");
+  const [newColumnColor, setNewColumnColor] = useState("#6b7280");
+  const newColumnInputRef = useRef<HTMLInputElement>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -420,6 +424,29 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, cal
     }
   };
 
+  const handleCreateStatus = useCallback(async () => {
+    const trimmed = newColumnName.trim();
+    if (!trimmed) return;
+    const newId = trimmed.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    const maxSort = statuses.length > 0 ? Math.max(...statuses.map(s => s.sort_order)) : 0;
+    const { error } = await supabase
+      .from("ticket_statuses")
+      .insert({ id: newId, name: trimmed, color: newColumnColor, sort_order: maxSort + 1 } as any);
+    if (error) {
+      toast({ title: "Erro ao criar estado", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Estado "${trimmed}" criado` });
+      setNewColumnName("");
+      setNewColumnColor("#6b7280");
+      setAddingColumn(false);
+      refetchStatuses();
+    }
+  }, [newColumnName, newColumnColor, statuses, refetchStatuses, toast]);
+
+  useEffect(() => {
+    if (addingColumn) newColumnInputRef.current?.focus();
+  }, [addingColumn]);
+
   return (
     <TooltipProvider>
     <DndContext
@@ -452,8 +479,50 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, cal
             </ScrollArea>
           </DroppableColumn>
         ))}
-      </div>
-
+          {/* Add new column button */}
+          <div className="flex-shrink-0 w-64">
+            {addingColumn ? (
+              <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 space-y-2">
+                <Input
+                  ref={newColumnInputRef}
+                  placeholder="Nome do estado..."
+                  value={newColumnName}
+                  onChange={(e) => setNewColumnName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleCreateStatus();
+                    if (e.key === "Escape") { setAddingColumn(false); setNewColumnName(""); }
+                  }}
+                  className="h-8 text-sm"
+                />
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground">Cor:</label>
+                  <input
+                    type="color"
+                    value={newColumnColor}
+                    onChange={(e) => setNewColumnColor(e.target.value)}
+                    className="h-6 w-8 rounded border cursor-pointer"
+                  />
+                </div>
+                <div className="flex gap-1">
+                  <Button size="sm" className="h-7 text-xs flex-1" onClick={handleCreateStatus}>
+                    <Check className="h-3 w-3 mr-1" /> Criar
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setAddingColumn(false); setNewColumnName(""); }}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setAddingColumn(true)}
+                className="w-full h-24 rounded-lg border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-colors flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary"
+              >
+                <Plus className="h-5 w-5" />
+                <span className="text-xs font-medium">Novo Estado</span>
+              </button>
+            )}
+          </div>
+        </div>
       <DragOverlay>
         {activeTicket && <TicketCard ticket={activeTicket} isDragging categoryNames={categoryNames} callCount={callCounts?.[activeTicket.id]} agentProfile={activeTicket.assigned_to ? agentProfiles?.[activeTicket.assigned_to] : undefined} unreadCount={unreadCounts?.[activeTicket.id]} emailUnreadCount={emailUnreadCounts?.[activeTicket.id]} ticketTags={ticketTagsMap?.[activeTicket.id]} allTags={allTags} agentReplied={agentRepliedMap?.[activeTicket.id]} attachmentInfo={attachmentInfoMap?.[activeTicket.id]} />}
       </DragOverlay>
