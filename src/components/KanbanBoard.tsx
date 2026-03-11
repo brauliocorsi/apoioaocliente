@@ -411,6 +411,19 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, cal
     }
   };
 
+  const handleRenameStatus = async (id: string, newName: string) => {
+    const { error } = await supabase
+      .from("ticket_statuses")
+      .update({ name: newName })
+      .eq("id", id);
+    if (error) {
+      toast({ title: "Erro ao renomear status", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Status renomeado → ${newName}` });
+      refetchStatuses();
+    }
+  };
+
   const handleCreateStatus = useCallback(async () => {
     const trimmed = newColumnName.trim();
     if (!trimmed) return;
