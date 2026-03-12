@@ -521,6 +521,32 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
                     <div><span className="text-muted-foreground">Data levantamento:</span> <span className="ml-2">{ticket.pickup_date || "–"}</span></div>
                   )}
                 </div>
+                {/* OS associadas do GestãoClick */}
+                {loadingOS && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
+                    <Loader2 className="h-3 w-3 animate-spin" /> A verificar OS...
+                  </div>
+                )}
+                {!loadingOS && clientOS.length > 0 && (
+                  <div className="pt-2 space-y-1.5">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                      <Wrench className="h-3 w-3" /> OS no GestãoClick ({clientOS.length})
+                    </p>
+                    {clientOS.map((os: any, idx: number) => (
+                      <div key={os.id || idx} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-muted-foreground truncate">
+                          #{os.codigo || os.numero || os.id}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] shrink-0 border-primary/30 text-primary bg-primary/5"
+                        >
+                          {os.situacao || os.status || os.nome_situacao || "–"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <hr className="border-border" />
