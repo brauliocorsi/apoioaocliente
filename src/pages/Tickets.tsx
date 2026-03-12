@@ -12,7 +12,7 @@ export type AttachmentInfo = {
   hasImages: boolean;
   hasVideos: boolean;
 };
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import KanbanBoard from "@/components/KanbanBoard";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import SlaDashboard, { type SlaTicket, getTicketSlaStatus, calcRemaining, type SlaStatus } from "@/components/ticket/SlaDashboard";
@@ -96,6 +96,7 @@ export default function Tickets() {
   const [attachmentInfoMap, setAttachmentInfoMap] = useState<Record<string, AttachmentInfo>>({});
   const [fetchKey, setFetchKey] = useState(0);
   const navigate = useNavigate();
+  const location = useLocation();
   const { statuses, statusLabels } = useTicketStatuses();
 
   const refreshTickets = () => setFetchKey((k) => k + 1);
@@ -221,6 +222,11 @@ export default function Tickets() {
     };
     fetch();
   }, [statusFilter, priorityFilter, agentFilter, fetchKey]);
+
+  // Refresh when navigating back to this page (location.key changes on each navigation)
+  useEffect(() => {
+    refreshTickets();
+  }, [location.key]);
 
   // Pre-compute SLA counts (before SLA filter, but after other filters)
   const preSlaCounts = (() => {
