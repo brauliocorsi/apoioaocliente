@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Pencil, Check, X, UserPlus, Loader2, Phone, Mail, ArrowLeft, ArrowRight } from "lucide-react";
+import { Pencil, Check, X, UserPlus, Loader2, Phone, Mail, ArrowLeft, ArrowRight, Wrench } from "lucide-react";
 import TagSelector from "./TagSelector";
 import TicketDocuments from "./TicketDocuments";
 import GestaoClickSearch from "./GestaoClickSearch";
