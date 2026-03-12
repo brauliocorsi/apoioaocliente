@@ -373,7 +373,7 @@ export default function Tickets() {
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : view === "kanban" ? (
-        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} callCounts={callCounts} agentProfiles={agentProfiles} unreadCounts={unreadCounts} emailUnreadCounts={emailUnreadCounts} ticketTagsMap={ticketTagsMap} allTags={allTags} agentRepliedMap={agentRepliedMap} attachmentInfoMap={attachmentInfoMap} />
+        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} onOpenTicket={markTicketAsRead} callCounts={callCounts} agentProfiles={agentProfiles} unreadCounts={unreadCounts} emailUnreadCounts={emailUnreadCounts} ticketTagsMap={ticketTagsMap} allTags={allTags} agentRepliedMap={agentRepliedMap} attachmentInfoMap={attachmentInfoMap} />
       ) : (
         <Card>
           <CardContent className="p-0">
