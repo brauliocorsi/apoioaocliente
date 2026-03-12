@@ -72,6 +72,22 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
     }
   }, [ticket?.id]);
 
+  // Fetch OS from GestãoClick by client name
+  useEffect(() => {
+    if (!ticket?.client_name) return;
+    setLoadingOS(true);
+    supabase.functions
+      .invoke("gestaoclick-proxy", {
+        body: { action: "search_os", nome: ticket.client_name },
+      })
+      .then(({ data }) => {
+        const list = data?.data || data?.ordens_servicos || (Array.isArray(data) ? data : []);
+        setClientOS(list.map((o: any) => o.ordem_servico || o));
+      })
+      .catch(() => setClientOS([]))
+      .finally(() => setLoadingOS(false));
+  }, [ticket?.client_name]);
+
   useEffect(() => {
     if (ticket) {
       setForm({
