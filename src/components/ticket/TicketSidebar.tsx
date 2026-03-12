@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Pencil, Check, X, UserPlus, Loader2, Phone, Mail, ArrowLeft, ArrowRight } from "lucide-react";
+import { Pencil, Check, X, UserPlus, Loader2, Phone, Mail, ArrowLeft, ArrowRight, Wrench } from "lucide-react";
 import TagSelector from "./TagSelector";
 import TicketDocuments from "./TicketDocuments";
 import GestaoClickSearch from "./GestaoClickSearch";
@@ -37,6 +37,8 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
   const [linkedCalls, setLinkedCalls] = useState<any[]>([]);
   const [emailMessages, setEmailMessages] = useState<any[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<any>(null);
+  const [clientOS, setClientOS] = useState<any[]>([]);
+  const [loadingOS, setLoadingOS] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -69,6 +71,22 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
       });
     }
   }, [ticket?.id]);
+
+  // Fetch OS from GestãoClick by client name
+  useEffect(() => {
+    if (!ticket?.client_name) return;
+    setLoadingOS(true);
+    supabase.functions
+      .invoke("gestaoclick-proxy", {
+        body: { action: "search_os", nome: ticket.client_name },
+      })
+      .then(({ data }) => {
+        const list = data?.data || data?.ordens_servicos || (Array.isArray(data) ? data : []);
+        setClientOS(list.map((o: any) => o.ordem_servico || o));
+      })
+      .catch(() => setClientOS([]))
+      .finally(() => setLoadingOS(false));
+  }, [ticket?.client_name]);
 
   useEffect(() => {
     if (ticket) {
@@ -503,6 +521,32 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
                     <div><span className="text-muted-foreground">Data levantamento:</span> <span className="ml-2">{ticket.pickup_date || "–"}</span></div>
                   )}
                 </div>
+                {/* OS associadas do GestãoClick */}
+                {loadingOS && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
+                    <Loader2 className="h-3 w-3 animate-spin" /> A verificar OS...
+                  </div>
+                )}
+                {!loadingOS && clientOS.length > 0 && (
+                  <div className="pt-2 space-y-1.5">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                      <Wrench className="h-3 w-3" /> OS no GestãoClick ({clientOS.length})
+                    </p>
+                    {clientOS.map((os: any, idx: number) => (
+                      <div key={os.id || idx} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-muted-foreground truncate">
+                          #{os.codigo || os.numero || os.id}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] shrink-0 border-primary/30 text-primary bg-primary/5"
+                        >
+                          {os.situacao || os.status || os.nome_situacao || "–"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <hr className="border-border" />
