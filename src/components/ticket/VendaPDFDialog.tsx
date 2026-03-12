@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -36,10 +36,11 @@ export default function VendaPDFDialog({ open, onOpenChange, vendaId, vendaCodig
     }
   };
 
-  const handleOpenChange = (isOpen: boolean) => {
-    onOpenChange(isOpen);
-    if (isOpen) fetchVenda();
-  };
+  useEffect(() => {
+    if (open && !venda && !loading) {
+      fetchVenda();
+    }
+  }, [open]);
 
   const handlePrint = () => {
     const content = contentRef.current;
@@ -115,7 +116,7 @@ export default function VendaPDFDialog({ open, onOpenChange, vendaId, vendaCodig
   const pagamentos = venda?.pagamentos || venda?.parcelas || [];
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
