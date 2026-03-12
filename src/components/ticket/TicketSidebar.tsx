@@ -507,6 +507,11 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
 
               <hr className="border-border" />
 
+              {/* === Pesquisa GestãoClick (consulta rápida) === */}
+              <GestaoClickSearch compact />
+
+              <hr className="border-border" />
+
               {/* === Produto === */}
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Produto</p>
