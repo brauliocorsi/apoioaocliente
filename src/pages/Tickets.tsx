@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -100,6 +100,35 @@ export default function Tickets() {
   const { statuses, statusLabels } = useTicketStatuses();
 
   const refreshTickets = () => setFetchKey((k) => k + 1);
+
+  const markTicketAsRead = useCallback(async (ticketId: string) => {
+    setUnreadCounts((prev) => {
+      if (!prev[ticketId]) return prev;
+      const next = { ...prev };
+      delete next[ticketId];
+      return next;
+    });
+    setEmailUnreadCounts((prev) => {
+      if (!prev[ticketId]) return prev;
+      const next = { ...prev };
+      delete next[ticketId];
+      return next;
+    });
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from("ticket_read_status")
+      .upsert(
+        { ticket_id: ticketId, agent_id: user.id, last_read_at: new Date().toISOString() },
+        { onConflict: "ticket_id,agent_id" }
+      );
+
+    if (error) {
+      console.error("Erro ao marcar ticket como lido:", error.message);
+    }
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -344,7 +373,7 @@ export default function Tickets() {
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : view === "kanban" ? (
-        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} callCounts={callCounts} agentProfiles={agentProfiles} unreadCounts={unreadCounts} emailUnreadCounts={emailUnreadCounts} ticketTagsMap={ticketTagsMap} allTags={allTags} agentRepliedMap={agentRepliedMap} attachmentInfoMap={attachmentInfoMap} />
+        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} onOpenTicket={markTicketAsRead} callCounts={callCounts} agentProfiles={agentProfiles} unreadCounts={unreadCounts} emailUnreadCounts={emailUnreadCounts} ticketTagsMap={ticketTagsMap} allTags={allTags} agentRepliedMap={agentRepliedMap} attachmentInfoMap={attachmentInfoMap} />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -356,7 +385,7 @@ export default function Tickets() {
                   <div
                     key={t.id}
                     className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => navigate(`/tickets/${t.id}`)}
+                    onClick={() => { void markTicketAsRead(t.id); navigate(`/tickets/${t.id}`); }}
                   >
                     <div className="flex items-center gap-4">
                       <span className="text-xs font-mono text-muted-foreground w-12">#{t.ticket_number}</span>

@@ -245,10 +245,19 @@ export default function TicketDetail() {
   // Mark ticket as read for current agent
   useEffect(() => {
     if (!id || !user) return;
-    supabase.from("ticket_read_status").upsert(
-      { ticket_id: id, agent_id: user.id, last_read_at: new Date().toISOString() },
-      { onConflict: "ticket_id,agent_id" }
-    );
+
+    const markAsRead = async () => {
+      const { error } = await supabase.from("ticket_read_status").upsert(
+        { ticket_id: id, agent_id: user.id, last_read_at: new Date().toISOString() },
+        { onConflict: "ticket_id,agent_id" }
+      );
+
+      if (error) {
+        console.error("Erro ao marcar ticket como lido:", error.message);
+      }
+    };
+
+    void markAsRead();
   }, [id, user]);
 
   // Load agents for mentions + sender profiles for chat avatars
