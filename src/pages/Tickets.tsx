@@ -12,7 +12,7 @@ export type AttachmentInfo = {
   hasImages: boolean;
   hasVideos: boolean;
 };
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import KanbanBoard from "@/components/KanbanBoard";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import SlaDashboard, { type SlaTicket, getTicketSlaStatus, calcRemaining, type SlaStatus } from "@/components/ticket/SlaDashboard";
