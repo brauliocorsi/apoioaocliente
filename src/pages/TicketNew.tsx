@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft } from "lucide-react";
 import FileUpload from "@/components/FileUpload";
+import GestaoClickSearch from "@/components/ticket/GestaoClickSearch";
 
 type Category = { id: string; name: string };
 type Subcategory = { id: string; category_id: string; name: string };
