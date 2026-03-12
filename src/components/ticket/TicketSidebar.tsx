@@ -507,8 +507,36 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
 
               <hr className="border-border" />
 
-              {/* === Pesquisa GestãoClick (consulta rápida) === */}
-              <GestaoClickSearch compact />
+              {/* === Pesquisa GestãoClick (consulta rápida + preencher campos vazios) === */}
+              <GestaoClickSearch
+                compact
+                onSelectOrder={async (od) => {
+                  const updates: any = {};
+                  if (!ticket.order_number && od.order_number) updates.order_number = od.order_number;
+                  if (!ticket.client_name && od.client_name) updates.client_name = od.client_name;
+                  if (!ticket.client_email && od.client_email) updates.client_email = od.client_email;
+                  if (!ticket.client_phone && od.client_phone) updates.client_phone = od.client_phone;
+                  if (!ticket.product_name && od.product_name) updates.product_name = od.product_name;
+                  if (!ticket.delivery_date && od.delivery_date) updates.delivery_date = od.delivery_date;
+                  if (!ticket.purchase_date && od.purchase_date) updates.purchase_date = od.purchase_date;
+
+                  if (Object.keys(updates).length === 0) {
+                    toast({ title: "Todos os campos já estão preenchidos" });
+                    return;
+                  }
+
+                  const { error } = await supabase
+                    .from("tickets")
+                    .update(updates)
+                    .eq("id", ticket.id);
+                  if (error) {
+                    toast({ title: "Erro ao preencher campos", description: error.message, variant: "destructive" });
+                  } else {
+                    toast({ title: `${Object.keys(updates).length} campo(s) preenchido(s) com dados do GestãoClick` });
+                    onUpdate();
+                  }
+                }}
+              />
 
               <hr className="border-border" />
 
