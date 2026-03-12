@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.download-attachment]
 verify_jwt = false
+
+[functions.gestaoclick-proxy]
+verify_jwt = false
