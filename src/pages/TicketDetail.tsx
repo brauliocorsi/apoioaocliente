@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage, FileVideo, FileText, Trash2, Gavel, ChevronDown, ChevronRight, Check, Mail, Maximize2, Minimize2 } from "lucide-react";
+import { ArrowLeft, Loader2, Clock, Send, MessageSquare, Paperclip, X, FileImage, FileVideo, FileText, Trash2, Gavel, ChevronDown, ChevronRight, Check, Mail, Maximize2, Minimize2, AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -180,6 +181,7 @@ export default function TicketDetail() {
   const [hasEmailThread, setHasEmailThread] = useState(false);
   const [messagesFullscreen, setMessagesFullscreen] = useState(false);
   const [fullViewContent, setFullViewContent] = useState<string | null>(null);
+  const [failedEmails, setFailedEmails] = useState<any[]>([]);
 
   const fetchTicket = async () => {
     if (!id) return;
@@ -197,10 +199,18 @@ export default function TicketDetail() {
     setTicket(t);
     setEvents(evts || []);
     setMessages(msgs || []);
-    // Check for email thread
+    // Check for email thread + failed emails
     if (t) {
-      const { data: et } = await supabase.from("email_threads").select("id").eq("ticket_id", id).limit(1).maybeSingle();
+      const [{ data: et }, { data: failedLogs }] = await Promise.all([
+        supabase.from("email_threads").select("id").eq("ticket_id", id).limit(1).maybeSingle(),
+        supabase.from("email_logs").select("id, created_at, delivery_status, delivery_details, error_message, subject")
+          .eq("ticket_id", id)
+          .eq("status", "failed")
+          .order("created_at", { ascending: false })
+          .limit(5),
+      ]);
       setHasEmailThread(!!(et || t.client_email));
+      setFailedEmails(failedLogs || []);
     }
     setTags((tTags || []).map((r: any) => r.tag_id));
     setClauses((tClauses || []).map((r: any) => r.clause_id));
@@ -992,6 +1002,20 @@ export default function TicketDetail() {
                 </div>
               )}
               <div className="border-t pt-3 space-y-2">
+                {failedEmails.length > 0 && (
+                  <Alert variant="destructive" className="py-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription className="text-xs">
+                      <strong>Falha no envio de email!</strong>
+                      {failedEmails.slice(0, 3).map((fe) => (
+                        <div key={fe.id} className="mt-1 opacity-90">
+                          • {fe.delivery_details || fe.error_message || "Erro desconhecido"}{" "}
+                          <span className="opacity-60">({new Date(fe.created_at).toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })})</span>
+                        </div>
+                      ))}
+                    </AlertDescription>
+                  </Alert>
+                )}
                 {hasEmailThread && (
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400">
                     <Mail className="h-3.5 w-3.5 shrink-0" />
