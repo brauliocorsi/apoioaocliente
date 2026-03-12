@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
     switch (action) {
       case "search_vendas":
         path = "/vendas";
-        if (query) params.set("pesquisa", query);
+        if (query) params.set("codigo", query);
         if (page) params.set("pagina", String(page));
         break;
       case "get_venda":
@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
         break;
       case "search_clientes":
         path = "/clientes";
-        if (query) params.set("pesquisa", query);
+        if (query) params.set("nome", query);
         if (page) params.set("pagina", String(page));
         break;
       case "get_cliente":
