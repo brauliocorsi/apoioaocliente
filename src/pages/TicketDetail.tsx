@@ -199,10 +199,18 @@ export default function TicketDetail() {
     setTicket(t);
     setEvents(evts || []);
     setMessages(msgs || []);
-    // Check for email thread
+    // Check for email thread + failed emails
     if (t) {
-      const { data: et } = await supabase.from("email_threads").select("id").eq("ticket_id", id).limit(1).maybeSingle();
+      const [{ data: et }, { data: failedLogs }] = await Promise.all([
+        supabase.from("email_threads").select("id").eq("ticket_id", id).limit(1).maybeSingle(),
+        supabase.from("email_logs").select("id, created_at, delivery_status, delivery_details, error_message, subject")
+          .eq("ticket_id", id)
+          .eq("status", "failed")
+          .order("created_at", { ascending: false })
+          .limit(5),
+      ]);
       setHasEmailThread(!!(et || t.client_email));
+      setFailedEmails(failedLogs || []);
     }
     setTags((tTags || []).map((r: any) => r.tag_id));
     setClauses((tClauses || []).map((r: any) => r.clause_id));
