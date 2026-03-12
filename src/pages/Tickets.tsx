@@ -101,6 +101,35 @@ export default function Tickets() {
 
   const refreshTickets = () => setFetchKey((k) => k + 1);
 
+  const markTicketAsRead = useCallback(async (ticketId: string) => {
+    setUnreadCounts((prev) => {
+      if (!prev[ticketId]) return prev;
+      const next = { ...prev };
+      delete next[ticketId];
+      return next;
+    });
+    setEmailUnreadCounts((prev) => {
+      if (!prev[ticketId]) return prev;
+      const next = { ...prev };
+      delete next[ticketId];
+      return next;
+    });
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from("ticket_read_status")
+      .upsert(
+        { ticket_id: ticketId, agent_id: user.id, last_read_at: new Date().toISOString() },
+        { onConflict: "ticket_id,agent_id" }
+      );
+
+    if (error) {
+      console.error("Erro ao marcar ticket como lido:", error.message);
+    }
+  }, []);
+
   useEffect(() => {
     Promise.all([
       supabase.from("categories").select("id, name"),
