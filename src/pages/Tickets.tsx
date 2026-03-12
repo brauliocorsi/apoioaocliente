@@ -223,22 +223,10 @@ export default function Tickets() {
     fetch();
   }, [statusFilter, priorityFilter, agentFilter, fetchKey]);
 
-  // Refresh unread counts when page regains visibility (e.g. after navigating back from ticket detail)
+  // Refresh when navigating back to this page (location.key changes on each navigation)
   useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        refreshTickets();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    // Also refresh on window focus for same-tab navigation
-    const handleFocus = () => refreshTickets();
-    window.addEventListener("focus", handleFocus);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("focus", handleFocus);
-    };
-  }, []);
+    refreshTickets();
+  }, [location.key]);
 
   // Pre-compute SLA counts (before SLA filter, but after other filters)
   const preSlaCounts = (() => {
