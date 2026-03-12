@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Pencil, Check, X, UserPlus, Loader2, Phone, Mail, ArrowLeft, ArrowRight } from "lucide-react";
 import TagSelector from "./TagSelector";
 import TicketDocuments from "./TicketDocuments";
+import GestaoClickSearch from "./GestaoClickSearch";
 import { useNavigate } from "react-router-dom";
 
 interface TicketSidebarProps {
@@ -273,6 +274,19 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Encomenda & Entrega</p>
                 <div className="space-y-2">
+                  <GestaoClickSearch
+                    compact
+                    onSelectOrder={(od) => setForm({
+                      ...form,
+                      order_number: od.order_number || form.order_number,
+                      client_name: od.client_name || form.client_name,
+                      client_email: od.client_email || form.client_email,
+                      client_phone: od.client_phone || form.client_phone,
+                      product_name: od.product_name || form.product_name,
+                      delivery_date: od.delivery_date || form.delivery_date,
+                      purchase_date: od.purchase_date || form.purchase_date,
+                    })}
+                  />
                   <div className="space-y-1">
                     <Label className="text-xs">Nº Encomenda</Label>
                     <Input className="h-8 text-xs" value={form.order_number} onChange={(e) => setForm({ ...form, order_number: e.target.value })} />
