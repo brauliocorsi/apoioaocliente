@@ -184,7 +184,7 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile
   );
 }
 
-function DraggableTicket({ ticket, categoryNames, callCount, agentProfile, unreadCount, emailUnreadCount, ticketTags, allTags, agentReplied, attachmentInfo }: { ticket: TicketRow; categoryNames?: Record<string, string>; callCount?: number; agentProfile?: { full_name: string; avatar_url: string | null }; unreadCount?: number; emailUnreadCount?: number; ticketTags?: string[]; allTags?: { id: string; name: string; color: string | null }[]; agentReplied?: boolean; attachmentInfo?: AttachmentInfo }) {
+function DraggableTicket({ ticket, categoryNames, callCount, agentProfile, unreadCount, emailUnreadCount, ticketTags, allTags, agentReplied, attachmentInfo, onOpenTicket }: { ticket: TicketRow; categoryNames?: Record<string, string>; callCount?: number; agentProfile?: { full_name: string; avatar_url: string | null }; unreadCount?: number; emailUnreadCount?: number; ticketTags?: string[]; allTags?: { id: string; name: string; color: string | null }[]; agentReplied?: boolean; attachmentInfo?: AttachmentInfo; onOpenTicket?: (ticketId: string) => void }) {
   const navigate = useNavigate();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: ticket.id,
@@ -197,7 +197,10 @@ function DraggableTicket({ ticket, categoryNames, callCount, agentProfile, unrea
       {...listeners}
       {...attributes}
       className={`cursor-grab active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}
-      onClick={() => navigate(`/tickets/${ticket.id}`)}
+      onClick={() => {
+        onOpenTicket?.(ticket.id);
+        navigate(`/tickets/${ticket.id}`);
+      }}
     >
       <TicketCard ticket={ticket} categoryNames={categoryNames} callCount={callCount} agentProfile={agentProfile} unreadCount={unreadCount} emailUnreadCount={emailUnreadCount} ticketTags={ticketTags} allTags={allTags} agentReplied={agentReplied} attachmentInfo={attachmentInfo} />
     </div>
