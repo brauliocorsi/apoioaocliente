@@ -36,10 +36,11 @@ export default function VendaPDFDialog({ open, onOpenChange, vendaId, vendaCodig
     }
   };
 
-  const handleOpenChange = (isOpen: boolean) => {
-    onOpenChange(isOpen);
-    if (isOpen) fetchVenda();
-  };
+  useEffect(() => {
+    if (open && !venda && !loading) {
+      fetchVenda();
+    }
+  }, [open]);
 
   const handlePrint = () => {
     const content = contentRef.current;
