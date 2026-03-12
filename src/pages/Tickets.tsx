@@ -385,7 +385,7 @@ export default function Tickets() {
                   <div
                     key={t.id}
                     className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => navigate(`/tickets/${t.id}`)}
+                    onClick={() => { void markTicketAsRead(t.id); navigate(`/tickets/${t.id}`); }}
                   >
                     <div className="flex items-center gap-4">
                       <span className="text-xs font-mono text-muted-foreground w-12">#{t.ticket_number}</span>
