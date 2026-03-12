@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Pencil, Check, X, UserPlus, Loader2, Phone, Mail, ArrowLeft, ArrowRight } from "lucide-react";
 import TagSelector from "./TagSelector";
 import TicketDocuments from "./TicketDocuments";
+import GestaoClickSearch from "./GestaoClickSearch";
 import { useNavigate } from "react-router-dom";
 
 interface TicketSidebarProps {
