@@ -96,6 +96,7 @@ export default function Tickets() {
   const [attachmentInfoMap, setAttachmentInfoMap] = useState<Record<string, AttachmentInfo>>({});
   const [fetchKey, setFetchKey] = useState(0);
   const navigate = useNavigate();
+  const location = useLocation();
   const { statuses, statusLabels } = useTicketStatuses();
 
   const refreshTickets = () => setFetchKey((k) => k + 1);
