@@ -47,6 +47,7 @@ interface KanbanBoardProps {
   tickets: TicketRow[];
   categoryNames?: Record<string, string>;
   onTicketMoved?: () => void;
+  onOpenTicket?: (ticketId: string) => void;
   callCounts?: Record<string, number>;
   agentProfiles?: Record<string, { full_name: string; avatar_url: string | null }>;
   unreadCounts?: Record<string, number>;
