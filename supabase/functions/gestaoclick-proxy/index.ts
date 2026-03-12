@@ -46,74 +46,163 @@ Deno.serve(async (req) => {
     );
   }
 
-  try {
-    const { action, query, id, page } = await req.json();
+  const gcHeaders = {
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+    "access-token": accessToken,
+    "secret-access-token": secretToken,
+  };
 
-    // Build URL based on action
-    let path: string;
-    const params = new URLSearchParams();
+  const gcFetch = async (path: string, params?: URLSearchParams) => {
+    const qs = params?.toString();
+    const url = `${GC_BASE}${path}${qs ? "?" + qs : ""}`;
+    console.log(`GestaoClick request: ${url}`);
+    const res = await fetch(url, { method: "GET", headers: gcHeaders });
+    const text = await res.text();
+    console.log(`GestaoClick response status: ${res.status}, body preview: ${text.substring(0, 500)}`);
+    let data;
+    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+    if (!res.ok) throw { status: res.status, data };
+    return data;
+  };
+
+  try {
+    const { action, query, id, page, telefone, nome, codigo } = await req.json();
 
     switch (action) {
-      case "search_vendas":
-        path = "/vendas";
+      // === VENDAS ===
+      case "search_vendas": {
+        const params = new URLSearchParams();
         if (query) params.set("codigo", query);
+        if (nome) params.set("nome", nome);
         if (page) params.set("pagina", String(page));
-        break;
-      case "get_venda":
-        path = `/vendas/${id}`;
-        break;
-      case "search_clientes":
-        path = "/clientes";
+        const data = await gcFetch("/vendas", params);
+        return json(data);
+      }
+      case "get_venda": {
+        const data = await gcFetch(`/vendas/${id}`);
+        return json(data);
+      }
+
+      // === ORDENS DE SERVIÇO ===
+      case "search_os": {
+        const params = new URLSearchParams();
+        if (codigo) params.set("codigo", codigo);
+        if (nome) params.set("nome", nome);
+        if (query) {
+          // If query looks numeric, search by codigo; otherwise by nome
+          if (/^\d+$/.test(query.trim())) {
+            params.set("codigo", query.trim());
+          } else {
+            params.set("nome", query.trim());
+          }
+        }
+        if (page) params.set("pagina", String(page));
+        const data = await gcFetch("/ordens_servicos", params);
+        return json(data);
+      }
+      case "get_os": {
+        const data = await gcFetch(`/ordens_servicos/${id}`);
+        return json(data);
+      }
+
+      // === CLIENTES ===
+      case "search_clientes": {
+        const params = new URLSearchParams();
         if (query) params.set("nome", query);
+        if (telefone) params.set("telefone", telefone);
         if (page) params.set("pagina", String(page));
-        break;
-      case "get_cliente":
-        path = `/clientes/${id}`;
-        break;
+        const data = await gcFetch("/clientes", params);
+        return json(data);
+      }
+      case "get_cliente": {
+        const data = await gcFetch(`/clientes/${id}`);
+        return json(data);
+      }
+
+      // === SEARCH ALL (vendas + OS, optionally by phone) ===
+      case "search_all": {
+        const results: { vendas: any[]; ordens_servico: any[]; clientes: any[] } = {
+          vendas: [],
+          ordens_servico: [],
+          clientes: [],
+        };
+
+        const isPhone = /^[\d\s\+\(\)\-]{7,}$/.test((query || "").trim());
+        const isNumeric = /^\d+$/.test((query || "").trim());
+
+        if (isPhone) {
+          // Search clients by phone first
+          const clientData = await gcFetch("/clientes", (() => {
+            const p = new URLSearchParams();
+            p.set("telefone", query.trim());
+            return p;
+          })());
+          const clientes = clientData?.data || clientData?.clientes || (Array.isArray(clientData) ? clientData : []);
+          results.clientes = clientes.map((c: any) => c.cliente || c);
+
+          // For each client found, search vendas and OS by client name
+          const clientNames = results.clientes.map((c: any) => c.nome).filter(Boolean);
+          const uniqueNames = [...new Set(clientNames)];
+
+          const fetches: Promise<void>[] = [];
+          for (const name of uniqueNames.slice(0, 3)) {
+            fetches.push(
+              gcFetch("/vendas", (() => { const p = new URLSearchParams(); p.set("nome", name); return p; })())
+                .then(d => {
+                  const v = d?.data || d?.vendas || (Array.isArray(d) ? d : []);
+                  results.vendas.push(...v);
+                })
+                .catch(() => {})
+            );
+            fetches.push(
+              gcFetch("/ordens_servicos", (() => { const p = new URLSearchParams(); p.set("nome", name); return p; })())
+                .then(d => {
+                  const os = d?.data || d?.ordens_servicos || (Array.isArray(d) ? d : []);
+                  results.ordens_servico.push(...os);
+                })
+                .catch(() => {})
+            );
+          }
+          await Promise.all(fetches);
+        } else {
+          // Search vendas and OS in parallel
+          const vendaParams = new URLSearchParams();
+          const osParams = new URLSearchParams();
+
+          if (isNumeric) {
+            vendaParams.set("codigo", query.trim());
+            osParams.set("codigo", query.trim());
+          } else if (query) {
+            vendaParams.set("nome", query.trim());
+            osParams.set("nome", query.trim());
+          }
+
+          const [vendaData, osData] = await Promise.all([
+            gcFetch("/vendas", vendaParams).catch(() => ({})),
+            gcFetch("/ordens_servicos", osParams).catch(() => ({})),
+          ]);
+
+          results.vendas = vendaData?.data || vendaData?.vendas || (Array.isArray(vendaData) ? vendaData : []);
+          results.ordens_servico = osData?.data || osData?.ordens_servicos || (Array.isArray(osData) ? osData : []);
+        }
+
+        return json(results);
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Unknown action: ${action}` }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
     }
-
-    const queryString = params.toString();
-    const url = `${GC_BASE}${path}${queryString ? "?" + queryString : ""}`;
-
-    console.log(`GestaoClick request: ${url}`);
-
-    const gcResponse = await fetch(url, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "access-token": accessToken,
-        "secret-access-token": secretToken,
-      },
-    });
-
-    const responseText = await gcResponse.text();
-    console.log(`GestaoClick response status: ${gcResponse.status}, body preview: ${responseText.substring(0, 500)}`);
-
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch {
-      data = { raw: responseText };
-    }
-
-    if (!gcResponse.ok) {
+  } catch (error: any) {
+    if (error?.status && error?.data) {
       return new Response(
-        JSON.stringify({ error: `GestãoClick API error [${gcResponse.status}]`, details: data }),
-        { status: gcResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: `GestãoClick API error [${error.status}]`, details: error.data }),
+        { status: error.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    return new Response(JSON.stringify(data), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("GestaoClick proxy error:", message);
     return new Response(
@@ -122,3 +211,10 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+function json(data: any) {
+  return new Response(JSON.stringify(data), {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}

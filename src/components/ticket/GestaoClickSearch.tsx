@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Loader2, Package, ArrowRight, FileText } from "lucide-react";
+import { Search, Loader2, Package, ArrowRight, FileText, Wrench, Phone } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import VendaPDFDialog from "./VendaPDFDialog";
+import OSDetailDialog from "./OSDetailDialog";
 
 interface GestaoClickSearchProps {
   onSelectOrder?: (orderData: {
@@ -26,27 +27,34 @@ export default function GestaoClickSearch({ onSelectOrder, compact = false }: Ge
   const { toast } = useToast();
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<any[]>([]);
+  const [vendas, setVendas] = useState<any[]>([]);
+  const [ordensServico, setOrdensServico] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
   const [pdfVenda, setPdfVenda] = useState<{ id: string; codigo: string } | null>(null);
+  const [osDetail, setOsDetail] = useState<{ id: string; codigo: string } | null>(null);
+
+  const isPhone = (q: string) => /^[\d\s\+\(\)\-]{7,}$/.test(q.trim());
 
   const search = async () => {
     if (!query.trim()) return;
     setLoading(true);
-    setResults([]);
+    setVendas([]);
+    setOrdensServico([]);
 
     try {
       const { data, error } = await supabase.functions.invoke("gestaoclick-proxy", {
-        body: { action: "search_vendas", query: query.trim() },
+        body: { action: "search_all", query: query.trim() },
       });
 
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
-      setResults(vendas);
+      const v = data?.vendas || [];
+      const os = data?.ordens_servico || [];
+      setVendas(v);
+      setOrdensServico(os);
 
-      if (vendas.length === 0) {
+      if (v.length === 0 && os.length === 0) {
         toast({ title: "Nenhum resultado encontrado no GestãoClick" });
       }
     } catch (e: any) {
@@ -61,27 +69,117 @@ export default function GestaoClickSearch({ onSelectOrder, compact = false }: Ge
     }
   };
 
-  const selectOrder = (venda: any) => {
+  const selectOrder = (item: any) => {
     const orderData = {
-      order_number: venda.codigo || venda.numero || venda.id?.toString() || "",
-      client_name: venda.nome_cliente || venda.cliente?.nome || "",
-      client_email: venda.email_cliente || venda.cliente?.email || "",
-      client_phone: venda.telefone_cliente || venda.cliente?.telefone || "",
-      product_name: venda.itens?.[0]?.nome || venda.produtos?.[0]?.nome || "",
-      delivery_date: venda.data_entrega || "",
-      purchase_date: venda.data_venda || venda.data || "",
+      order_number: item.codigo || item.numero || item.id?.toString() || "",
+      client_name: item.nome_cliente || item.cliente?.nome || "",
+      client_email: item.email_cliente || item.cliente?.email || "",
+      client_phone: item.telefone_cliente || item.cliente?.telefone || "",
+      product_name: item.itens?.[0]?.nome || item.produtos?.[0]?.nome || "",
+      delivery_date: item.data_entrega || item.prazo_entrega || "",
+      purchase_date: item.data_venda || item.data || "",
     };
     onSelectOrder?.(orderData);
-    toast({ title: `Encomenda ${orderData.order_number} selecionada` });
+    toast({ title: `Registo ${orderData.order_number} selecionado` });
     setOpen(false);
-    setResults([]);
+    setVendas([]);
+    setOrdensServico([]);
     setQuery("");
   };
 
-  const openPdf = (e: React.MouseEvent, venda: any) => {
+  const openVendaPdf = (e: React.MouseEvent, v: any) => {
     e.stopPropagation();
-    setPdfVenda({ id: venda.id?.toString(), codigo: venda.codigo || venda.numero || venda.id?.toString() });
+    setPdfVenda({ id: v.id?.toString(), codigo: v.codigo || v.numero || v.id?.toString() });
   };
+
+  const openOsDetail = (e: React.MouseEvent, os: any) => {
+    e.stopPropagation();
+    setOsDetail({ id: os.id?.toString(), codigo: os.codigo || os.numero || os.id?.toString() });
+  };
+
+  const hasResults = vendas.length > 0 || ordensServico.length > 0;
+
+  const renderResultItem = (item: any, i: number, type: "venda" | "os") => (
+    <div
+      key={`${type}-${item.id || i}`}
+      className="w-full text-left p-2 rounded-md border border-border hover:bg-accent/50 transition-colors text-xs space-y-0.5"
+    >
+      <div className="flex items-center justify-between">
+        <span className="font-medium flex items-center gap-1">
+          {type === "os" ? <Wrench className="h-3 w-3 text-primary" /> : <Package className="h-3 w-3 text-primary" />}
+          #{item.codigo || item.numero || item.id}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={(e) => type === "venda" ? openVendaPdf(e, item) : openOsDetail(e, item)}
+            className="p-1 rounded hover:bg-accent"
+            title={type === "venda" ? "Ver detalhes da venda" : "Ver detalhes da OS"}
+          >
+            <FileText className="h-3 w-3 text-primary" />
+          </button>
+          <Badge variant="outline" className="text-[10px]">
+            {item.situacao || item.status || item.nome_situacao || "–"}
+          </Badge>
+        </div>
+      </div>
+      <div className="text-muted-foreground">
+        {item.nome_cliente || item.cliente?.nome || "–"}
+      </div>
+      <div className="flex items-center justify-between">
+        {(item.data_venda || item.data) && (
+          <span className="text-muted-foreground">{item.data_venda || item.data}</span>
+        )}
+        <button
+          onClick={() => selectOrder(item)}
+          className="text-primary text-[10px] hover:underline flex items-center gap-0.5"
+        >
+          <ArrowRight className="h-2.5 w-2.5" /> Usar dados
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderResultItemFull = (item: any, i: number, type: "venda" | "os") => (
+    <div
+      key={`${type}-${item.id || i}`}
+      className="w-full text-left p-3 rounded-lg border border-border hover:bg-accent/50 transition-colors text-sm space-y-1"
+    >
+      <div className="flex items-center justify-between">
+        <span className="font-semibold flex items-center gap-1.5">
+          {type === "os" ? <Wrench className="h-4 w-4 text-primary" /> : <Package className="h-4 w-4 text-primary" />}
+          {type === "os" ? "OS" : "Encomenda"} #{item.codigo || item.numero || item.id}
+        </span>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 gap-1 text-xs"
+            onClick={(e) => type === "venda" ? openVendaPdf(e, item) : openOsDetail(e, item)}
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Ver Detalhes
+          </Button>
+          <Badge variant="outline" className="text-xs">
+            {item.situacao || item.status || item.nome_situacao || "–"}
+          </Badge>
+        </div>
+      </div>
+      <div className="text-muted-foreground text-xs">
+        Cliente: {item.nome_cliente || item.cliente?.nome || "–"}
+      </div>
+      {item.valor_total && (
+        <div className="text-muted-foreground text-xs">
+          Valor: {parseFloat(item.valor_total).toLocaleString("pt-PT", { minimumFractionDigits: 2 })} €
+        </div>
+      )}
+      <button
+        onClick={() => selectOrder(item)}
+        className="flex items-center gap-1 text-xs text-primary hover:underline"
+      >
+        <ArrowRight className="h-3 w-3" /> Usar dados deste registo
+      </button>
+    </div>
+  );
 
   if (compact) {
     return (
@@ -96,7 +194,7 @@ export default function GestaoClickSearch({ onSelectOrder, compact = false }: Ge
           <CollapsibleContent className="mt-2 space-y-2">
             <div className="flex gap-1.5">
               <Input
-                placeholder="Nº encomenda, cliente..."
+                placeholder="Nº encomenda, telefone, cliente..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && search()}
@@ -106,44 +204,29 @@ export default function GestaoClickSearch({ onSelectOrder, compact = false }: Ge
                 {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
               </Button>
             </div>
-            {results.length > 0 && (
-              <div className="max-h-48 overflow-y-auto space-y-1.5">
-                {results.map((v: any, i: number) => (
-                  <div
-                    key={v.id || i}
-                    className="w-full text-left p-2 rounded-md border border-border hover:bg-accent/50 transition-colors text-xs space-y-0.5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">#{v.codigo || v.numero || v.id}</span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={(e) => openPdf(e, v)}
-                          className="p-1 rounded hover:bg-accent"
-                          title="Ver PDF da venda"
-                        >
-                          <FileText className="h-3 w-3 text-primary" />
-                        </button>
-                        <Badge variant="outline" className="text-[10px]">
-                          {v.situacao || v.status || v.nome_situacao || "–"}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="text-muted-foreground">
-                      {v.nome_cliente || v.cliente?.nome || "–"}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      {(v.data_venda || v.data) && (
-                        <span className="text-muted-foreground">{v.data_venda || v.data}</span>
-                      )}
-                      <button
-                        onClick={() => selectOrder(v)}
-                        className="text-primary text-[10px] hover:underline flex items-center gap-0.5"
-                      >
-                        <ArrowRight className="h-2.5 w-2.5" /> Usar dados
-                      </button>
-                    </div>
-                  </div>
-                ))}
+            {isPhone(query) && !loading && (
+              <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <Phone className="h-3 w-3" /> Pesquisando por telefone do cliente
+              </p>
+            )}
+            {hasResults && (
+              <div className="max-h-64 overflow-y-auto space-y-1.5">
+                {vendas.length > 0 && (
+                  <>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pt-1">
+                      Vendas ({vendas.length})
+                    </p>
+                    {vendas.map((v, i) => renderResultItem(v, i, "venda"))}
+                  </>
+                )}
+                {ordensServico.length > 0 && (
+                  <>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pt-1">
+                      Ordens de Serviço ({ordensServico.length})
+                    </p>
+                    {ordensServico.map((os, i) => renderResultItem(os, i, "os"))}
+                  </>
+                )}
               </div>
             )}
           </CollapsibleContent>
@@ -155,6 +238,14 @@ export default function GestaoClickSearch({ onSelectOrder, compact = false }: Ge
             onOpenChange={(o) => !o && setPdfVenda(null)}
             vendaId={pdfVenda.id}
             vendaCodigo={pdfVenda.codigo}
+          />
+        )}
+        {osDetail && (
+          <OSDetailDialog
+            open={!!osDetail}
+            onOpenChange={(o) => !o && setOsDetail(null)}
+            osId={osDetail.id}
+            osCodigo={osDetail.codigo}
           />
         )}
       </>
@@ -173,7 +264,7 @@ export default function GestaoClickSearch({ onSelectOrder, compact = false }: Ge
         <CardContent className="space-y-3">
           <div className="flex gap-2">
             <Input
-              placeholder="Pesquisar por código de encomenda..."
+              placeholder="Pesquisar por código, nome do cliente ou telefone..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && search()}
@@ -183,46 +274,30 @@ export default function GestaoClickSearch({ onSelectOrder, compact = false }: Ge
             </Button>
           </div>
 
-          {results.length > 0 && (
-            <div className="max-h-64 overflow-y-auto space-y-2">
-              {results.map((v: any, i: number) => (
-                <div
-                  key={v.id || i}
-                  className="w-full text-left p-3 rounded-lg border border-border hover:bg-accent/50 transition-colors text-sm space-y-1"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold">Encomenda #{v.codigo || v.numero || v.id}</span>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 gap-1 text-xs"
-                        onClick={(e) => openPdf(e, v)}
-                      >
-                        <FileText className="h-3.5 w-3.5" />
-                        Ver PDF
-                      </Button>
-                      <Badge variant="outline" className="text-xs">
-                        {v.situacao || v.status || v.nome_situacao || "–"}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="text-muted-foreground text-xs">
-                    Cliente: {v.nome_cliente || v.cliente?.nome || "–"}
-                  </div>
-                  {v.valor_total && (
-                    <div className="text-muted-foreground text-xs">
-                      Valor: €{parseFloat(v.valor_total).toFixed(2)}
-                    </div>
-                  )}
-                  <button
-                    onClick={() => selectOrder(v)}
-                    className="flex items-center gap-1 text-xs text-primary hover:underline"
-                  >
-                    <ArrowRight className="h-3 w-3" /> Usar dados desta encomenda
-                  </button>
-                </div>
-              ))}
+          {isPhone(query) && !loading && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <Phone className="h-3.5 w-3.5" /> Pesquisando por telefone do cliente
+            </p>
+          )}
+
+          {hasResults && (
+            <div className="max-h-80 overflow-y-auto space-y-2">
+              {vendas.length > 0 && (
+                <>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 pt-1">
+                    <Package className="h-3.5 w-3.5" /> Vendas ({vendas.length})
+                  </p>
+                  {vendas.map((v, i) => renderResultItemFull(v, i, "venda"))}
+                </>
+              )}
+              {ordensServico.length > 0 && (
+                <>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 pt-2">
+                    <Wrench className="h-3.5 w-3.5" /> Ordens de Serviço ({ordensServico.length})
+                  </p>
+                  {ordensServico.map((os, i) => renderResultItemFull(os, i, "os"))}
+                </>
+              )}
             </div>
           )}
         </CardContent>
@@ -234,6 +309,14 @@ export default function GestaoClickSearch({ onSelectOrder, compact = false }: Ge
           onOpenChange={(o) => !o && setPdfVenda(null)}
           vendaId={pdfVenda.id}
           vendaCodigo={pdfVenda.codigo}
+        />
+      )}
+      {osDetail && (
+        <OSDetailDialog
+          open={!!osDetail}
+          onOpenChange={(o) => !o && setOsDetail(null)}
+          osId={osDetail.id}
+          osCodigo={osDetail.codigo}
         />
       )}
     </>
