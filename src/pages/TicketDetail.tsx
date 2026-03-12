@@ -1002,6 +1002,20 @@ export default function TicketDetail() {
                 </div>
               )}
               <div className="border-t pt-3 space-y-2">
+                {failedEmails.length > 0 && (
+                  <Alert variant="destructive" className="py-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription className="text-xs">
+                      <strong>Falha no envio de email!</strong>
+                      {failedEmails.slice(0, 3).map((fe) => (
+                        <div key={fe.id} className="mt-1 opacity-90">
+                          • {fe.delivery_details || fe.error_message || "Erro desconhecido"}{" "}
+                          <span className="opacity-60">({new Date(fe.created_at).toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })})</span>
+                        </div>
+                      ))}
+                    </AlertDescription>
+                  </Alert>
+                )}
                 {hasEmailThread && (
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400">
                     <Mail className="h-3.5 w-3.5 shrink-0" />
