@@ -155,6 +155,19 @@ export default function TicketNew() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        <GestaoClickSearch
+          onSelectOrder={(od) => setForm((prev) => ({
+            ...prev,
+            order_number: od.order_number || prev.order_number,
+            client_name: od.client_name || prev.client_name,
+            client_email: od.client_email || prev.client_email,
+            client_phone: od.client_phone || prev.client_phone,
+            product_name: od.product_name || prev.product_name,
+            delivery_date: od.delivery_date || prev.delivery_date,
+            purchase_date: od.purchase_date || prev.purchase_date,
+          }))}
+        />
+
         <Card>
           <CardHeader><CardTitle className="text-base">Dados do Cliente</CardTitle></CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
