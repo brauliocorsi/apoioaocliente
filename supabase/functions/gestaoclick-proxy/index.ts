@@ -50,19 +50,26 @@ Deno.serve(async (req) => {
   try {
     const { action, query, id, page } = await req.json();
 
-    let url: string;
+    // Build URL based on action
+    let path: string;
+    const params = new URLSearchParams();
+
     switch (action) {
       case "search_vendas":
-        url = `${GC_BASE}/vendas?access_token=${accessToken}&secret_access_token=${secretToken}&pesquisa=${encodeURIComponent(query || "")}&pagina=${page || 1}`;
+        path = "/vendas";
+        if (query) params.set("pesquisa", query);
+        if (page) params.set("pagina", String(page));
         break;
       case "get_venda":
-        url = `${GC_BASE}/vendas/${id}?access_token=${accessToken}&secret_access_token=${secretToken}`;
+        path = `/vendas/${id}`;
         break;
       case "search_clientes":
-        url = `${GC_BASE}/clientes?access_token=${accessToken}&secret_access_token=${secretToken}&pesquisa=${encodeURIComponent(query || "")}&pagina=${page || 1}`;
+        path = "/clientes";
+        if (query) params.set("pesquisa", query);
+        if (page) params.set("pagina", String(page));
         break;
       case "get_cliente":
-        url = `${GC_BASE}/clientes/${id}?access_token=${accessToken}&secret_access_token=${secretToken}`;
+        path = `/clientes/${id}`;
         break;
       default:
         return new Response(
@@ -71,12 +78,30 @@ Deno.serve(async (req) => {
         );
     }
 
+    const queryString = params.toString();
+    const url = `${GC_BASE}${path}${queryString ? "?" + queryString : ""}`;
+
+    console.log(`GestaoClick request: ${url}`);
+
     const gcResponse = await fetch(url, {
       method: "GET",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "access-token": accessToken,
+        "secret-access-token": secretToken,
+      },
     });
 
-    const data = await gcResponse.json();
+    const responseText = await gcResponse.text();
+    console.log(`GestaoClick response status: ${gcResponse.status}, body preview: ${responseText.substring(0, 500)}`);
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      data = { raw: responseText };
+    }
 
     if (!gcResponse.ok) {
       return new Response(
