@@ -5,6 +5,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { Loader2 } from "lucide-react";
 import NotificationBell from "@/components/NotificationBell";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import OrderLookupDialog from "@/components/OrderLookupDialog";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 export function AppLayout() {
