@@ -37,6 +37,7 @@ export function AppLayout() {
           <header className="flex h-14 items-center justify-between gap-4 border-b border-border/40 glass px-6 sticky top-0 z-20">
             <SidebarTrigger className="text-muted-foreground hover:text-foreground transition-colors" />
             <div className="flex items-center gap-1.5">
+              <OrderLookupDialog />
               <ThemeToggle />
               <NotificationBell />
             </div>
