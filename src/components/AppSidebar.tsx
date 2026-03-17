@@ -44,13 +44,12 @@ export function AppSidebar() {
 
   return (
     <Sidebar className="border-r-0">
-      {/* Brand header with gradient accent */}
-      <SidebarHeader className="p-5 pb-6">
+      <SidebarHeader className="px-5 py-6">
         <div className="flex items-center gap-3">
-          <img src="/images/logo-upmoveis-red.jpeg" alt="UP Móveis" className="h-10 w-10 rounded-xl object-cover shadow-lg" />
+          <img src="/images/logo-upmoveis-red.jpeg" alt="UP Móveis" className="h-9 w-9 rounded-lg object-cover" />
           <div className="flex flex-col">
-            <span className="text-sm font-bold tracking-tight text-sidebar-foreground">UP Móveis</span>
-            <span className="text-[10px] font-medium uppercase tracking-widest text-sidebar-foreground/40">Suporte</span>
+            <span className="text-[13px] font-semibold tracking-tight text-sidebar-foreground">UP Móveis</span>
+            <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-sidebar-foreground/35">Suporte</span>
           </div>
         </div>
       </SidebarHeader>
@@ -58,7 +57,7 @@ export function AppSidebar() {
       <SidebarContent className="px-3">
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-1">
+            <SidebarMenu className="space-y-0.5">
               {navItems.map((item) => {
                 const active = isActive(item.url);
                 return (
@@ -68,31 +67,19 @@ export function AppSidebar() {
                         to={item.url}
                         end={item.url === "/"}
                         className={`
-                          group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200
+                          group relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors duration-150
                           ${active
-                            ? "bg-sidebar-primary/15 text-sidebar-primary-foreground"
-                            : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                            ? "bg-sidebar-accent text-sidebar-primary"
+                            : "text-sidebar-foreground/55 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground/90"
                           }
                         `}
                         activeClassName=""
                       >
-                        {/* Active indicator bar */}
                         {active && (
-                          <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-gradient-to-b from-sidebar-primary to-[hsl(260,60%,55%)]" />
+                          <div className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-sidebar-primary" />
                         )}
-                        <div className={`
-                          flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-200
-                          ${active
-                            ? "bg-gradient-to-br from-sidebar-primary to-[hsl(260,60%,55%)] text-white shadow-md shadow-sidebar-primary/20"
-                            : "bg-sidebar-accent/50 text-sidebar-foreground/50 group-hover:bg-sidebar-accent group-hover:text-sidebar-foreground/80"
-                          }
-                        `}>
-                          <item.icon className="h-4 w-4" />
-                        </div>
+                        <item.icon className="h-4 w-4 shrink-0" />
                         <span>{item.title}</span>
-                        {active && (
-                          <div className="ml-auto h-1.5 w-1.5 rounded-full bg-sidebar-primary animate-pulse" />
-                        )}
                       </NavLink>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -104,47 +91,45 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="p-4">
-        <div className="rounded-xl bg-sidebar-accent/60 p-3 backdrop-blur-sm">
-          <div className="flex items-center gap-3">
-            <ProfileDialog
-              userId={user?.id || ""}
-              fullName={profile?.full_name || ""}
-              email={profile?.email || ""}
-              avatarUrl={profile?.avatar_url}
-              table="profiles"
-              trigger={
-                <button className="shrink-0 group relative">
-                  <Avatar className="h-9 w-9 border-2 border-sidebar-primary/30 transition-all group-hover:border-sidebar-primary">
-                    <AvatarImage src={profile?.avatar_url || undefined} />
-                    <AvatarFallback className="bg-gradient-to-br from-sidebar-primary to-[hsl(260,60%,55%)] text-[11px] font-bold text-white">
-                      {initials}
-                    </AvatarFallback>
-                  </Avatar>
-                </button>
-              }
-            />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-sidebar-foreground truncate">
-                {profile?.full_name || "Agente"}
-              </p>
-              <p className="text-[10px] text-sidebar-foreground/40 capitalize">{role || "agent"}</p>
-            </div>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={signOut}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/40 transition-colors hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    <LogOut className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p className="text-xs">Terminar sessão</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+        <div className="flex items-center gap-3 rounded-lg px-2 py-2">
+          <ProfileDialog
+            userId={user?.id || ""}
+            fullName={profile?.full_name || ""}
+            email={profile?.email || ""}
+            avatarUrl={profile?.avatar_url}
+            table="profiles"
+            trigger={
+              <button className="shrink-0 group">
+                <Avatar className="h-8 w-8 border border-sidebar-border transition-colors group-hover:border-sidebar-primary/40">
+                  <AvatarImage src={profile?.avatar_url || undefined} />
+                  <AvatarFallback className="bg-sidebar-accent text-[11px] font-semibold text-sidebar-foreground">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+              </button>
+            }
+          />
+          <div className="flex-1 min-w-0">
+            <p className="text-[12px] font-medium text-sidebar-foreground truncate">
+              {profile?.full_name || "Agente"}
+            </p>
+            <p className="text-[10px] text-sidebar-foreground/35 capitalize">{role || "agent"}</p>
           </div>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={signOut}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/35 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p className="text-xs">Terminar sessão</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </SidebarFooter>
     </Sidebar>
