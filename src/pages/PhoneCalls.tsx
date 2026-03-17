@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ import { usePhoneCallStatuses } from "@/hooks/usePhoneCallStatuses";
 import PhoneCallKanban from "@/components/phone/PhoneCallKanban";
 import PhoneCallDetailDialog from "@/components/phone/PhoneCallDetailDialog";
 import PhoneCallList from "@/components/phone/PhoneCallList";
+import NotePreviewDialog from "@/components/phone/NotePreviewDialog";
 
 type PhoneCall = {
   id: string;
@@ -50,6 +51,7 @@ export default function PhoneCalls() {
   const [agentFilter, setAgentFilter] = useState("todos");
   const [search, setSearch] = useState("");
   const [selectedCall, setSelectedCall] = useState<PhoneCall | null>(null);
+  const [previewCall, setPreviewCall] = useState<PhoneCall | null>(null);
   const [activeTab, setActiveTab] = useState("ativas");
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
@@ -333,7 +335,7 @@ export default function PhoneCalls() {
               onStatusChanged={fetchCalls}
             />
           ) : (
-            <ClosedCallsTable calls={filteredClosed} onSelect={setSelectedCall} statusLabels={statusLabels} />
+            <ClosedCallsTable calls={filteredClosed} onSelect={setSelectedCall} onPreviewNotes={setPreviewCall} statusLabels={statusLabels} />
           )}
         </CardContent>
       </Card>
@@ -344,6 +346,14 @@ export default function PhoneCalls() {
         onClose={() => setSelectedCall(null)}
         onUpdated={() => { fetchCalls(); }}
       />
+
+      <NotePreviewDialog
+        open={!!previewCall}
+        onOpenChange={(o) => !o && setPreviewCall(null)}
+        clientName={previewCall?.client_name || ""}
+        subject={previewCall?.subject || ""}
+        notes={previewCall?.notes || null}
+      />
     </div>
   );
 }
@@ -352,10 +362,12 @@ export default function PhoneCalls() {
 function ClosedCallsTable({
   calls,
   onSelect,
+  onPreviewNotes,
   statusLabels,
 }: {
   calls: PhoneCall[];
   onSelect: (c: PhoneCall) => void;
+  onPreviewNotes: (c: PhoneCall) => void;
   statusLabels: Record<string, string>;
 }) {
   if (calls.length === 0) {
@@ -391,7 +403,13 @@ function ClosedCallsTable({
                 <div className="font-medium">{c.client_name}</div>
                 <div className="text-xs text-muted-foreground">{c.client_phone}</div>
               </td>
-              <td className="px-3 py-2.5 max-w-[200px] truncate">{c.subject}</td>
+              <td className="px-3 py-2.5 max-w-[200px]">
+                <span
+                  className="truncate block cursor-pointer hover:text-primary transition-colors"
+                  onClick={(e) => { e.stopPropagation(); onPreviewNotes(c); }}
+                  title="Clique para ver texto completo"
+                >{c.subject}</span>
+              </td>
               <td className="px-3 py-2.5">
                 <span className="text-xs px-2 py-0.5 rounded-full bg-muted">{statusLabels[c.status] || c.status}</span>
               </td>

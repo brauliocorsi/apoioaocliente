@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { usePhoneCallStatuses, type PhoneCallStatus } from "@/hooks/usePhoneCallStatuses";
 import { Phone, Bell, FileText, Plus, Trash2, Check, X, Pencil, User, Clock } from "lucide-react";
+import NotePreviewDialog from "./NotePreviewDialog";
 import {
   DndContext,
   DragOverlay,
@@ -51,7 +52,7 @@ interface PhoneCallKanbanProps {
   onStatusChanged: () => void;
 }
 
-function CallCard({ call, isDragging }: { call: PhoneCall; isDragging?: boolean }) {
+function CallCard({ call, isDragging, onPreviewNotes }: { call: PhoneCall; isDragging?: boolean; onPreviewNotes?: (call: PhoneCall) => void }) {
   const priorityBadge = (p: string) =>
     p === "P1" ? "bg-destructive/10 text-destructive border-destructive/30" :
     p === "P2" ? "bg-warning/10 text-warning border-warning/30" :
@@ -83,7 +84,11 @@ function CallCard({ call, isDragging }: { call: PhoneCall; isDragging?: boolean 
           )}
         </div>
       </div>
-      <p className="text-sm font-medium leading-tight line-clamp-2 mb-1">{call.subject}</p>
+      <p
+        className="text-sm font-medium leading-tight line-clamp-2 mb-1 cursor-pointer hover:text-primary transition-colors"
+        onClick={(e) => { e.stopPropagation(); onPreviewNotes?.(call); }}
+        title="Clique para ver texto completo"
+      >{call.subject}</p>
       <p className="text-xs text-muted-foreground truncate">{call.client_name}</p>
       <div className="flex items-center justify-between mt-0.5">
         {call.created_by_name && (
@@ -129,7 +134,7 @@ function CallCard({ call, isDragging }: { call: PhoneCall; isDragging?: boolean 
   );
 }
 
-function DraggableCall({ call, onSelect }: { call: PhoneCall; onSelect: (c: PhoneCall) => void }) {
+function DraggableCall({ call, onSelect, onPreviewNotes }: { call: PhoneCall; onSelect: (c: PhoneCall) => void; onPreviewNotes: (c: PhoneCall) => void }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: call.id,
     data: { call },
@@ -143,7 +148,7 @@ function DraggableCall({ call, onSelect }: { call: PhoneCall; onSelect: (c: Phon
       className={`cursor-grab active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}
       onClick={() => onSelect(call)}
     >
-      <CallCard call={call} />
+      <CallCard call={call} onPreviewNotes={onPreviewNotes} />
     </div>
   );
 }
@@ -242,6 +247,7 @@ export default function PhoneCallKanban({ calls, onSelect, onStatusChanged }: Ph
   const { statuses, refetch: refetchStatuses } = usePhoneCallStatuses();
   const [activeCall, setActiveCall] = useState<PhoneCall | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
+  const [previewCall, setPreviewCall] = useState<PhoneCall | null>(null);
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnName, setNewColumnName] = useState("");
   const newColRef = useRef<HTMLInputElement>(null);
@@ -366,7 +372,7 @@ export default function PhoneCallKanban({ calls, onSelect, onStatusChanged }: Ph
             <ScrollArea className="h-[calc(100vh-420px)] min-h-[200px]">
               <div className="p-2 space-y-2">
                 {(grouped[col.id] || []).map((c) => (
-                  <DraggableCall key={c.id} call={c} onSelect={onSelect} />
+                  <DraggableCall key={c.id} call={c} onSelect={onSelect} onPreviewNotes={setPreviewCall} />
                 ))}
                 {(grouped[col.id] || []).length === 0 && (
                   <p className="text-xs text-muted-foreground text-center py-8">Sem ligações</p>
@@ -411,6 +417,14 @@ export default function PhoneCallKanban({ calls, onSelect, onStatusChanged }: Ph
       <DragOverlay>
         {activeCall && <CallCard call={activeCall} isDragging />}
       </DragOverlay>
+
+      <NotePreviewDialog
+        open={!!previewCall}
+        onOpenChange={(o) => !o && setPreviewCall(null)}
+        clientName={previewCall?.client_name || ""}
+        subject={previewCall?.subject || ""}
+        notes={previewCall?.notes || null}
+      />
     </DndContext>
   );
 }
