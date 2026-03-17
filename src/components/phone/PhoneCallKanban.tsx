@@ -83,7 +83,11 @@ function CallCard({ call, isDragging, onPreviewNotes }: { call: PhoneCall; isDra
           )}
         </div>
       </div>
-      <p className="text-sm font-medium leading-tight line-clamp-2 mb-1">{call.subject}</p>
+      <p
+        className="text-sm font-medium leading-tight line-clamp-2 mb-1 cursor-pointer hover:text-primary transition-colors"
+        onClick={(e) => { e.stopPropagation(); onPreviewNotes?.(call); }}
+        title="Clique para ver texto completo"
+      >{call.subject}</p>
       <p className="text-xs text-muted-foreground truncate">{call.client_name}</p>
       <div className="flex items-center justify-between mt-0.5">
         {call.created_by_name && (
