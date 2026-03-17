@@ -268,7 +268,7 @@ export default function PostDeliveryConfirmations() {
       </div>
 
       {/* Form */}
-      <Card>
+      <Card ref={formRef}>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Plus className="h-4 w-4" /> Novo Registo Pós-Entrega
