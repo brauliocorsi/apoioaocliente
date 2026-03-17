@@ -1,15 +1,16 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Loader2, Package, FileText, Wrench, Phone, ShoppingBag } from "lucide-react";
+import { Search, Loader2, Package, FileText, Wrench, Phone, ShoppingBag, Ticket, TruckIcon, ClipboardCheck } from "lucide-react";
 import VendaPDFDialog from "@/components/ticket/VendaPDFDialog";
 import OSDetailDialog from "@/components/ticket/OSDetailDialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import OrderInternalData from "@/components/order/OrderInternalData";
 
 export default function OrderLookupDialog() {
   const { toast } = useToast();
@@ -20,8 +21,8 @@ export default function OrderLookupDialog() {
   const [ordensServico, setOrdensServico] = useState<any[]>([]);
   const [pdfVenda, setPdfVenda] = useState<{ id: string; codigo: string } | null>(null);
   const [osDetail, setOsDetail] = useState<{ id: string; codigo: string } | null>(null);
+  const [internalData, setInternalData] = useState<Record<string, any>>({});
 
-  // Global keyboard shortcut: Ctrl+G / Cmd+G
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") {
@@ -35,11 +36,41 @@ export default function OrderLookupDialog() {
 
   const isPhone = (q: string) => /^[\d\s\+\(\)\-]{7,}$/.test(q.trim());
 
+  const fetchInternalData = async (orderNumbers: string[]) => {
+    if (orderNumbers.length === 0) return;
+
+    const [ticketsRes, phoneRes, deliveryRes, postDeliveryRes] = await Promise.all([
+      supabase.from("tickets").select("id, ticket_number, subject, status, client_name, priority, created_at").in("order_number", orderNumbers),
+      supabase.from("phone_calls").select("id, client_name, subject, status, priority, created_at, invoice_number").in("invoice_number", orderNumbers),
+      supabase.from("delivery_confirmations").select("id, order_number, confirmed, contact_attempts, notes, created_at").in("order_number", orderNumbers),
+      supabase.from("post_delivery_confirmations").select("id, order_number, client_name, client_satisfied, product_ok, assembly_ok, no_damage, issues_reported, notes, created_at").in("order_number", orderNumbers),
+    ]);
+
+    const grouped: Record<string, any> = {};
+    for (const num of orderNumbers) {
+      grouped[num] = {
+        tickets: (ticketsRes.data || []).filter((t: any) => t.order_number === num),
+        phoneCalls: (phoneRes.data || []).filter((p: any) => p.invoice_number === num),
+        deliveryConfirmations: (deliveryRes.data || []).filter((d: any) => d.order_number === num),
+        postDeliveryConfirmations: (postDeliveryRes.data || []).filter((pd: any) => pd.order_number === num),
+      };
+    }
+
+    // tickets don't have order_number in the select, re-query with it
+    const ticketsWithOrder = await supabase.from("tickets").select("id, ticket_number, subject, status, client_name, priority, created_at, order_number").in("order_number", orderNumbers);
+    for (const num of orderNumbers) {
+      grouped[num].tickets = (ticketsWithOrder.data || []).filter((t: any) => t.order_number === num);
+    }
+
+    setInternalData(grouped);
+  };
+
   const search = async () => {
     if (!query.trim()) return;
     setLoading(true);
     setVendas([]);
     setOrdensServico([]);
+    setInternalData({});
 
     try {
       const { data, error } = await supabase.functions.invoke("gestaoclick-proxy", {
@@ -53,6 +84,23 @@ export default function OrderLookupDialog() {
       setVendas(v);
       setOrdensServico(os);
 
+      // Collect order numbers for internal data lookup
+      const orderNumbers = new Set<string>();
+      v.forEach((item: any) => {
+        const venda = item.venda || item;
+        if (venda.codigo) orderNumbers.add(String(venda.codigo));
+      });
+      os.forEach((item: any) => {
+        const ordem = item.ordem_servico || item;
+        if (ordem.codigo) orderNumbers.add(String(ordem.codigo));
+      });
+      // Also add the query itself if it looks like an order number
+      if (/^\d+$/.test(query.trim())) {
+        orderNumbers.add(query.trim());
+      }
+
+      await fetchInternalData([...orderNumbers]);
+
       if (v.length === 0 && os.length === 0) {
         toast({ title: "Nenhum resultado encontrado" });
       }
@@ -63,7 +111,7 @@ export default function OrderLookupDialog() {
     }
   };
 
-  const hasResults = vendas.length > 0 || ordensServico.length > 0;
+  const hasResults = vendas.length > 0 || ordensServico.length > 0 || Object.keys(internalData).length > 0;
 
   const fmtDate = (val: string) => {
     if (!val) return "–";
@@ -80,6 +128,9 @@ export default function OrderLookupDialog() {
 
   const renderVenda = (item: any, i: number) => {
     const v = item.venda || item;
+    const orderNum = String(v.codigo || v.numero || "");
+    const internal = internalData[orderNum];
+
     return (
       <div
         key={`v-${v.id || i}`}
@@ -120,7 +171,6 @@ export default function OrderLookupDialog() {
           {v.nome_vendedor && <span><strong className="text-foreground/70">Vendedor:</strong> {v.nome_vendedor}</span>}
           {v.nome_forma_pagamento && <span><strong className="text-foreground/70">Pagamento:</strong> {v.nome_forma_pagamento}</span>}
         </div>
-        {/* Products preview */}
         {(v.produtos || []).length > 0 && (
           <div className="text-[11px] text-muted-foreground border-t border-border/50 pt-1.5 mt-1">
             <span className="font-medium text-foreground/60">Produtos: </span>
@@ -135,12 +185,16 @@ export default function OrderLookupDialog() {
             {(v.produtos || []).length > 3 && <span className="text-muted-foreground/60"> +{(v.produtos || []).length - 3}</span>}
           </div>
         )}
+        {internal && <OrderInternalData data={internal} />}
       </div>
     );
   };
 
   const renderOS = (item: any, i: number) => {
     const os = item.ordem_servico || item;
+    const orderNum = String(os.codigo || os.numero || "");
+    const internal = internalData[orderNum];
+
     return (
       <div
         key={`os-${os.id || i}`}
@@ -171,6 +225,7 @@ export default function OrderLookupDialog() {
           <span><strong className="text-foreground/70">Data:</strong> {fmtDate(os.data || os.data_abertura)}</span>
           {os.valor_total && <span><strong className="text-foreground/70">Valor:</strong> {fmt(os.valor_total)}</span>}
         </div>
+        {internal && <OrderInternalData data={internal} />}
       </div>
     );
   };
@@ -195,7 +250,7 @@ export default function OrderLookupDialog() {
         </Tooltip>
       </TooltipProvider>
 
-      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setVendas([]); setOrdensServico([]); setQuery(""); } }}>
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setVendas([]); setOrdensServico([]); setQuery(""); setInternalData({}); } }}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
