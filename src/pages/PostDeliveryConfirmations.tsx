@@ -436,6 +436,36 @@ export default function PostDeliveryConfirmations() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!previewRecord} onOpenChange={(o) => !o && setPreviewRecord(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <ClipboardCheck className="h-4 w-4 text-primary" />
+              {previewRecord?.client_name} — Enc. #{previewRecord?.order_number}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {previewRecord?.issues_reported && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Problemas Reportados</p>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap bg-destructive/5 rounded-lg p-3 border border-destructive/20">{previewRecord.issues_reported}</p>
+              </div>
+            )}
+            {previewRecord?.notes && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <FileText className="h-3 w-3" /> Observações
+                </p>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap bg-muted/50 rounded-lg p-3 border">{previewRecord.notes}</p>
+              </div>
+            )}
+            {!previewRecord?.issues_reported && !previewRecord?.notes && (
+              <p className="text-sm text-muted-foreground text-center py-4">Sem problemas ou observações registadas.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
