@@ -8,9 +8,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Phone, Bell, FileText, Plus, Trash2, Check, X, Pencil, User, Clock, MessageSquareText } from "lucide-react";
-import NotePreviewDialog from "./NotePreviewDialog";
+import PriorityFlag from "@/components/ticket/PriorityFlag";
+import { usePhoneCallStatuses, type PhoneCallStatus } from "@/hooks/usePhoneCallStatuses";
 import { Phone, Bell, FileText, Plus, Trash2, Check, X, Pencil, User, Clock } from "lucide-react";
+import NotePreviewDialog from "./NotePreviewDialog";
 import {
   DndContext,
   DragOverlay,
