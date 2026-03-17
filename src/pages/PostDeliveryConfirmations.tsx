@@ -70,6 +70,7 @@ export default function PostDeliveryConfirmations() {
   // Edit
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Partial<PostDeliveryRecord>>({});
+  const [previewRecord, setPreviewRecord] = useState<PostDeliveryRecord | null>(null);
 
   const fetchData = async () => {
     const [{ data: recs }, { data: profs }] = await Promise.all([
