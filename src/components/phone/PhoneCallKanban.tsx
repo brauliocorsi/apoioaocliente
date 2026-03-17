@@ -133,7 +133,7 @@ function CallCard({ call, isDragging, onPreviewNotes }: { call: PhoneCall; isDra
   );
 }
 
-function DraggableCall({ call, onSelect }: { call: PhoneCall; onSelect: (c: PhoneCall) => void }) {
+function DraggableCall({ call, onSelect, onPreviewNotes }: { call: PhoneCall; onSelect: (c: PhoneCall) => void; onPreviewNotes: (c: PhoneCall) => void }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: call.id,
     data: { call },
@@ -147,7 +147,7 @@ function DraggableCall({ call, onSelect }: { call: PhoneCall; onSelect: (c: Phon
       className={`cursor-grab active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}
       onClick={() => onSelect(call)}
     >
-      <CallCard call={call} />
+      <CallCard call={call} onPreviewNotes={onPreviewNotes} />
     </div>
   );
 }
