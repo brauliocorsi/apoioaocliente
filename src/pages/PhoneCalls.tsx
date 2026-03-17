@@ -335,7 +335,7 @@ export default function PhoneCalls() {
               onStatusChanged={fetchCalls}
             />
           ) : (
-            <ClosedCallsTable calls={filteredClosed} onSelect={setSelectedCall} statusLabels={statusLabels} />
+            <ClosedCallsTable calls={filteredClosed} onSelect={setSelectedCall} onPreviewNotes={setPreviewCall} statusLabels={statusLabels} />
           )}
         </CardContent>
       </Card>
