@@ -246,6 +246,7 @@ export default function PhoneCallKanban({ calls, onSelect, onStatusChanged }: Ph
   const { statuses, refetch: refetchStatuses } = usePhoneCallStatuses();
   const [activeCall, setActiveCall] = useState<PhoneCall | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
+  const [previewCall, setPreviewCall] = useState<PhoneCall | null>(null);
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnName, setNewColumnName] = useState("");
   const newColRef = useRef<HTMLInputElement>(null);
