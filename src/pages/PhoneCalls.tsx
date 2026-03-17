@@ -362,10 +362,12 @@ export default function PhoneCalls() {
 function ClosedCallsTable({
   calls,
   onSelect,
+  onPreviewNotes,
   statusLabels,
 }: {
   calls: PhoneCall[];
   onSelect: (c: PhoneCall) => void;
+  onPreviewNotes: (c: PhoneCall) => void;
   statusLabels: Record<string, string>;
 }) {
   if (calls.length === 0) {
