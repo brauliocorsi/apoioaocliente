@@ -190,7 +190,7 @@ export default function OrderLookupDialog() {
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
-            <p className="text-xs">Consultar encomendas</p>
+            <p className="text-xs">Consultar encomendas <kbd className="ml-1 pointer-events-none inline-flex h-5 select-none items-center gap-0.5 rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">⌘G</kbd></p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
