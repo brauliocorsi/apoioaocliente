@@ -235,7 +235,7 @@ export default function PhoneCalls() {
       </div>
 
       {/* Quick form */}
-      <PhoneCallForm onCreated={fetchCalls} />
+      <PhoneCallForm onCreated={() => { fetchCalls(); if (autoNew) setSearchParams({}); }} autoOpen={autoNew} />
 
       {/* Filters + Tabs */}
       <Card>
