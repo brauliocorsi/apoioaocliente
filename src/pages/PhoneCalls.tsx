@@ -51,6 +51,7 @@ export default function PhoneCalls() {
   const [agentFilter, setAgentFilter] = useState("todos");
   const [search, setSearch] = useState("");
   const [selectedCall, setSelectedCall] = useState<PhoneCall | null>(null);
+  const [previewCall, setPreviewCall] = useState<PhoneCall | null>(null);
   const [activeTab, setActiveTab] = useState("ativas");
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
