@@ -21,6 +21,18 @@ export default function OrderLookupDialog() {
   const [pdfVenda, setPdfVenda] = useState<{ id: string; codigo: string } | null>(null);
   const [osDetail, setOsDetail] = useState<{ id: string; codigo: string } | null>(null);
 
+  // Global keyboard shortcut: Ctrl+G / Cmd+G
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") {
+        e.preventDefault();
+        setOpen(true);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const isPhone = (q: string) => /^[\d\s\+\(\)\-]{7,}$/.test(q.trim());
 
   const search = async () => {
