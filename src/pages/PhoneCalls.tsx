@@ -346,6 +346,14 @@ export default function PhoneCalls() {
         onClose={() => setSelectedCall(null)}
         onUpdated={() => { fetchCalls(); }}
       />
+
+      <NotePreviewDialog
+        open={!!previewCall}
+        onOpenChange={(o) => !o && setPreviewCall(null)}
+        clientName={previewCall?.client_name || ""}
+        subject={previewCall?.subject || ""}
+        notes={previewCall?.notes || null}
+      />
     </div>
   );
 }
