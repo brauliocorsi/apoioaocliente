@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +14,8 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
-import { ClipboardCheck, Search, Plus, Trash2, Pencil, Check, X, CalendarDays, CheckCircle2, XCircle, Star } from "lucide-react";
+import { ClipboardCheck, Search, Plus, Trash2, Pencil, Check, X, CalendarDays, CheckCircle2, XCircle, Star, FileText } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -69,6 +70,7 @@ export default function PostDeliveryConfirmations() {
   // Edit
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Partial<PostDeliveryRecord>>({});
+  const [previewRecord, setPreviewRecord] = useState<PostDeliveryRecord | null>(null);
 
   const fetchData = async () => {
     const [{ data: recs }, { data: profs }] = await Promise.all([
@@ -408,7 +410,15 @@ export default function PostDeliveryConfirmations() {
                           <TableCell>
                             <StarRating value={r.assembly_nps} readOnly />
                           </TableCell>
-                          <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{r.issues_reported || "—"}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground max-w-[200px]">
+                            {r.issues_reported ? (
+                              <span
+                                className="truncate block cursor-pointer hover:text-primary transition-colors"
+                                onClick={() => setPreviewRecord(r)}
+                                title="Clique para ver texto completo"
+                              >{r.issues_reported}</span>
+                            ) : "—"}
+                          </TableCell>
                           <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>
                           <TableCell>
                             <div className="flex gap-1">
@@ -426,6 +436,36 @@ export default function PostDeliveryConfirmations() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!previewRecord} onOpenChange={(o) => !o && setPreviewRecord(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <ClipboardCheck className="h-4 w-4 text-primary" />
+              {previewRecord?.client_name} — Enc. #{previewRecord?.order_number}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {previewRecord?.issues_reported && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Problemas Reportados</p>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap bg-destructive/5 rounded-lg p-3 border border-destructive/20">{previewRecord.issues_reported}</p>
+              </div>
+            )}
+            {previewRecord?.notes && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <FileText className="h-3 w-3" /> Observações
+                </p>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap bg-muted/50 rounded-lg p-3 border">{previewRecord.notes}</p>
+              </div>
+            )}
+            {!previewRecord?.issues_reported && !previewRecord?.notes && (
+              <p className="text-sm text-muted-foreground text-center py-4">Sem problemas ou observações registadas.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
