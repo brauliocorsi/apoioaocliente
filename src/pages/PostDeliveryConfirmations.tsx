@@ -48,11 +48,23 @@ interface AgentProfile {
 
 export default function PostDeliveryConfirmations() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoNew = searchParams.get("new") === "1";
+  const formRef = useRef<HTMLDivElement>(null);
   const [records, setRecords] = useState<PostDeliveryRecord[]>([]);
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+
+  useEffect(() => {
+    if (autoNew && formRef.current) {
+      formRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      const firstInput = formRef.current.querySelector("input");
+      if (firstInput) setTimeout(() => firstInput.focus(), 400);
+      setSearchParams({});
+    }
+  }, [autoNew]);
 
   // Form
   const [orderNumber, setOrderNumber] = useState("");
