@@ -51,7 +51,7 @@ interface PhoneCallKanbanProps {
   onStatusChanged: () => void;
 }
 
-function CallCard({ call, isDragging }: { call: PhoneCall; isDragging?: boolean }) {
+function CallCard({ call, isDragging, onPreviewNotes }: { call: PhoneCall; isDragging?: boolean; onPreviewNotes?: (call: PhoneCall) => void }) {
   const priorityBadge = (p: string) =>
     p === "P1" ? "bg-destructive/10 text-destructive border-destructive/30" :
     p === "P2" ? "bg-warning/10 text-warning border-warning/30" :
