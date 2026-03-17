@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,11 +48,23 @@ interface AgentProfile {
 
 export default function PostDeliveryConfirmations() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoNew = searchParams.get("new") === "1";
+  const formRef = useRef<HTMLDivElement>(null);
   const [records, setRecords] = useState<PostDeliveryRecord[]>([]);
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+
+  useEffect(() => {
+    if (autoNew && formRef.current) {
+      formRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      const firstInput = formRef.current.querySelector("input");
+      if (firstInput) setTimeout(() => firstInput.focus(), 400);
+      setSearchParams({});
+    }
+  }, [autoNew]);
 
   // Form
   const [orderNumber, setOrderNumber] = useState("");
@@ -255,7 +268,7 @@ export default function PostDeliveryConfirmations() {
       </div>
 
       {/* Form */}
-      <Card>
+      <Card ref={formRef}>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Plus className="h-4 w-4" /> Novo Registo Pós-Entrega

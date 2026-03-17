@@ -13,10 +13,11 @@ import QuickTicketDialog from "./QuickTicketDialog";
 
 interface PhoneCallFormProps {
   onCreated: () => void;
+  autoOpen?: boolean;
 }
 
-export default function PhoneCallForm({ onCreated }: PhoneCallFormProps) {
-  const [open, setOpen] = useState(false);
+export default function PhoneCallForm({ onCreated, autoOpen }: PhoneCallFormProps) {
+  const [open, setOpen] = useState(autoOpen ?? false);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     client_name: "",

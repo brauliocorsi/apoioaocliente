@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,8 @@ type PhoneCall = {
 };
 
 export default function PhoneCalls() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoNew = searchParams.get("new") === "1";
   const [calls, setCalls] = useState<PhoneCall[]>([]);
   const [reminderCounts, setReminderCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -232,7 +235,7 @@ export default function PhoneCalls() {
       </div>
 
       {/* Quick form */}
-      <PhoneCallForm onCreated={fetchCalls} />
+      <PhoneCallForm onCreated={() => { fetchCalls(); if (autoNew) setSearchParams({}); }} autoOpen={autoNew} />
 
       {/* Filters + Tabs */}
       <Card>
