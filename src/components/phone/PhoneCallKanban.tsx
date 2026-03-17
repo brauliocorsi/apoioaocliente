@@ -371,7 +371,7 @@ export default function PhoneCallKanban({ calls, onSelect, onStatusChanged }: Ph
             <ScrollArea className="h-[calc(100vh-420px)] min-h-[200px]">
               <div className="p-2 space-y-2">
                 {(grouped[col.id] || []).map((c) => (
-                  <DraggableCall key={c.id} call={c} onSelect={onSelect} />
+                  <DraggableCall key={c.id} call={c} onSelect={onSelect} onPreviewNotes={setPreviewCall} />
                 ))}
                 {(grouped[col.id] || []).length === 0 && (
                   <p className="text-xs text-muted-foreground text-center py-8">Sem ligações</p>
