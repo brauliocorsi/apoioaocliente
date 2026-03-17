@@ -44,6 +44,8 @@ type PhoneCall = {
 };
 
 export default function PhoneCalls() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoNew = searchParams.get("new") === "1";
   const [calls, setCalls] = useState<PhoneCall[]>([]);
   const [reminderCounts, setReminderCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
