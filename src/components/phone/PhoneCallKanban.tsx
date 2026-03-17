@@ -416,6 +416,14 @@ export default function PhoneCallKanban({ calls, onSelect, onStatusChanged }: Ph
       <DragOverlay>
         {activeCall && <CallCard call={activeCall} isDragging />}
       </DragOverlay>
+
+      <NotePreviewDialog
+        open={!!previewCall}
+        onOpenChange={(o) => !o && setPreviewCall(null)}
+        clientName={previewCall?.client_name || ""}
+        subject={previewCall?.subject || ""}
+        notes={previewCall?.notes || null}
+      />
     </DndContext>
   );
 }
