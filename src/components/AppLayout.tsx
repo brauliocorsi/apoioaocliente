@@ -1,4 +1,5 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { useEffect } from "react";
+import { Navigate, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -10,7 +11,36 @@ import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 export function AppLayout() {
   const { session, user, loading } = useAuth();
+  const navigate = useNavigate();
   usePushNotifications(user?.id);
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if user is typing in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
+
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key.toLowerCase()) {
+          case "l":
+            e.preventDefault();
+            navigate("/phone-calls?new=1");
+            break;
+          case "p":
+            e.preventDefault();
+            navigate("/post-delivery?new=1");
+            break;
+          case "t":
+            e.preventDefault();
+            navigate("/tickets/new");
+            break;
+        }
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [navigate]);
 
   if (loading) {
     return (
