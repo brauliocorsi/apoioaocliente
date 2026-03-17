@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,18 @@ export default function OrderLookupDialog() {
   const [ordensServico, setOrdensServico] = useState<any[]>([]);
   const [pdfVenda, setPdfVenda] = useState<{ id: string; codigo: string } | null>(null);
   const [osDetail, setOsDetail] = useState<{ id: string; codigo: string } | null>(null);
+
+  // Global keyboard shortcut: Ctrl+G / Cmd+G
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "g") {
+        e.preventDefault();
+        setOpen(true);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const isPhone = (q: string) => /^[\d\s\+\(\)\-]{7,}$/.test(q.trim());
 
@@ -178,7 +190,7 @@ export default function OrderLookupDialog() {
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">
-            <p className="text-xs">Consultar encomendas</p>
+            <p className="text-xs">Consultar encomendas <kbd className="ml-1 pointer-events-none inline-flex h-5 select-none items-center gap-0.5 rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">⌘G</kbd></p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
