@@ -410,7 +410,15 @@ export default function PostDeliveryConfirmations() {
                           <TableCell>
                             <StarRating value={r.assembly_nps} readOnly />
                           </TableCell>
-                          <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{r.issues_reported || "—"}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground max-w-[200px]">
+                            {r.issues_reported ? (
+                              <span
+                                className="truncate block cursor-pointer hover:text-primary transition-colors"
+                                onClick={() => setPreviewRecord(r)}
+                                title="Clique para ver texto completo"
+                              >{r.issues_reported}</span>
+                            ) : "—"}
+                          </TableCell>
                           <TableCell className="text-sm">{agentName(r.created_by)}</TableCell>
                           <TableCell>
                             <div className="flex gap-1">
