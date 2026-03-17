@@ -15,6 +15,7 @@ import { usePhoneCallStatuses } from "@/hooks/usePhoneCallStatuses";
 import PhoneCallKanban from "@/components/phone/PhoneCallKanban";
 import PhoneCallDetailDialog from "@/components/phone/PhoneCallDetailDialog";
 import PhoneCallList from "@/components/phone/PhoneCallList";
+import NotePreviewDialog from "@/components/phone/NotePreviewDialog";
 
 type PhoneCall = {
   id: string;
