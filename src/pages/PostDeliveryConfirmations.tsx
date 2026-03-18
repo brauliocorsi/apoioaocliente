@@ -407,15 +407,15 @@ export default function PostDeliveryConfirmations() {
                           <TableCell>{r.client_name}</TableCell>
                           <TableCell>{r.client_phone}</TableCell>
                           <TableCell>
-                            <div className="flex gap-1">
+                            <div className="flex gap-1 flex-wrap">
                               {[
-                                { ok: r.product_ok, label: "Produto" },
-                                { ok: r.assembly_ok, label: "Montagem" },
-                                { ok: r.no_damage, label: "Sem danos" },
-                                { ok: r.client_satisfied, label: "Satisfeito" },
+                                { ok: r.product_ok, label: "Produto", icon: null },
+                                { ok: r.assembly_ok, label: "Montagem", icon: <Wrench className="h-2.5 w-2.5" /> },
+                                { ok: r.no_damage, label: "Sem danos", icon: null },
+                                { ok: r.client_satisfied, label: "Satisfeito", icon: null },
                               ].map(item => (
-                                <Badge key={item.label} variant={item.ok ? "default" : "outline"} className={`text-[10px] ${item.ok ? "bg-green-500/15 text-green-700 border-green-300 dark:text-green-400" : ""}`}>
-                                  {item.ok ? "✓" : "✗"} {item.label}
+                                <Badge key={item.label} variant={item.ok ? "default" : "outline"} className={`text-[10px] gap-0.5 ${item.ok ? "bg-green-500/15 text-green-700 border-green-300 dark:text-green-400" : ""}`}>
+                                  {item.icon || (item.ok ? <CheckCircle2 className="h-2.5 w-2.5" /> : <XCircle className="h-2.5 w-2.5" />)} {item.label}
                                 </Badge>
                               ))}
                             </div>
