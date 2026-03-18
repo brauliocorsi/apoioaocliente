@@ -14,7 +14,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
-import { Truck, Search, CheckCircle2, XCircle, Plus, Trash2, Pencil, Check, X, PhoneCall, CalendarDays, HelpCircle, ChevronDown } from "lucide-react";
+import { Truck, Search, CheckCircle2, XCircle, Plus, Trash2, Pencil, Check, X, PhoneCall, PhoneOff, CalendarDays, HelpCircle, ChevronDown } from "lucide-react";
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
@@ -389,9 +389,13 @@ export default function DeliveryConfirmations() {
                         <TableCell>{r.client_phone}</TableCell>
                         <TableCell>
                           {r.confirmed ? (
-                            <Badge className="bg-green-500/15 text-green-700 border-green-300 dark:text-green-400">Confirmada</Badge>
+                            <Badge className="bg-green-500/15 text-green-700 border-green-300 dark:text-green-400 gap-1">
+                              <CheckCircle2 className="h-3 w-3" /> Confirmada
+                            </Badge>
                           ) : (
-                            <Badge variant="destructive">Não confirmada</Badge>
+                            <Badge variant="destructive" className="gap-1">
+                              <PhoneOff className="h-3 w-3" /> Não atendeu
+                            </Badge>
                           )}
                         </TableCell>
                         <TableCell>
