@@ -202,6 +202,102 @@ export type Database = {
         }
         Relationships: []
       }
+      delayed_order_contacts: {
+        Row: {
+          contact_type: string
+          contacted_at: string
+          contacted_by: string
+          created_at: string
+          delayed_order_id: string
+          id: string
+          next_contact_at: string | null
+          notes: string | null
+          phone_call_id: string | null
+        }
+        Insert: {
+          contact_type?: string
+          contacted_at?: string
+          contacted_by?: string
+          created_at?: string
+          delayed_order_id: string
+          id?: string
+          next_contact_at?: string | null
+          notes?: string | null
+          phone_call_id?: string | null
+        }
+        Update: {
+          contact_type?: string
+          contacted_at?: string
+          contacted_by?: string
+          created_at?: string
+          delayed_order_id?: string
+          id?: string
+          next_contact_at?: string | null
+          notes?: string | null
+          phone_call_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delayed_order_contacts_delayed_order_id_fkey"
+            columns: ["delayed_order_id"]
+            isOneToOne: false
+            referencedRelation: "delayed_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delayed_order_contacts_phone_call_id_fkey"
+            columns: ["phone_call_id"]
+            isOneToOne: false
+            referencedRelation: "phone_calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delayed_orders: {
+        Row: {
+          client_name: string
+          client_phone: string | null
+          created_at: string
+          created_by: string
+          id: string
+          is_archived: boolean
+          notes: string | null
+          order_date: string | null
+          order_number: string
+          situacao: string | null
+          sla_deadline_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_name: string
+          client_phone?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          is_archived?: boolean
+          notes?: string | null
+          order_date?: string | null
+          order_number: string
+          situacao?: string | null
+          sla_deadline_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_name?: string
+          client_phone?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          is_archived?: boolean
+          notes?: string | null
+          order_date?: string | null
+          order_number?: string
+          situacao?: string | null
+          sla_deadline_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       delivery_confirmations: {
         Row: {
           client_phone: string
