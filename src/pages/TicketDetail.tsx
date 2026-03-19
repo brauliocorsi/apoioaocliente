@@ -182,6 +182,7 @@ export default function TicketDetail() {
   const [messagesFullscreen, setMessagesFullscreen] = useState(false);
   const [fullViewContent, setFullViewContent] = useState<string | null>(null);
   const [failedEmails, setFailedEmails] = useState<any[]>([]);
+  const [retryingEmailId, setRetryingEmailId] = useState<string | null>(null);
 
   const fetchTicket = async () => {
     if (!id) return;
