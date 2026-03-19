@@ -80,6 +80,28 @@ Deno.serve(async (req) => {
         const data = await gcFetch("/vendas", params);
         return json(data);
       }
+      case "list_situacoes": {
+        // Fetch multiple pages to discover all unique situacao values
+        const situacoes = new Set<string>();
+        let pg = 1;
+        const maxPages = 5;
+        while (pg <= maxPages) {
+          const params = new URLSearchParams();
+          params.set("pagina", String(pg));
+          const data = await gcFetch("/vendas", params);
+          const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
+          if (vendas.length === 0) break;
+          vendas.forEach((v: any) => {
+            const venda = v.venda || v;
+            if (venda.situacao) situacoes.add(venda.situacao);
+          });
+          // Check if there are more pages
+          const totalPages = data?.meta?.total_paginas || 1;
+          if (pg >= totalPages) break;
+          pg++;
+        }
+        return json({ situacoes: Array.from(situacoes).sort() });
+      }
       case "get_venda": {
         const data = await gcFetch(`/vendas/${id}`);
         return json(data);

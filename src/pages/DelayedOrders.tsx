@@ -6,20 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertTriangle, Clock, Phone, PhoneCall, Plus, RefreshCw, Search, Timer, Archive, CheckCircle, Loader2, Filter } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { AlertTriangle, Clock, Phone, PhoneCall, Plus, RefreshCw, Search, Timer, Archive, CheckCircle, Loader2, Filter, Download } from "lucide-react";
 import { toast } from "sonner";
 import { format, differenceInDays, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 
-const DEFAULT_SITUACOES = [
-  "Aguardando Produto",
-  "Em Produção",
-  "Pedido Confirmado",
-  "Separação",
-];
+// Will be fetched from GestãoClick API
 
 type DelayedOrder = {
   id: string;
@@ -63,7 +59,9 @@ export default function DelayedOrders() {
   const [contacts, setContacts] = useState<Record<string, OrderContact[]>>({});
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
-  const [selectedSituacoes, setSelectedSituacoes] = useState<string[]>(DEFAULT_SITUACOES);
+  const [availableSituacoes, setAvailableSituacoes] = useState<string[]>([]);
+  const [loadingSituacoes, setLoadingSituacoes] = useState(false);
+  const [selectedSituacoes, setSelectedSituacoes] = useState<string[]>([]);
   const [customSituacao, setCustomSituacao] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [contactDialog, setContactDialog] = useState<{ open: boolean; order: DelayedOrder | null }>({ open: false, order: null });
@@ -72,6 +70,26 @@ export default function DelayedOrders() {
   const [savingContact, setSavingContact] = useState(false);
   const [filterSituacao, setFilterSituacao] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+
+  const fetchSituacoes = async () => {
+    setLoadingSituacoes(true);
+    try {
+      const res = await supabase.functions.invoke("gestaoclick-proxy", {
+        body: { action: "list_situacoes" },
+      });
+      if (res.error) throw res.error;
+      const sits = res.data?.situacoes || [];
+      setAvailableSituacoes(sits);
+      if (selectedSituacoes.length === 0 && sits.length > 0) {
+        // Don't auto-select, let user choose
+      }
+      toast.success(`${sits.length} situação(ões) encontrada(s) no GestãoClick`);
+    } catch (error: any) {
+      console.error("Error fetching situacoes:", error);
+      toast.error("Erro ao buscar situações: " + (error.message || "Erro desconhecido"));
+    }
+    setLoadingSituacoes(false);
+  };
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -354,14 +372,48 @@ export default function DelayedOrders() {
       {/* Import Section */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Filter className="h-4 w-4" />
-            Importar do GestãoClick
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Filter className="h-4 w-4" />
+              Importar do GestãoClick
+            </CardTitle>
+            <Button variant="outline" size="sm" onClick={fetchSituacoes} disabled={loadingSituacoes}>
+              {loadingSituacoes ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+              Carregar situações
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
+          {availableSituacoes.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Selecione as situações a importar:</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                {availableSituacoes.map((sit) => (
+                  <label key={sit} className="flex items-center gap-2 rounded-md border border-border p-2 cursor-pointer hover:bg-muted/50 transition-colors text-sm">
+                    <Checkbox
+                      checked={selectedSituacoes.includes(sit)}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedSituacoes([...selectedSituacoes, sit]);
+                        } else {
+                          setSelectedSituacoes(selectedSituacoes.filter((s) => s !== sit));
+                        }
+                      }}
+                    />
+                    <span className="truncate">{sit}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Clique em <strong>"Carregar situações"</strong> para buscar as situações disponíveis no GestãoClick.
+            </p>
+          )}
+
+          {/* Custom situacao input */}
           <div className="flex flex-wrap gap-2">
-            {selectedSituacoes.map((sit) => (
+            {selectedSituacoes.filter(s => !availableSituacoes.includes(s)).map((sit) => (
               <Badge key={sit} variant="secondary" className="cursor-pointer" onClick={() => removeSituacao(sit)}>
                 {sit} ×
               </Badge>
@@ -369,7 +421,7 @@ export default function DelayedOrders() {
           </div>
           <div className="flex gap-2">
             <Input
-              placeholder="Adicionar situação personalizada..."
+              placeholder="Ou adicionar situação manualmente..."
               value={customSituacao}
               onChange={(e) => setCustomSituacao(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addSituacao()}
@@ -383,7 +435,11 @@ export default function DelayedOrders() {
               Importar notas atrasadas
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">Clique nas badges para remover situações. Apenas encomendas com mais de 30 dias serão importadas.</p>
+          <p className="text-xs text-muted-foreground">
+            {selectedSituacoes.length > 0
+              ? `${selectedSituacoes.length} situação(ões) selecionada(s). Apenas encomendas com mais de 30 dias serão importadas.`
+              : "Selecione pelo menos uma situação para importar."}
+          </p>
         </CardContent>
       </Card>
 
