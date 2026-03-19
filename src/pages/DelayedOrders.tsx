@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertTriangle, Clock, Phone, PhoneCall, Plus, RefreshCw, Search, Timer, Archive, CheckCircle, Loader2, Filter } from "lucide-react";
+import { AlertTriangle, Clock, Phone, PhoneCall, Plus, RefreshCw, Search, Timer, Archive, CheckCircle, Loader2, Filter, Download } from "lucide-react";
 import { toast } from "sonner";
 import { format, differenceInDays, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
