@@ -59,7 +59,9 @@ export default function DelayedOrders() {
   const [contacts, setContacts] = useState<Record<string, OrderContact[]>>({});
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
-  const [selectedSituacoes, setSelectedSituacoes] = useState<string[]>(DEFAULT_SITUACOES);
+  const [availableSituacoes, setAvailableSituacoes] = useState<string[]>([]);
+  const [loadingSituacoes, setLoadingSituacoes] = useState(false);
+  const [selectedSituacoes, setSelectedSituacoes] = useState<string[]>([]);
   const [customSituacao, setCustomSituacao] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [contactDialog, setContactDialog] = useState<{ open: boolean; order: DelayedOrder | null }>({ open: false, order: null });
@@ -68,6 +70,26 @@ export default function DelayedOrders() {
   const [savingContact, setSavingContact] = useState(false);
   const [filterSituacao, setFilterSituacao] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+
+  const fetchSituacoes = async () => {
+    setLoadingSituacoes(true);
+    try {
+      const res = await supabase.functions.invoke("gestaoclick-proxy", {
+        body: { action: "list_situacoes" },
+      });
+      if (res.error) throw res.error;
+      const sits = res.data?.situacoes || [];
+      setAvailableSituacoes(sits);
+      if (selectedSituacoes.length === 0 && sits.length > 0) {
+        // Don't auto-select, let user choose
+      }
+      toast.success(`${sits.length} situação(ões) encontrada(s) no GestãoClick`);
+    } catch (error: any) {
+      console.error("Error fetching situacoes:", error);
+      toast.error("Erro ao buscar situações: " + (error.message || "Erro desconhecido"));
+    }
+    setLoadingSituacoes(false);
+  };
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
