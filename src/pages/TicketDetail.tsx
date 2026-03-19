@@ -1016,13 +1016,62 @@ export default function TicketDetail() {
                   <Alert variant="destructive" className="py-2">
                     <AlertTriangle className="h-4 w-4" />
                     <AlertDescription className="text-xs">
-                      <strong>Falha no envio de email!</strong>
-                      {failedEmails.slice(0, 3).map((fe) => (
-                        <div key={fe.id} className="mt-1 opacity-90">
-                          • {fe.delivery_details || fe.error_message || "Erro desconhecido"}{" "}
-                          <span className="opacity-60">({new Date(fe.created_at).toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })})</span>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <strong>Falha no envio de email!</strong>
+                          {failedEmails.slice(0, 3).map((fe) => (
+                            <div key={fe.id} className="mt-1 opacity-90">
+                              • {fe.delivery_details || fe.error_message || "Erro desconhecido"}{" "}
+                              <span className="opacity-60">({new Date(fe.created_at).toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })})</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0 h-7 text-xs gap-1 border-destructive/30 text-destructive hover:bg-destructive/10"
+                          disabled={retryingEmailId !== null}
+                          onClick={async () => {
+                            if (!id || !ticket) return;
+                            setRetryingEmailId(failedEmails[0]?.id || "retry");
+                            try {
+                              // Find the last failed message content from ticket_messages
+                              const lastAgentMsg = [...messages].reverse().find(m => m.sender_type === "agent");
+                              const content = lastAgentMsg?.content || "";
+                              if (!content) {
+                                toast({ title: "Sem conteúdo para reenviar", description: "Não foi encontrada uma mensagem para reenviar.", variant: "destructive" });
+                                setRetryingEmailId(null);
+                                return;
+                              }
+                              const { data, error } = await supabase.functions.invoke("reply-email-ticket", {
+                                body: { ticket_id: id, content },
+                              });
+                              if (error) {
+                                toast({ title: "Erro ao reenviar", description: error.message, variant: "destructive" });
+                              } else if (data?.error) {
+                                toast({ title: "Falha no reenvio", description: data.error, variant: "destructive" });
+                              } else {
+                                toast({ title: "Email reenviado com sucesso!" });
+                                // Refresh failed emails
+                                const { data: updatedLogs } = await supabase
+                                  .from("email_logs")
+                                  .select("id, created_at, delivery_status, delivery_details, error_message, subject")
+                                  .eq("ticket_id", id)
+                                  .eq("status", "failed")
+                                  .order("created_at", { ascending: false })
+                                  .limit(5);
+                                setFailedEmails(updatedLogs || []);
+                              }
+                            } catch (err) {
+                              toast({ title: "Erro ao reenviar email", description: (err as Error).message, variant: "destructive" });
+                            }
+                            setRetryingEmailId(null);
+                          }}
+                        >
+                          {retryingEmailId ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                          Reenviar
+                        </Button>
+                      </div>
                     </AlertDescription>
                   </Alert>
                 )}
