@@ -329,11 +329,11 @@ export default function DelayedOrders() {
         </Card>
         <Card>
           <CardContent className="p-3 flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-500/10">
-              <Clock className="h-4 w-4 text-orange-500" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent">
+              <Clock className="h-4 w-4 text-accent-foreground" />
             </div>
             <div>
-              <p className="text-xl font-bold leading-none text-orange-500">{stats.attention}</p>
+              <p className="text-xl font-bold leading-none text-accent-foreground">{stats.attention}</p>
               <p className="text-xs text-muted-foreground mt-0.5">Atenção (30-45d)</p>
             </div>
           </CardContent>
