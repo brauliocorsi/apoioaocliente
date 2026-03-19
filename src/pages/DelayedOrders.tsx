@@ -15,12 +15,7 @@ import { toast } from "sonner";
 import { format, differenceInDays, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 
-const DEFAULT_SITUACOES = [
-  "Aguardando Produto",
-  "Em Produção",
-  "Pedido Confirmado",
-  "Separação",
-];
+// Will be fetched from GestãoClick API
 
 type DelayedOrder = {
   id: string;
