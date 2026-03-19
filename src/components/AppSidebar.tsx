@@ -22,6 +22,7 @@ const navItems = [
   { title: "Tickets", url: "/tickets", icon: Ticket },
   { title: "Email Tickets", url: "/email-tickets", icon: Mail },
   { title: "Ligações", url: "/phone-calls", icon: Phone },
+  { title: "Notas Atrasadas", url: "/delayed-orders", icon: AlertTriangle },
   { title: "Reg. Ligações", url: "/delivery-confirmations", icon: Truck },
   { title: "Pós-Entrega", url: "/post-delivery", icon: ClipboardCheck },
   { title: "Macros", url: "/macros", icon: MessageSquareText },

@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
   };
 
   try {
-    const { action, query, id, page, telefone, nome, codigo } = await req.json();
+    const { action, query, id, page, telefone, nome, codigo, situacao } = await req.json();
 
     switch (action) {
       // === VENDAS ===
@@ -75,6 +75,7 @@ Deno.serve(async (req) => {
         const params = new URLSearchParams();
         if (query) params.set("codigo", query);
         if (nome) params.set("nome", nome);
+        if (situacao) params.set("situacao", situacao);
         if (page) params.set("pagina", String(page));
         const data = await gcFetch("/vendas", params);
         return json(data);
