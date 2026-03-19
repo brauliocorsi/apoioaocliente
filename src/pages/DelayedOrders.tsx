@@ -53,7 +53,7 @@ function getSlaStatus(orderDate: string | null): { label: string; color: string;
   const days = differenceInDays(new Date(), parseISO(orderDate));
   if (days > 60) return { label: `${days} dias — Crítico`, color: "bg-destructive text-destructive-foreground", days };
   if (days > 45) return { label: `${days} dias — Alerta`, color: "bg-warning text-warning-foreground", days };
-  if (days > 30) return { label: `${days} dias — Atenção`, color: "bg-orange-500 text-white", days };
+  if (days > 30) return { label: `${days} dias — Atenção`, color: "bg-accent text-accent-foreground", days };
   return { label: `${days} dias`, color: "bg-primary/10 text-primary", days };
 }
 
