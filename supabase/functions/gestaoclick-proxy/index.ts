@@ -93,7 +93,8 @@ Deno.serve(async (req) => {
           if (vendas.length === 0) break;
           vendas.forEach((v: any) => {
             const venda = v.venda || v;
-            if (venda.situacao) situacoes.add(venda.situacao);
+            const sit = venda.nome_situacao || venda.situacao;
+            if (sit) situacoes.add(sit);
           });
           // Check if there are more pages
           const totalPages = data?.meta?.total_paginas || 1;
