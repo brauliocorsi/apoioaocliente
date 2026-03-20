@@ -15,6 +15,8 @@ const TARGET_SITUACOES = [
 ];
 
 Deno.serve(async (req) => {
+  const url = new URL(req.url);
+  const diagnose = url.searchParams.get("diagnose") === "true";
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
