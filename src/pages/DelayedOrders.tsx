@@ -9,13 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Checkbox } from "@/components/ui/checkbox";
-import { AlertTriangle, Clock, Phone, PhoneCall, Plus, RefreshCw, Search, Timer, Archive, CheckCircle, Loader2, Filter, Download } from "lucide-react";
+import { AlertTriangle, Clock, Phone, PhoneCall, RefreshCw, Search, Timer, Archive, CheckCircle, Loader2, Zap, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
 import { format, differenceInDays, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
-
-// Will be fetched from GestãoClick API
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { Progress } from "@/components/ui/progress";
 
 type DelayedOrder = {
   id: string;
@@ -44,52 +43,46 @@ type OrderContact = {
   created_at: string;
 };
 
-function getSlaStatus(orderDate: string | null): { label: string; color: string; days: number } {
-  if (!orderDate) return { label: "Sem data", color: "bg-muted text-muted-foreground", days: 0 };
+type SlaLevel = "normal" | "attention" | "alert" | "critical";
+
+function getSlaInfo(orderDate: string | null): { label: string; level: SlaLevel; days: number; progress: number } {
+  if (!orderDate) return { label: "Sem data", level: "normal", days: 0, progress: 0 };
   const days = differenceInDays(new Date(), parseISO(orderDate));
-  if (days > 60) return { label: `${days} dias — Crítico`, color: "bg-destructive text-destructive-foreground", days };
-  if (days > 45) return { label: `${days} dias — Alerta`, color: "bg-warning text-warning-foreground", days };
-  if (days > 30) return { label: `${days} dias — Atenção`, color: "bg-accent text-accent-foreground", days };
-  return { label: `${days} dias`, color: "bg-primary/10 text-primary", days };
+  if (days > 30) return { label: `${days}d — Vencido!`, level: "critical", days, progress: 100 };
+  if (days >= 20) return { label: `${days}d — Alerta`, level: "alert", days, progress: Math.round((days / 30) * 100) };
+  if (days >= 15) return { label: `${days}d — Atenção`, level: "attention", days, progress: Math.round((days / 30) * 100) };
+  return { label: `${days}d`, level: "normal", days, progress: Math.round((days / 30) * 100) };
 }
+
+const slaColors: Record<SlaLevel, string> = {
+  normal: "bg-primary/10 text-primary",
+  attention: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
+  alert: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+  critical: "bg-destructive text-destructive-foreground",
+};
+
+const slaProgressColors: Record<SlaLevel, string> = {
+  normal: "[&>div]:bg-primary",
+  attention: "[&>div]:bg-yellow-500",
+  alert: "[&>div]:bg-orange-500",
+  critical: "[&>div]:bg-destructive",
+};
 
 export default function DelayedOrders() {
   const { user } = useAuth();
   const [orders, setOrders] = useState<DelayedOrder[]>([]);
   const [contacts, setContacts] = useState<Record<string, OrderContact[]>>({});
   const [loading, setLoading] = useState(true);
-  const [importing, setImporting] = useState(false);
-  const [availableSituacoes, setAvailableSituacoes] = useState<string[]>([]);
-  const [loadingSituacoes, setLoadingSituacoes] = useState(false);
-  const [selectedSituacoes, setSelectedSituacoes] = useState<string[]>([]);
-  const [customSituacao, setCustomSituacao] = useState("");
+  const [syncing, setSyncing] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [contactDialog, setContactDialog] = useState<{ open: boolean; order: DelayedOrder | null }>({ open: false, order: null });
   const [contactNotes, setContactNotes] = useState("");
   const [contactNextDate, setContactNextDate] = useState("");
   const [savingContact, setSavingContact] = useState(false);
   const [filterSituacao, setFilterSituacao] = useState<string>("all");
+  const [filterSla, setFilterSla] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
-
-  const fetchSituacoes = async () => {
-    setLoadingSituacoes(true);
-    try {
-      const res = await supabase.functions.invoke("gestaoclick-proxy", {
-        body: { action: "list_situacoes" },
-      });
-      if (res.error) throw res.error;
-      const sits = res.data?.situacoes || [];
-      setAvailableSituacoes(sits);
-      if (selectedSituacoes.length === 0 && sits.length > 0) {
-        // Don't auto-select, let user choose
-      }
-      toast.success(`${sits.length} situação(ões) encontrada(s) no GestãoClick`);
-    } catch (error: any) {
-      console.error("Error fetching situacoes:", error);
-      toast.error("Erro ao buscar situações: " + (error.message || "Erro desconhecido"));
-    }
-    setLoadingSituacoes(false);
-  };
+  const [lastSync, setLastSync] = useState<string | null>(null);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -99,11 +92,10 @@ export default function DelayedOrders() {
       .eq("is_archived", showArchived)
       .order("order_date", { ascending: true });
     if (error) {
-      toast.error("Erro ao carregar notas atrasadas");
+      toast.error("Erro ao carregar encomendas");
       console.error(error);
     } else {
       setOrders((data as DelayedOrder[]) || []);
-      // Fetch contacts for all orders
       const ids = (data || []).map((o: any) => o.id);
       if (ids.length > 0) {
         const { data: contactsData } = await supabase
@@ -122,78 +114,34 @@ export default function DelayedOrders() {
     setLoading(false);
   }, [showArchived]);
 
-  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+  // Fetch last sync time from system_settings
+  const fetchLastSync = async () => {
+    const { data } = await supabase
+      .from("system_settings")
+      .select("value")
+      .eq("key", "delayed_orders_last_sync")
+      .maybeSingle();
+    if (data) setLastSync(data.value);
+  };
 
-  const importFromGestaoClick = async () => {
-    if (selectedSituacoes.length === 0) {
-      toast.error("Selecione pelo menos uma situação");
-      return;
-    }
-    setImporting(true);
+  useEffect(() => { fetchOrders(); fetchLastSync(); }, [fetchOrders]);
+
+  const runManualSync = async () => {
+    setSyncing(true);
     try {
-      const allVendas: any[] = [];
-      for (const sit of selectedSituacoes) {
-        const { data: session } = await supabase.auth.getSession();
-        const res = await supabase.functions.invoke("gestaoclick-proxy", {
-          body: { action: "search_vendas", situacao: sit },
-        });
-        if (res.error) throw res.error;
-        const vendas = res.data?.data || res.data?.vendas || (Array.isArray(res.data) ? res.data : []);
-        allVendas.push(...vendas);
-      }
-
-      // Deduplicate by codigo
-      const uniqueMap = new Map<string, any>();
-      allVendas.forEach((v: any) => {
-        const venda = v.venda || v;
-        const code = venda.codigo || venda.id;
-        if (code && !uniqueMap.has(String(code))) uniqueMap.set(String(code), venda);
-      });
-
-      const uniqueVendas = Array.from(uniqueMap.values());
-      
-      // Filter orders older than 30 days
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      let imported = 0;
-      for (const venda of uniqueVendas) {
-        const orderDate = venda.data_emissao || venda.data_venda || venda.created_at;
-        if (orderDate && new Date(orderDate) > thirtyDaysAgo) continue; // Skip if < 30 days
-
-        const orderNumber = String(venda.codigo || venda.id);
-        // Check if already exists
-        const { data: existing } = await supabase
-          .from("delayed_orders")
-          .select("id")
-          .eq("order_number", orderNumber)
-          .maybeSingle();
-
-        if (existing) continue;
-
-        const clientName = venda.nome_cliente || venda.cliente?.nome || venda.nome || "Cliente";
-        const clientPhone = venda.telefone_cliente || venda.cliente?.telefone || venda.telefone || null;
-
-        const slaDeadline = orderDate ? new Date(new Date(orderDate).getTime() + 30 * 24 * 60 * 60 * 1000) : null;
-
-        await supabase.from("delayed_orders").insert({
-          order_number: orderNumber,
-          client_name: clientName,
-          client_phone: clientPhone,
-          order_date: orderDate ? orderDate.substring(0, 10) : null,
-          situacao: venda.situacao || venda.status || null,
-          sla_deadline_at: slaDeadline?.toISOString() || null,
-        });
-        imported++;
-      }
-
-      toast.success(`${imported} nota(s) importada(s) do GestãoClick`);
+      const res = await supabase.functions.invoke("sync-delayed-orders");
+      if (res.error) throw res.error;
+      const d = res.data;
+      toast.success(
+        `Sincronização concluída: ${d.imported} novas, ${d.updated} atualizadas, ${d.archived} arquivadas`
+      );
       fetchOrders();
+      fetchLastSync();
     } catch (error: any) {
-      console.error("Import error:", error);
-      toast.error("Erro ao importar do GestãoClick: " + (error.message || "Erro desconhecido"));
+      console.error("Sync error:", error);
+      toast.error("Erro na sincronização: " + (error.message || "Erro desconhecido"));
     }
-    setImporting(false);
+    setSyncing(false);
   };
 
   const registerContact = async () => {
@@ -206,10 +154,7 @@ export default function DelayedOrders() {
         next_contact_at: contactNextDate ? new Date(contactNextDate).toISOString() : null,
         contact_type: "phone",
       });
-
-      // Update the order's updated_at
       await supabase.from("delayed_orders").update({ notes: contactNotes || contactDialog.order.notes }).eq("id", contactDialog.order.id);
-
       toast.success("Contacto registado com sucesso");
       setContactDialog({ open: false, order: null });
       setContactNotes("");
@@ -231,18 +176,14 @@ export default function DelayedOrders() {
         priority: "P2",
         invoice_number: order.order_number,
       }).select().single();
-
       if (error) throw error;
-
-      // Register the contact with linked phone call
       await supabase.from("delayed_order_contacts").insert({
         delayed_order_id: order.id,
         notes: `Ligação criada: ${data.id}`,
         contact_type: "phone_call",
         phone_call_id: data.id,
       });
-
-      toast.success("Ligação criada e vinculada à nota atrasada");
+      toast.success("Ligação criada e vinculada");
       fetchOrders();
     } catch (error) {
       toast.error("Erro ao criar ligação");
@@ -254,384 +195,406 @@ export default function DelayedOrders() {
     fetchOrders();
   };
 
-  const addSituacao = () => {
-    const trimmed = customSituacao.trim();
-    if (trimmed && !selectedSituacoes.includes(trimmed)) {
-      setSelectedSituacoes([...selectedSituacoes, trimmed]);
-      setCustomSituacao("");
-    }
-  };
-
-  const removeSituacao = (sit: string) => {
-    setSelectedSituacoes(selectedSituacoes.filter((s) => s !== sit));
-  };
-
   const filteredOrders = orders.filter((o) => {
     if (filterSituacao !== "all" && o.situacao !== filterSituacao) return false;
+    if (filterSla !== "all") {
+      const sla = getSlaInfo(o.order_date);
+      if (filterSla === "critical" && sla.level !== "critical") return false;
+      if (filterSla === "alert" && sla.level !== "alert") return false;
+      if (filterSla === "attention" && sla.level !== "attention") return false;
+      if (filterSla === "contacted") {
+        if ((contacts[o.id] || []).length === 0) return false;
+      }
+      if (filterSla === "no_contact") {
+        if ((contacts[o.id] || []).length > 0) return false;
+      }
+    }
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       if (
         !o.order_number.toLowerCase().includes(term) &&
         !o.client_name.toLowerCase().includes(term) &&
         !(o.client_phone || "").toLowerCase().includes(term)
-      )
-        return false;
+      ) return false;
     }
     return true;
   });
 
   const uniqueSituacoes = [...new Set(orders.map((o) => o.situacao).filter(Boolean))] as string[];
 
-  // Stats
   const stats = {
     total: orders.length,
-    critical: orders.filter((o) => getSlaStatus(o.order_date).days > 60).length,
-    alert: orders.filter((o) => { const d = getSlaStatus(o.order_date).days; return d > 45 && d <= 60; }).length,
-    attention: orders.filter((o) => { const d = getSlaStatus(o.order_date).days; return d > 30 && d <= 45; }).length,
+    critical: orders.filter((o) => getSlaInfo(o.order_date).level === "critical").length,
+    alert: orders.filter((o) => getSlaInfo(o.order_date).level === "alert").length,
+    attention: orders.filter((o) => getSlaInfo(o.order_date).level === "attention").length,
     withContact: orders.filter((o) => (contacts[o.id] || []).length > 0).length,
+    noContact: orders.filter((o) => (contacts[o.id] || []).length === 0).length,
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Notas Atrasadas</h1>
-          <p className="text-sm text-muted-foreground">Monitorização de encomendas com atraso no GestãoClick</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowArchived(!showArchived)}>
-            <Archive className="h-4 w-4 mr-1" />
-            {showArchived ? "Ver ativas" : "Ver arquivadas"}
-          </Button>
-          <Button variant="outline" size="sm" onClick={fetchOrders}>
-            <RefreshCw className="h-4 w-4 mr-1" />
-            Atualizar
-          </Button>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <Card>
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <Clock className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <p className="text-xl font-bold leading-none text-primary">{stats.total}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Total</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className={stats.critical > 0 ? "border-destructive/30" : ""}>
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
-              <AlertTriangle className="h-4 w-4 text-destructive" />
-            </div>
-            <div>
-              <p className="text-xl font-bold leading-none text-destructive">{stats.critical}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Crítico (&gt;60d)</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className={stats.alert > 0 ? "border-warning/30" : ""}>
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-warning/10">
-              <Timer className="h-4 w-4 text-warning" />
-            </div>
-            <div>
-              <p className="text-xl font-bold leading-none text-warning">{stats.alert}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Alerta (45-60d)</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent">
-              <Clock className="h-4 w-4 text-accent-foreground" />
-            </div>
-            <div>
-              <p className="text-xl font-bold leading-none text-accent-foreground">{stats.attention}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Atenção (30-45d)</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success/10">
-              <PhoneCall className="h-4 w-4 text-success" />
-            </div>
-            <div>
-              <p className="text-xl font-bold leading-none text-success">{stats.withContact}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Com contacto</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Import Section */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Filter className="h-4 w-4" />
-              Importar do GestãoClick
-            </CardTitle>
-            <Button variant="outline" size="sm" onClick={fetchSituacoes} disabled={loadingSituacoes}>
-              {loadingSituacoes ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
-              Carregar situações
+    <TooltipProvider>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Controlo de Encomendas</h1>
+            <p className="text-sm text-muted-foreground">
+              Monitorização automática de encomendas pendentes — Sincroniza diariamente às 08:00
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {lastSync && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <CalendarClock className="h-3 w-3" />
+                    Último sync: {format(new Date(lastSync), "dd/MM HH:mm")}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Última sincronização automática com o GestãoClick</TooltipContent>
+              </Tooltip>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setShowArchived(!showArchived)}>
+              <Archive className="h-4 w-4 mr-1" />
+              {showArchived ? "Ativas" : "Arquivadas"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={fetchOrders}>
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Atualizar
+            </Button>
+            <Button onClick={runManualSync} disabled={syncing} className="gap-1">
+              {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+              Sincronizar agora
             </Button>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {availableSituacoes.length > 0 ? (
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Selecione as situações a importar:</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                {availableSituacoes.map((sit) => (
-                  <label key={sit} className="flex items-center gap-2 rounded-md border border-border p-2 cursor-pointer hover:bg-muted/50 transition-colors text-sm">
-                    <Checkbox
-                      checked={selectedSituacoes.includes(sit)}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          setSelectedSituacoes([...selectedSituacoes, sit]);
-                        } else {
-                          setSelectedSituacoes(selectedSituacoes.filter((s) => s !== sit));
-                        }
-                      }}
-                    />
-                    <span className="truncate">{sit}</span>
-                  </label>
-                ))}
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+          <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => setFilterSla("all")}>
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                <Clock className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-xl font-bold leading-none text-primary">{stats.total}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Total</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className={`cursor-pointer hover:border-destructive/50 transition-colors ${stats.critical > 0 ? "border-destructive/30" : ""}`} onClick={() => setFilterSla("critical")}>
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+              </div>
+              <div>
+                <p className="text-xl font-bold leading-none text-destructive">{stats.critical}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Vencidas (&gt;30d)</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="cursor-pointer hover:border-orange-500/50 transition-colors" onClick={() => setFilterSla("alert")}>
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/20">
+                <Timer className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div>
+                <p className="text-xl font-bold leading-none text-orange-600 dark:text-orange-400">{stats.alert}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Alerta (20-30d)</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="cursor-pointer hover:border-yellow-500/50 transition-colors" onClick={() => setFilterSla("attention")}>
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-yellow-100 dark:bg-yellow-900/20">
+                <Clock className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <div>
+                <p className="text-xl font-bold leading-none text-yellow-600 dark:text-yellow-400">{stats.attention}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Atenção (15-20d)</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="cursor-pointer hover:border-green-500/50 transition-colors" onClick={() => setFilterSla("contacted")}>
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/20">
+                <PhoneCall className="h-4 w-4 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <p className="text-xl font-bold leading-none text-green-600 dark:text-green-400">{stats.withContact}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Com contacto</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="cursor-pointer hover:border-muted-foreground/50 transition-colors" onClick={() => setFilterSla("no_contact")}>
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                <Phone className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-xl font-bold leading-none text-muted-foreground">{stats.noContact}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Sem contacto</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Info banner */}
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-3 text-sm flex items-start gap-3">
+            <Zap className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium text-primary">Sincronização Automática Ativa</p>
+              <p className="text-muted-foreground text-xs mt-0.5">
+                Todos os dias às 08:00, o sistema busca automaticamente encomendas com situação:
+                <strong> Encomenda</strong>, <strong>Encomenda Fornecedor</strong>, <strong>Encomenda Fabrica</strong> e <strong>Encomenda Fornecedor - Fábrica</strong>.
+                Encomendas que mudarem de situação são automaticamente arquivadas. Você também pode clicar em "Sincronizar agora" a qualquer momento.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Filters */}
+        <div className="flex gap-3 items-center flex-wrap">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Buscar por nº nota, cliente ou telefone..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9" />
+          </div>
+          <Select value={filterSituacao} onValueChange={setFilterSituacao}>
+            <SelectTrigger className="w-52">
+              <SelectValue placeholder="Filtrar por situação" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as situações</SelectItem>
+              {uniqueSituacoes.map((s) => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterSla} onValueChange={setFilterSla}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="Filtrar por SLA" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os SLA</SelectItem>
+              <SelectItem value="critical">🔴 Vencidas (&gt;30d)</SelectItem>
+              <SelectItem value="alert">🟠 Alerta (20-30d)</SelectItem>
+              <SelectItem value="attention">🟡 Atenção (15-20d)</SelectItem>
+              <SelectItem value="contacted">✅ Com contacto</SelectItem>
+              <SelectItem value="no_contact">⚪ Sem contacto</SelectItem>
+            </SelectContent>
+          </Select>
+          {(filterSla !== "all" || filterSituacao !== "all" || searchTerm) && (
+            <Button variant="ghost" size="sm" onClick={() => { setFilterSla("all"); setFilterSituacao("all"); setSearchTerm(""); }}>
+              Limpar filtros
+            </Button>
+          )}
+        </div>
+
+        {/* Orders Table */}
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nota</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Telefone</TableHead>
+                  <TableHead>Data Venda</TableHead>
+                  <TableHead>Situação</TableHead>
+                  <TableHead>Dias / SLA</TableHead>
+                  <TableHead>Contactos</TableHead>
+                  <TableHead>Último Contacto</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                    </TableCell>
+                  </TableRow>
+                ) : filteredOrders.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      {orders.length === 0
+                        ? "Nenhuma encomenda pendente. Clique em \"Sincronizar agora\" para buscar do GestãoClick."
+                        : "Nenhuma encomenda encontrada com os filtros atuais."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredOrders.map((order) => {
+                    const sla = getSlaInfo(order.order_date);
+                    const orderContacts = contacts[order.id] || [];
+                    const lastContact = orderContacts[0];
+
+                    return (
+                      <TableRow key={order.id} className={sla.level === "critical" ? "bg-destructive/5" : sla.level === "alert" ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}>
+                        <TableCell className="font-mono font-medium text-sm">#{order.order_number}</TableCell>
+                        <TableCell className="font-medium">{order.client_name}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">{order.client_phone || "—"}</TableCell>
+                        <TableCell className="text-sm">
+                          {order.order_date ? format(parseISO(order.order_date), "dd/MM/yyyy") : "—"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">{order.situacao || "N/A"}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1 min-w-[120px]">
+                            <Badge className={`text-xs ${slaColors[sla.level]}`}>{sla.label}</Badge>
+                            <Progress value={sla.progress} className={`h-1.5 ${slaProgressColors[sla.level]}`} />
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant={orderContacts.length > 0 ? "secondary" : "outline"} className={`text-xs ${orderContacts.length === 0 && sla.level !== "normal" ? "border-destructive/50 text-destructive" : ""}`}>
+                                {orderContacts.length > 0 ? `${orderContacts.length}x` : "Nenhum"}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {orderContacts.length > 0
+                                ? `${orderContacts.length} contacto(s) registado(s)`
+                                : "Nenhum contacto feito — considere entrar em contacto"}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {lastContact ? (
+                            <div>
+                              <div>{format(new Date(lastContact.contacted_at), "dd/MM HH:mm", { locale: pt })}</div>
+                              {lastContact.notes && <div className="truncate max-w-[120px] text-[10px]">{lastContact.notes}</div>}
+                            </div>
+                          ) : (
+                            <span className={sla.level !== "normal" ? "text-destructive" : ""}>Nunca</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => {
+                                    setContactDialog({ open: true, order });
+                                    setContactNotes("");
+                                    setContactNextDate("");
+                                  }}
+                                >
+                                  <Phone className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Registar contacto rápido</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => createPhoneCall(order)}>
+                                  <PhoneCall className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Criar ligação completa</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleArchive(order)}>
+                                  {order.is_archived ? <RefreshCw className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>{order.is_archived ? "Desarquivar" : "Arquivar"}</TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        {/* Contact Dialog */}
+        <Dialog open={contactDialog.open} onOpenChange={(open) => setContactDialog({ open, order: open ? contactDialog.order : null })}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Registar Contacto — #{contactDialog.order?.order_number}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-medium mb-1">Cliente</p>
+                <p className="text-sm text-muted-foreground">{contactDialog.order?.client_name} — {contactDialog.order?.client_phone || "Sem telefone"}</p>
+              </div>
+              {contactDialog.order && (
+                <div>
+                  <p className="text-sm font-medium mb-1">SLA</p>
+                  <Badge className={`${slaColors[getSlaInfo(contactDialog.order.order_date).level]}`}>
+                    {getSlaInfo(contactDialog.order.order_date).label}
+                  </Badge>
+                </div>
+              )}
+              <div>
+                <label className="text-sm font-medium">Notas do contacto</label>
+                <Textarea
+                  value={contactNotes}
+                  onChange={(e) => setContactNotes(e.target.value)}
+                  placeholder="Ex: Cliente informado sobre atraso, previsão de entrega em 15 dias..."
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Próximo contacto (opcional)</label>
+                <Input type="datetime-local" value={contactNextDate} onChange={(e) => setContactNextDate(e.target.value)} />
+              </div>
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={() => contactDialog.order && createPhoneCall(contactDialog.order)}>
+                  <PhoneCall className="h-4 w-4 mr-1" />
+                  Criar ligação completa
+                </Button>
+                <Button onClick={registerContact} disabled={savingContact}>
+                  {savingContact ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-1" />}
+                  Registar
+                </Button>
               </div>
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Clique em <strong>"Carregar situações"</strong> para buscar as situações disponíveis no GestãoClick.
-            </p>
-          )}
+          </DialogContent>
+        </Dialog>
 
-          {/* Custom situacao input */}
-          <div className="flex flex-wrap gap-2">
-            {selectedSituacoes.filter(s => !availableSituacoes.includes(s)).map((sit) => (
-              <Badge key={sit} variant="secondary" className="cursor-pointer" onClick={() => removeSituacao(sit)}>
-                {sit} ×
-              </Badge>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Ou adicionar situação manualmente..."
-              value={customSituacao}
-              onChange={(e) => setCustomSituacao(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addSituacao()}
-              className="max-w-xs"
-            />
-            <Button variant="outline" size="sm" onClick={addSituacao} disabled={!customSituacao.trim()}>
-              <Plus className="h-4 w-4" />
-            </Button>
-            <Button onClick={importFromGestaoClick} disabled={importing || selectedSituacoes.length === 0}>
-              {importing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Search className="h-4 w-4 mr-1" />}
-              Importar notas atrasadas
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {selectedSituacoes.length > 0
-              ? `${selectedSituacoes.length} situação(ões) selecionada(s). Apenas encomendas com mais de 30 dias serão importadas.`
-              : "Selecione pelo menos uma situação para importar."}
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Filters */}
-      <div className="flex gap-3 items-center">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Buscar por nº nota, cliente ou telefone..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9" />
-        </div>
-        <Select value={filterSituacao} onValueChange={setFilterSituacao}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Filtrar por situação" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas as situações</SelectItem>
-            {uniqueSituacoes.map((s) => (
-              <SelectItem key={s} value={s}>{s}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Orders Table */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nota</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Telefone</TableHead>
-                <TableHead>Data Encomenda</TableHead>
-                <TableHead>Situação</TableHead>
-                <TableHead>SLA</TableHead>
-                <TableHead>Contactos</TableHead>
-                <TableHead>Último Contacto</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-                  </TableCell>
-                </TableRow>
-              ) : filteredOrders.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                    Nenhuma nota atrasada encontrada. Clique em "Importar" para buscar do GestãoClick.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredOrders.map((order) => {
-                  const sla = getSlaStatus(order.order_date);
-                  const orderContacts = contacts[order.id] || [];
-                  const lastContact = orderContacts[0];
-
-                  return (
-                    <TableRow key={order.id} className={sla.days > 60 ? "bg-destructive/5" : ""}>
-                      <TableCell className="font-mono font-medium">#{order.order_number}</TableCell>
-                      <TableCell className="font-medium">{order.client_name}</TableCell>
-                      <TableCell className="text-muted-foreground">{order.client_phone || "—"}</TableCell>
-                      <TableCell>
-                        {order.order_date ? format(parseISO(order.order_date), "dd/MM/yyyy") : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">{order.situacao || "N/A"}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`text-xs ${sla.color}`}>{sla.label}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="text-xs">{orderContacts.length}</Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {lastContact ? format(new Date(lastContact.contacted_at), "dd/MM HH:mm", { locale: pt }) : "Nunca"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            title="Registar contacto rápido"
-                            onClick={() => {
-                              setContactDialog({ open: true, order });
-                              setContactNotes("");
-                              setContactNextDate("");
-                            }}
-                          >
-                            <Phone className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            title="Criar ligação completa"
-                            onClick={() => createPhoneCall(order)}
-                          >
-                            <PhoneCall className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            title={order.is_archived ? "Desarquivar" : "Arquivar"}
-                            onClick={() => toggleArchive(order)}
-                          >
-                            {order.is_archived ? <RefreshCw className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
-                          </Button>
+        {/* Contact History */}
+        {filteredOrders.some((o) => (contacts[o.id] || []).length > 0) && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Histórico de Contactos Recentes</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {filteredOrders
+                  .flatMap((o) => (contacts[o.id] || []).map((c) => ({ ...c, order: o })))
+                  .sort((a, b) => new Date(b.contacted_at).getTime() - new Date(a.contacted_at).getTime())
+                  .slice(0, 20)
+                  .map((c) => (
+                    <div key={c.id} className="flex items-start gap-3 text-sm border-b border-border/50 pb-2">
+                      <Phone className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">#{c.order.order_number}</span>
+                          <span className="text-muted-foreground">{c.order.client_name}</span>
+                          {c.phone_call_id && <Badge variant="outline" className="text-xs">Ligação vinculada</Badge>}
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Contact Dialog */}
-      <Dialog open={contactDialog.open} onOpenChange={(open) => setContactDialog({ open, order: open ? contactDialog.order : null })}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Registar Contacto — #{contactDialog.order?.order_number}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm font-medium mb-1">Cliente</p>
-              <p className="text-sm text-muted-foreground">{contactDialog.order?.client_name} — {contactDialog.order?.client_phone || "Sem telefone"}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Notas do contacto</label>
-              <Textarea
-                value={contactNotes}
-                onChange={(e) => setContactNotes(e.target.value)}
-                placeholder="Ex: Cliente informado sobre atraso, previsão de entrega em 15 dias..."
-                rows={3}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Próximo contacto (opcional)</label>
-              <Input type="datetime-local" value={contactNextDate} onChange={(e) => setContactNextDate(e.target.value)} />
-            </div>
-            <div className="flex justify-between">
-              <Button variant="outline" onClick={() => contactDialog.order && createPhoneCall(contactDialog.order)}>
-                <PhoneCall className="h-4 w-4 mr-1" />
-                Criar ligação completa
-              </Button>
-              <Button onClick={registerContact} disabled={savingContact}>
-                {savingContact ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-1" />}
-                Registar
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Contact History inline */}
-      {filteredOrders.some((o) => (contacts[o.id] || []).length > 0) && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Histórico de Contactos Recentes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {filteredOrders
-                .flatMap((o) => (contacts[o.id] || []).map((c) => ({ ...c, order: o })))
-                .sort((a, b) => new Date(b.contacted_at).getTime() - new Date(a.contacted_at).getTime())
-                .slice(0, 20)
-                .map((c) => (
-                  <div key={c.id} className="flex items-start gap-3 text-sm border-b border-border/50 pb-2">
-                    <Phone className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">#{c.order.order_number}</span>
-                        <span className="text-muted-foreground">{c.order.client_name}</span>
-                        {c.phone_call_id && <Badge variant="outline" className="text-xs">Ligação vinculada</Badge>}
+                        {c.notes && <p className="text-muted-foreground text-xs mt-0.5">{c.notes}</p>}
                       </div>
-                      {c.notes && <p className="text-muted-foreground text-xs mt-0.5">{c.notes}</p>}
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {format(new Date(c.contacted_at), "dd/MM HH:mm", { locale: pt })}
+                      </span>
                     </div>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {format(new Date(c.contacted_at), "dd/MM HH:mm", { locale: pt })}
-                    </span>
-                  </div>
-                ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }
