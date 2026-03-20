@@ -528,7 +528,7 @@ export default function DelayedOrders() {
                   </TableRow>
                 ) : filteredOrders.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                       {orders.length === 0
                         ? "Nenhuma encomenda pendente. Clique em \"Sincronizar agora\" para buscar do GestãoClick."
                         : "Nenhuma encomenda encontrada com os filtros atuais."}
