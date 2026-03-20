@@ -355,6 +355,9 @@ export default function DelayedOrders() {
           </CardContent>
         </Card>
 
+        {/* Charts Dashboard */}
+        <DelayedOrdersCharts orders={orders} contacts={contacts} />
+
         {/* Filters */}
         <div className="flex gap-3 items-center flex-wrap">
           <div className="relative flex-1 max-w-sm">
