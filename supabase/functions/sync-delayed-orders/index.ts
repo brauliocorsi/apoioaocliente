@@ -7,18 +7,24 @@ const corsHeaders = {
 };
 
 const GC_BASE = "https://api.gestaoclick.com/api";
-const BATCH_SIZE = 10;
-const MAX_PAGES = 100;
 const CLIENT_BATCH_SIZE = 5;
 
-const DEFAULT_TARGET_SITUACOES = [
-  "Encomenda",
-  "Encomenda Fornecedor",
-  "Encomenda Fabrica",
-  "Encomenda Fornecedor - Fábrica",
-  "Encomenda - Fornecedor",
+// The exact situacao search terms to send to the GestãoClick API.
+// The API does partial matching, so "Encomenda - F" will match
+// "Encomenda - Fábrica" and "Encomenda - Fábrica e Fornecedor".
+const SITUACAO_SEARCH_TERMS = [
   "Encomenda - Fábrica",
+  "Encomenda - Fornecedor",
   "Encomenda - Fábrica e Fornecedor",
+];
+
+// For local validation after fetching: normalized strings that ARE valid
+const VALID_NORMALIZED = [
+  "encomenda fabrica",
+  "encomenda fornecedor",
+  "encomenda fabrica e fornecedor",
+  "encomenda fornecedor fabrica",
+  "encomenda fornecedor e fabrica",
 ];
 
 const normalizeSituacao = (value: string): string =>
@@ -30,13 +36,13 @@ const normalizeSituacao = (value: string): string =>
     .trim()
     .replace(/\s+/g, " ");
 
-const buildSituacaoMatcher = (situacoes: string[]) => {
-  const normalizedTargets = situacoes.map(normalizeSituacao).filter(Boolean);
-  return (situacao: string | null | undefined): boolean => {
-    if (!situacao) return false;
-    const normalized = normalizeSituacao(situacao);
-    return normalizedTargets.includes(normalized);
-  };
+const isValidSituacao = (situacao: string | null | undefined): boolean => {
+  if (!situacao) return false;
+  const n = normalizeSituacao(situacao);
+  // Must contain "encomenda" AND at least one of "fabrica" or "fornecedor"
+  if (!n.includes("encomenda")) return false;
+  if (!n.includes("fabrica") && !n.includes("fornecedor")) return false;
+  return true;
 };
 
 Deno.serve(async (req) => {
@@ -77,18 +83,6 @@ Deno.serve(async (req) => {
     return data;
   };
 
-  const fetchPage = async (page: number): Promise<any[]> => {
-    try {
-      const params = new URLSearchParams();
-      params.set("pagina", String(page));
-      const data = await gcFetch("/vendas", params);
-      return data?.data || data?.vendas || (Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error(`Error fetching page ${page}:`, e);
-      return [];
-    }
-  };
-
   const fetchClientPhone = async (clientId: string): Promise<string | null> => {
     try {
       const data = await gcFetch(`/clientes/${clientId}`);
@@ -100,65 +94,53 @@ Deno.serve(async (req) => {
   };
 
   try {
-    let requestedSituacoes: string[] = [];
-    let pageLimitOverride: number | null = null;
-
-    try {
-      const rawBody = await req.text();
-      if (rawBody) {
-        const parsedBody = JSON.parse(rawBody);
-        if (Array.isArray(parsedBody?.situacoes)) {
-          requestedSituacoes = parsedBody.situacoes.filter((value: unknown): value is string => typeof value === "string");
-        }
-        if (Number.isFinite(parsedBody?.max_pages) && parsedBody.max_pages > 0) {
-          pageLimitOverride = Number(parsedBody.max_pages);
-        }
-      }
-    } catch {
-      // ignore malformed/empty body and use defaults
-    }
-
-    const targetSituacoes = requestedSituacoes.length > 0 ? requestedSituacoes : DEFAULT_TARGET_SITUACOES;
-    const isTargetSituacao = buildSituacaoMatcher(targetSituacoes);
-
-    // Step 1: Fetch pages and filter inline to save memory
-    const firstData = await gcFetch("/vendas", (() => { const p = new URLSearchParams(); p.set("pagina", "1"); return p; })());
-    const totalPages = Number(firstData?.meta?.total_paginas || 1);
-    const firstVendas = firstData?.data || firstData?.vendas || (Array.isArray(firstData) ? firstData : []);
-    const pagesToScan = Math.min(pageLimitOverride || MAX_PAGES, totalPages);
-    console.log(`Total pages: ${totalPages}, scanning up to ${pagesToScan}`);
-
-    // Filter inline - don't store non-matching vendas
+    // Strategy: Instead of scanning all 525+ pages, use the API's situacao filter
+    // to fetch ONLY matching vendas. This is much faster and avoids resource limits.
     const uniqueMap = new Map<string, any>();
+    let totalApiPages = 0;
 
-    const processVendas = (vendas: any[]) => {
-      for (const v of vendas) {
-        const venda = v.venda || v;
-        const sit = venda.nome_situacao || venda.situacao || "";
-        if (!isTargetSituacao(sit)) continue;
-        const code = String(venda.codigo || venda.id || "");
-        if (code) uniqueMap.set(code, venda);
+    for (const situacaoTerm of SITUACAO_SEARCH_TERMS) {
+      let page = 1;
+      let maxPage = 1;
+
+      while (page <= maxPage) {
+        const params = new URLSearchParams();
+        params.set("situacao", situacaoTerm);
+        params.set("pagina", String(page));
+
+        try {
+          const data = await gcFetch("/vendas", params);
+          const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
+          maxPage = Number(data?.meta?.total_paginas || 1);
+          totalApiPages++;
+
+          for (const v of vendas) {
+            const venda = v.venda || v;
+            const sit = venda.nome_situacao || venda.situacao || "";
+            // Double-check the situacao is valid (API might do partial matching)
+            if (!isValidSituacao(sit)) continue;
+            const code = String(venda.codigo || venda.id || "");
+            if (code) uniqueMap.set(code, venda);
+          }
+
+          console.log(`Situacao "${situacaoTerm}" page ${page}/${maxPage}: ${vendas.length} vendas, matched total: ${uniqueMap.size}`);
+
+          if (vendas.length === 0) break;
+          page++;
+        } catch (e) {
+          console.error(`Error fetching situacao "${situacaoTerm}" page ${page}:`, e);
+          break;
+        }
       }
-    };
-
-    processVendas(firstVendas);
-
-    for (let batchStart = 2; batchStart <= pagesToScan; batchStart += BATCH_SIZE) {
-      const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, pagesToScan);
-      const promises: Promise<any[]>[] = [];
-      for (let p = batchStart; p <= batchEnd; p++) promises.push(fetchPage(p));
-      const results = await Promise.all(promises);
-      for (const vendas of results) processVendas(vendas);
-      console.log(`Batch ${batchStart}-${batchEnd}/${pagesToScan}, matched: ${uniqueMap.size}`);
     }
 
     const filteredVendas = Array.from(uniqueMap.values());
-    console.log(`Filtered: ${filteredVendas.length} match target situacoes`);
+    console.log(`Total matched: ${filteredVendas.length} vendas from ${totalApiPages} API pages`);
 
-    // Step 3: Fetch client phones for unique client IDs
+    // Fetch client phones for unique client IDs
     const clientIds = [...new Set(filteredVendas.map(v => String(v.cliente_id || "")).filter(Boolean))];
     const phoneMap = new Map<string, string | null>();
-    
+
     console.log(`Fetching phone for ${clientIds.length} unique clients...`);
     for (let i = 0; i < clientIds.length; i += CLIENT_BATCH_SIZE) {
       const batch = clientIds.slice(i, i + CLIENT_BATCH_SIZE);
@@ -167,7 +149,7 @@ Deno.serve(async (req) => {
     }
     console.log(`Got phones for ${[...phoneMap.values()].filter(Boolean).length} clients`);
 
-    // Step 4: Upsert into database
+    // Upsert into database
     let imported = 0;
     let updated = 0;
 
@@ -186,7 +168,6 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (existing) {
-        // Update if situacao changed, or phone/date was missing
         const updates: Record<string, any> = {};
         if (existing.situacao !== situacao) updates.situacao = situacao;
         if (!existing.client_phone && clientPhone) updates.client_phone = clientPhone;
@@ -223,7 +204,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Step 5: Auto-archive
+    // Auto-archive orders no longer matching
     const activeOrderNumbers = new Set(filteredVendas.map(v => String(v.codigo || v.id)));
     const { data: dbOrders } = await supabaseAdmin
       .from("delayed_orders")
@@ -245,7 +226,14 @@ Deno.serve(async (req) => {
       .from("system_settings")
       .upsert({ key: "delayed_orders_last_sync", value: new Date().toISOString() }, { onConflict: "key" });
 
-    const summary = { imported, updated, archived, totalFetched: filteredVendas.length, totalPages, clientsWithPhone: [...phoneMap.values()].filter(Boolean).length };
+    const summary = {
+      imported,
+      updated,
+      archived,
+      totalFetched: filteredVendas.length,
+      totalApiPages,
+      clientsWithPhone: [...phoneMap.values()].filter(Boolean).length,
+    };
     console.log("Sync complete:", summary);
 
     return new Response(JSON.stringify({ success: true, ...summary }), {
