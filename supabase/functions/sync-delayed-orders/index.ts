@@ -55,37 +55,46 @@ Deno.serve(async (req) => {
   };
 
   try {
-    // Step 1: Discover situacao_ids by scanning a sample of vendas
-    // to build a map of nome_situacao -> situacao_id
-    const situacaoIdMap = new Map<string, string>();
+    // Step 1: Try to find situacao IDs from various endpoints
+    const situacaoEndpoints = ["/situacoes", "/situacoes_vendas", "/situacoes/vendas"];
+    let allSituacoes: any[] = [];
     
-    // First, try fetching situacoes endpoint directly
-    try {
-      const sitData = await gcFetch("/situacoes_vendas");
-      const situacoes = sitData?.data || sitData?.situacoes || (Array.isArray(sitData) ? sitData : []);
-      for (const s of situacoes) {
-        const sit = s.situacao || s;
-        const nome = sit.nome || sit.name || "";
-        const id = String(sit.id || "");
-        if (nome && id) situacaoIdMap.set(nome, id);
+    for (const endpoint of situacaoEndpoints) {
+      try {
+        const data = await gcFetch(endpoint);
+        const items = data?.data || data?.situacoes || (Array.isArray(data) ? data : []);
+        if (items.length > 0) {
+          allSituacoes = items;
+          console.log(`Found ${items.length} situacoes from ${endpoint}`);
+          // Log all situação names for debugging
+          items.forEach((s: any) => {
+            const sit = s.situacao || s;
+            console.log(`  Situacao: id=${sit.id || s.id}, nome="${sit.nome || sit.name || s.nome || s.name}"`);
+          });
+          break;
+        }
+      } catch (e) {
+        console.log(`Endpoint ${endpoint} failed:`, (e as Error).message || e);
       }
-      console.log(`Found ${situacaoIdMap.size} situacoes from API:`, Object.fromEntries(situacaoIdMap));
-    } catch (e) {
-      console.log("Could not fetch /situacoes_vendas, will scan vendas instead:", e);
     }
 
-    // Get target situacao_ids
-    const targetIds = TARGET_SITUACOES
-      .map(name => situacaoIdMap.get(name))
-      .filter(Boolean) as string[];
-    
-    console.log("Target situacao_ids:", targetIds);
+    // Build map of target situacao names -> IDs
+    const targetSitIds: string[] = [];
+    for (const s of allSituacoes) {
+      const sit = s.situacao || s;
+      const nome = (sit.nome || sit.name || s.nome || s.name || "").trim();
+      const id = String(sit.id || s.id || "");
+      if (TARGET_SITUACOES.some(t => t.toLowerCase() === nome.toLowerCase()) && id) {
+        targetSitIds.push(id);
+        console.log(`Matched target: "${nome}" -> id=${id}`);
+      }
+    }
 
     const allVendas: any[] = [];
 
-    if (targetIds.length > 0) {
-      // Fetch by situacao_id for each target
-      for (const sitId of targetIds) {
+    if (targetSitIds.length > 0) {
+      // Use situacao_id filter
+      for (const sitId of targetSitIds) {
         let page = 1;
         const maxPages = 20;
         while (page <= maxPages) {
@@ -97,7 +106,6 @@ Deno.serve(async (req) => {
             const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
             if (vendas.length === 0) break;
             allVendas.push(...vendas);
-            console.log(`SitID ${sitId} page ${page}: ${vendas.length} vendas`);
             const totalPages = data?.meta?.total_paginas || data?.meta?.ultima_pagina || 1;
             if (page >= totalPages) break;
             page++;
@@ -108,17 +116,26 @@ Deno.serve(async (req) => {
         }
       }
     } else {
-      // Fallback: scan recent pages and filter locally
-      console.log("No situacao_ids found, scanning all vendas...");
-      let page = 1;
-      const maxPages = 100;
-      while (page <= maxPages) {
+      // No situacao IDs found - scan last pages (newest vendas) + first pages 
+      // to catch vendas in "Encomenda" status
+      console.log("No situacao IDs matched. Scanning last pages for recent encomendas...");
+      
+      // Get total pages from first request
+      const firstParams = new URLSearchParams();
+      firstParams.set("pagina", "1");
+      const firstData = await gcFetch("/vendas", firstParams);
+      const totalPages = firstData?.meta?.total_paginas || 1;
+      console.log(`Total pages: ${totalPages}`);
+      
+      // Scan from the last page backwards (newest records)
+      const pagesToScan = Math.min(totalPages, 30);
+      for (let p = totalPages; p > totalPages - pagesToScan && p >= 1; p--) {
         const params = new URLSearchParams();
-        params.set("pagina", String(page));
+        params.set("pagina", String(p));
         try {
           const data = await gcFetch("/vendas", params);
           const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
-          if (vendas.length === 0) break;
+          if (vendas.length === 0) continue;
           for (const v of vendas) {
             const venda = v.venda || v;
             const sit = venda.nome_situacao || venda.situacao || "";
@@ -126,12 +143,8 @@ Deno.serve(async (req) => {
               allVendas.push(venda);
             }
           }
-          const totalPages = data?.meta?.total_paginas || data?.meta?.ultima_pagina || 1;
-          if (page >= totalPages) break;
-          page++;
         } catch (e) {
-          console.error(`Error scanning page ${page}:`, e);
-          break;
+          console.error(`Error scanning page ${p}:`, e);
         }
       }
     }
