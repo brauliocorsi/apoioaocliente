@@ -9,13 +9,14 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertTriangle, Clock, Phone, PhoneCall, RefreshCw, Search, Timer, Archive, CheckCircle, Loader2, Zap, CalendarClock } from "lucide-react";
+import { AlertTriangle, Clock, Eye, Phone, PhoneCall, RefreshCw, Search, Timer, Archive, CheckCircle, Loader2, Zap, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
 import { format, differenceInDays, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
 import DelayedOrdersCharts from "@/components/delayed/DelayedOrdersCharts";
+import VendaPDFDialog from "@/components/ticket/VendaPDFDialog";
 
 type DelayedOrder = {
   id: string;
@@ -84,6 +85,8 @@ export default function DelayedOrders() {
   const [filterSla, setFilterSla] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const [vendaDialog, setVendaDialog] = useState<{ open: boolean; vendaId: string; vendaCodigo: string }>({ open: false, vendaId: "", vendaCodigo: "" });
+  const [loadingVendaId, setLoadingVendaId] = useState<string | null>(null);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -194,6 +197,30 @@ export default function DelayedOrders() {
   const toggleArchive = async (order: DelayedOrder) => {
     await supabase.from("delayed_orders").update({ is_archived: !order.is_archived }).eq("id", order.id);
     fetchOrders();
+  };
+
+  const openVendaDetail = async (order: DelayedOrder) => {
+    setLoadingVendaId(order.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("gestaoclick-proxy", {
+        body: { action: "search_vendas", query: order.order_number },
+      });
+      if (error) throw error;
+      const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
+      const match = vendas.find((v: any) => {
+        const venda = v.venda || v;
+        return String(venda.codigo) === order.order_number;
+      });
+      const venda = match?.venda || match;
+      if (venda?.id) {
+        setVendaDialog({ open: true, vendaId: String(venda.id), vendaCodigo: order.order_number });
+      } else {
+        toast.error("Venda não encontrada no GestãoClick");
+      }
+    } catch (e: any) {
+      toast.error("Erro ao buscar detalhes: " + (e.message || "Erro"));
+    }
+    setLoadingVendaId(null);
   };
 
   const filteredOrders = orders.filter((o) => {
@@ -482,6 +509,20 @@ export default function DelayedOrders() {
                                   variant="ghost"
                                   size="icon"
                                   className="h-7 w-7"
+                                  onClick={() => openVendaDetail(order)}
+                                  disabled={loadingVendaId === order.id}
+                                >
+                                  {loadingVendaId === order.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Ver detalhes da venda</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
                                   onClick={() => {
                                     setContactDialog({ open: true, order });
                                     setContactNotes("");
@@ -598,6 +639,14 @@ export default function DelayedOrders() {
             </CardContent>
           </Card>
         )}
+
+        {/* Venda Detail Dialog */}
+        <VendaPDFDialog
+          open={vendaDialog.open}
+          onOpenChange={(open) => setVendaDialog({ ...vendaDialog, open })}
+          vendaId={vendaDialog.vendaId}
+          vendaCodigo={vendaDialog.vendaCodigo}
+        />
       </div>
     </TooltipProvider>
   );
