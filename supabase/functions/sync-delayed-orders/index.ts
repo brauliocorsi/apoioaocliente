@@ -89,6 +89,18 @@ Deno.serve(async (req) => {
     return data;
   };
 
+  const fetchPage = async (page: number): Promise<any[]> => {
+    try {
+      const params = new URLSearchParams();
+      params.set("pagina", String(page));
+      const data = await gcFetch("/vendas", params);
+      return data?.data || data?.vendas || (Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(`Error fetching page ${page}:`, e);
+      return [];
+    }
+  };
+
   const fetchClientPhone = async (clientId: string): Promise<string | null> => {
     try {
       const data = await gcFetch(`/clientes/${clientId}`);
