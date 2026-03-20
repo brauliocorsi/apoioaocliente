@@ -492,6 +492,7 @@ export default function DelayedOrders() {
               <SelectItem value="contacted">✅ Com contacto</SelectItem>
               <SelectItem value="no_contact">⚪ Sem contacto</SelectItem>
               <SelectItem value="today_contact">📅 Contactar hoje</SelectItem>
+            </SelectContent>
           </Select>
           {(filterSla !== "all" || filterSituacao !== "all" || searchTerm) && (
             <Button variant="ghost" size="sm" onClick={() => { setFilterSla("all"); setFilterSituacao("all"); setSearchTerm(""); }}>
