@@ -639,6 +639,14 @@ export default function DelayedOrders() {
             </CardContent>
           </Card>
         )}
+
+        {/* Venda Detail Dialog */}
+        <VendaPDFDialog
+          open={vendaDialog.open}
+          onOpenChange={(open) => setVendaDialog({ ...vendaDialog, open })}
+          vendaId={vendaDialog.vendaId}
+          vendaCodigo={vendaDialog.vendaCodigo}
+        />
       </div>
     </TooltipProvider>
   );
