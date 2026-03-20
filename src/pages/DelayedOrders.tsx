@@ -199,6 +199,30 @@ export default function DelayedOrders() {
     fetchOrders();
   };
 
+  const openVendaDetail = async (order: DelayedOrder) => {
+    setLoadingVendaId(order.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("gestaoclick-proxy", {
+        body: { action: "search_vendas", query: order.order_number },
+      });
+      if (error) throw error;
+      const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
+      const match = vendas.find((v: any) => {
+        const venda = v.venda || v;
+        return String(venda.codigo) === order.order_number;
+      });
+      const venda = match?.venda || match;
+      if (venda?.id) {
+        setVendaDialog({ open: true, vendaId: String(venda.id), vendaCodigo: order.order_number });
+      } else {
+        toast.error("Venda não encontrada no GestãoClick");
+      }
+    } catch (e: any) {
+      toast.error("Erro ao buscar detalhes: " + (e.message || "Erro"));
+    }
+    setLoadingVendaId(null);
+  };
+
   const filteredOrders = orders.filter((o) => {
     if (filterSituacao !== "all" && o.situacao !== filterSituacao) return false;
     if (filterSla !== "all") {
