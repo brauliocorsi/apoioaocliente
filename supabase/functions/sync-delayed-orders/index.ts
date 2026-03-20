@@ -8,10 +8,16 @@ const corsHeaders = {
 
 const GC_BASE = "https://api.gestaoclick.com/api";
 const TARGET_SITUACOES = [
-  "Encomenda",
-  "Encomenda Fornecedor",
-  "Encomenda Fabrica",
-  "Encomenda Fornecedor - Fábrica",
+  "Encomenda - Fábrica",
+  "Encomenda - Fornecedor",
+  "Encomenda - Fábrica e Fornecedor",
+];
+
+// Known situacao_ids from GestãoClick (discovered via diagnose mode)
+const TARGET_SITUACAO_IDS = [
+  "2211651",   // Encomenda - Fábrica
+  "8578323",   // Encomenda - Fornecedor
+  "8578342",   // Encomenda - Fábrica e Fornecedor
 ];
 
 Deno.serve(async (req) => {
