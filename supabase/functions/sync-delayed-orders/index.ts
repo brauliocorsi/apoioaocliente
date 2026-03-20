@@ -20,6 +20,14 @@ const TARGET_SITUACAO_IDS = [
   "8578342",   // Encomenda - Fábrica e Fornecedor
 ];
 
+// Post-fetch filter: only keep vendas whose situacao matches target list
+const isTargetSituacao = (situacao: string | null | undefined): boolean => {
+  if (!situacao) return false;
+  return TARGET_SITUACOES.some(target => 
+    situacao.toLowerCase().trim() === target.toLowerCase().trim()
+  );
+};
+
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   const diagnose = url.searchParams.get("diagnose") === "true";
