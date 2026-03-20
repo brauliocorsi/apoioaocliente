@@ -65,9 +65,9 @@ Deno.serve(async (req) => {
       const firstData = await gcFetch("/vendas", firstParams);
       const totalPages = firstData?.meta?.total_paginas || 1;
       
-      // Sample ~20 evenly spaced pages
+      // Sample ~8 evenly spaced pages for speed
       const samplePages = new Set<number>();
-      const step = Math.max(1, Math.floor(totalPages / 20));
+      const step = Math.max(1, Math.floor(totalPages / 8));
       for (let i = 1; i <= totalPages; i += step) samplePages.add(i);
       samplePages.add(totalPages);
       
