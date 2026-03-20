@@ -250,6 +250,23 @@ export default function DelayedOrders() {
 
   const uniqueSituacoes = [...new Set(orders.map((o) => o.situacao).filter(Boolean))] as string[];
 
+  // Get the latest next_contact_at for each order
+  const getNextContact = (orderId: string): string | null => {
+    const orderContacts = contacts[orderId] || [];
+    const withNext = orderContacts
+      .filter((c) => c.next_contact_at)
+      .sort((a, b) => new Date(b.contacted_at).getTime() - new Date(a.contacted_at).getTime());
+    return withNext.length > 0 ? withNext[0].next_contact_at : null;
+  };
+
+  // Orders with contact scheduled for today or overdue
+  const todayContactOrders = orders.filter((o) => {
+    const next = getNextContact(o.id);
+    if (!next) return false;
+    const nextDate = new Date(next);
+    return isToday(nextDate) || isBefore(nextDate, startOfDay(new Date()));
+  });
+
   const stats = {
     total: orders.length,
     critical: orders.filter((o) => getSlaInfo(o.order_date).level === "critical").length,
@@ -257,6 +274,7 @@ export default function DelayedOrders() {
     attention: orders.filter((o) => getSlaInfo(o.order_date).level === "attention").length,
     withContact: orders.filter((o) => (contacts[o.id] || []).length > 0).length,
     noContact: orders.filter((o) => (contacts[o.id] || []).length === 0).length,
+    todayContacts: todayContactOrders.length,
   };
 
   return (
