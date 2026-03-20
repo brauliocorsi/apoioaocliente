@@ -47,9 +47,10 @@ Deno.serve(async (req) => {
     console.log(`GC request: ${url}`);
     const res = await fetch(url, { method: "GET", headers: gcHeaders });
     const text = await res.text();
+    console.log(`GC response [${res.status}]: ${text.substring(0, 800)}`);
     let data;
     try { data = JSON.parse(text); } catch { data = { raw: text }; }
-    if (!res.ok) throw new Error(`GC API error [${res.status}]`);
+    if (!res.ok) throw new Error(`GC API error [${res.status}]: ${text.substring(0, 200)}`);
     return data;
   };
 
