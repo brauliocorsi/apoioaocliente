@@ -20,6 +20,14 @@ const TARGET_SITUACAO_IDS = [
   "8578342",   // Encomenda - Fábrica e Fornecedor
 ];
 
+// Post-fetch filter: only keep vendas whose situacao matches target list
+const isTargetSituacao = (situacao: string | null | undefined): boolean => {
+  if (!situacao) return false;
+  return TARGET_SITUACOES.some(target => 
+    situacao.toLowerCase().trim() === target.toLowerCase().trim()
+  );
+};
+
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   const diagnose = url.searchParams.get("diagnose") === "true";
@@ -149,7 +157,14 @@ Deno.serve(async (req) => {
       if (code && !uniqueMap.has(code)) uniqueMap.set(code, venda);
     });
 
-    const uniqueVendas = Array.from(uniqueMap.values());
+    // Post-fetch filter: API may return vendas with other situacoes
+    const filteredVendas = Array.from(uniqueMap.values()).filter(venda => {
+      const sit = venda.nome_situacao || venda.situacao || "";
+      return isTargetSituacao(sit);
+    });
+
+    console.log(`After filtering: ${filteredVendas.length} of ${uniqueMap.size} vendas match target situacoes`);
+    const uniqueVendas = filteredVendas;
     let imported = 0;
     let updated = 0;
 
