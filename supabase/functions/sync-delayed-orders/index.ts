@@ -121,50 +121,39 @@ Deno.serve(async (req) => {
     const targetSituacoes = requestedSituacoes.length > 0 ? requestedSituacoes : DEFAULT_TARGET_SITUACOES;
     const isTargetSituacao = buildSituacaoMatcher(targetSituacoes);
 
-    // Step 1: Fetch all pages in parallel batches
+    // Step 1: Fetch pages and filter inline to save memory
     const firstData = await gcFetch("/vendas", (() => { const p = new URLSearchParams(); p.set("pagina", "1"); return p; })());
     const totalPages = Number(firstData?.meta?.total_paginas || 1);
     const firstVendas = firstData?.data || firstData?.vendas || (Array.isArray(firstData) ? firstData : []);
-    const pagesToScan = pageLimitOverride ? Math.min(totalPages, pageLimitOverride) : totalPages;
-    console.log(`Total pages: ${totalPages}, scanning ${pagesToScan} (full sync)`);
+    const pagesToScan = Math.min(pageLimitOverride || MAX_PAGES, totalPages);
+    console.log(`Total pages: ${totalPages}, scanning up to ${pagesToScan}`);
 
-    const allVendas: any[] = [...firstVendas];
+    // Filter inline - don't store non-matching vendas
+    const uniqueMap = new Map<string, any>();
+
+    const processVendas = (vendas: any[]) => {
+      for (const v of vendas) {
+        const venda = v.venda || v;
+        const sit = venda.nome_situacao || venda.situacao || "";
+        if (!isTargetSituacao(sit)) continue;
+        const code = String(venda.codigo || venda.id || "");
+        if (code) uniqueMap.set(code, venda);
+      }
+    };
+
+    processVendas(firstVendas);
 
     for (let batchStart = 2; batchStart <= pagesToScan; batchStart += BATCH_SIZE) {
       const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, pagesToScan);
       const promises: Promise<any[]>[] = [];
       for (let p = batchStart; p <= batchEnd; p++) promises.push(fetchPage(p));
       const results = await Promise.all(promises);
-      for (const vendas of results) allVendas.push(...vendas);
-      if (batchEnd % 50 === 0 || batchEnd === pagesToScan) {
-        console.log(`Fetched page ${batchEnd}/${pagesToScan}, total: ${allVendas.length}`);
-      }
-    }
-
-    // Step 2: Filter target situacoes first, then deduplicate by order number keeping newest
-    const onlyTargetSituacoes = allVendas
-      .map((v: any) => v.venda || v)
-      .filter((venda: any) => isTargetSituacao(venda.nome_situacao || venda.situacao || ""));
-
-    const uniqueMap = new Map<string, any>();
-    for (const venda of onlyTargetSituacoes) {
-      const code = String(venda.codigo || venda.id || "");
-      if (!code) continue;
-
-      const existing = uniqueMap.get(code);
-      if (!existing) {
-        uniqueMap.set(code, venda);
-        continue;
-      }
-
-      const existingDate = new Date(existing.data || existing.data_emissao || existing.data_venda || 0).getTime();
-      const currentDate = new Date(venda.data || venda.data_emissao || venda.data_venda || 0).getTime();
-      if (currentDate >= existingDate) uniqueMap.set(code, venda);
+      for (const vendas of results) processVendas(vendas);
+      console.log(`Batch ${batchStart}-${batchEnd}/${pagesToScan}, matched: ${uniqueMap.size}`);
     }
 
     const filteredVendas = Array.from(uniqueMap.values());
-
-    console.log(`Filtered: ${filteredVendas.length} of ${allVendas.length} rows match target situacoes`);
+    console.log(`Filtered: ${filteredVendas.length} match target situacoes`);
 
     // Step 3: Fetch client phones for unique client IDs
     const clientIds = [...new Set(filteredVendas.map(v => String(v.cliente_id || "")).filter(Boolean))];
