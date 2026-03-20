@@ -112,48 +112,69 @@ Deno.serve(async (req) => {
   };
 
   try {
-    // Strategy: Instead of scanning all 525+ pages, use the API's situacao filter
-    // to fetch ONLY matching vendas. This is much faster and avoids resource limits.
-    const uniqueMap = new Map<string, any>();
-    let totalApiPages = 0;
+    let requestedSituacoes: string[] = [];
+    let pageLimitOverride: number | null = null;
 
-    for (const situacaoTerm of SITUACAO_SEARCH_TERMS) {
-      let page = 1;
-      let maxPage = 1;
-
-      while (page <= maxPage) {
-        const params = new URLSearchParams();
-        params.set("situacao", situacaoTerm);
-        params.set("pagina", String(page));
-
-        try {
-          const data = await gcFetch("/vendas", params);
-          const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
-          maxPage = Number(data?.meta?.total_paginas || 1);
-          totalApiPages++;
-
-          for (const v of vendas) {
-            const venda = v.venda || v;
-            const sit = venda.nome_situacao || venda.situacao || "";
-            // Double-check the situacao is valid (API might do partial matching)
-            if (!isValidSituacao(sit)) continue;
-            const code = String(venda.codigo || venda.id || "");
-            if (code) uniqueMap.set(code, venda);
-          }
-
-          console.log(`Situacao "${situacaoTerm}" page ${page}/${maxPage}: ${vendas.length} vendas, matched total: ${uniqueMap.size}`);
-
-          if (vendas.length === 0) break;
-          page++;
-        } catch (e) {
-          console.error(`Error fetching situacao "${situacaoTerm}" page ${page}:`, e);
-          break;
+    try {
+      const rawBody = await req.text();
+      if (rawBody) {
+        const parsedBody = JSON.parse(rawBody);
+        if (Array.isArray(parsedBody?.situacoes)) {
+          requestedSituacoes = parsedBody.situacoes.filter((value: unknown): value is string => typeof value === "string");
+        }
+        if (Number.isFinite(parsedBody?.max_pages) && parsedBody.max_pages > 0) {
+          pageLimitOverride = Number(parsedBody.max_pages);
         }
       }
+    } catch {
+      // keep defaults
+    }
+
+    const targetSituacoes = requestedSituacoes.length > 0 ? requestedSituacoes : DEFAULT_TARGET_SITUACOES;
+    const isTargetSituacao = buildSituacaoMatcher(targetSituacoes);
+
+    const firstData = await gcFetch("/vendas", (() => { const p = new URLSearchParams(); p.set("pagina", "1"); return p; })());
+    const totalPages = Number(firstData?.meta?.total_paginas || 1);
+    const firstVendas = firstData?.data || firstData?.vendas || (Array.isArray(firstData) ? firstData : []);
+    const pagesToScan = Math.min(pageLimitOverride || MAX_PAGES, totalPages);
+    console.log(`Total pages: ${totalPages}, scanning up to ${pagesToScan}`);
+
+    const uniqueMap = new Map<string, any>();
+
+    const processVendas = (vendas: any[]) => {
+      for (const v of vendas) {
+        const venda = v.venda || v;
+        const situacao = venda.nome_situacao || venda.situacao || "";
+        if (!isTargetSituacao(situacao)) continue;
+
+        const code = String(venda.codigo || venda.id || "");
+        if (!code) continue;
+
+        const existing = uniqueMap.get(code);
+        if (!existing) {
+          uniqueMap.set(code, venda);
+          continue;
+        }
+
+        const existingDate = new Date(existing.data || existing.data_emissao || existing.data_venda || 0).getTime();
+        const currentDate = new Date(venda.data || venda.data_emissao || venda.data_venda || 0).getTime();
+        if (currentDate >= existingDate) uniqueMap.set(code, venda);
+      }
+    };
+
+    processVendas(firstVendas);
+
+    for (let batchStart = 2; batchStart <= pagesToScan; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, pagesToScan);
+      const promises: Promise<any[]>[] = [];
+      for (let p = batchStart; p <= batchEnd; p++) promises.push(fetchPage(p));
+      const results = await Promise.all(promises);
+      for (const vendas of results) processVendas(vendas);
+      console.log(`Batch ${batchStart}-${batchEnd}/${pagesToScan}, matched: ${uniqueMap.size}`);
     }
 
     const filteredVendas = Array.from(uniqueMap.values());
-    console.log(`Total matched: ${filteredVendas.length} vendas from ${totalApiPages} API pages`);
+    console.log(`Filtered: ${filteredVendas.length} match target situacoes`);
 
     // Fetch client phones for unique client IDs
     const clientIds = [...new Set(filteredVendas.map(v => String(v.cliente_id || "")).filter(Boolean))];
