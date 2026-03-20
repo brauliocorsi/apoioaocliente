@@ -15,6 +15,7 @@ import { format, differenceInDays, parseISO } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
+import DelayedOrdersCharts from "@/components/delayed/DelayedOrdersCharts";
 
 type DelayedOrder = {
   id: string;
