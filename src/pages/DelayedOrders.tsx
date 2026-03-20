@@ -509,6 +509,20 @@ export default function DelayedOrders() {
                                   variant="ghost"
                                   size="icon"
                                   className="h-7 w-7"
+                                  onClick={() => openVendaDetail(order)}
+                                  disabled={loadingVendaId === order.id}
+                                >
+                                  {loadingVendaId === order.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Ver detalhes da venda</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
                                   onClick={() => {
                                     setContactDialog({ open: true, order });
                                     setContactNotes("");
