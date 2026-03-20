@@ -55,27 +55,82 @@ Deno.serve(async (req) => {
   };
 
   try {
+    // Step 1: Discover situacao_ids by scanning a sample of vendas
+    // to build a map of nome_situacao -> situacao_id
+    const situacaoIdMap = new Map<string, string>();
+    
+    // First, try fetching situacoes endpoint directly
+    try {
+      const sitData = await gcFetch("/situacoes_vendas");
+      const situacoes = sitData?.data || sitData?.situacoes || (Array.isArray(sitData) ? sitData : []);
+      for (const s of situacoes) {
+        const sit = s.situacao || s;
+        const nome = sit.nome || sit.name || "";
+        const id = String(sit.id || "");
+        if (nome && id) situacaoIdMap.set(nome, id);
+      }
+      console.log(`Found ${situacaoIdMap.size} situacoes from API:`, Object.fromEntries(situacaoIdMap));
+    } catch (e) {
+      console.log("Could not fetch /situacoes_vendas, will scan vendas instead:", e);
+    }
+
+    // Get target situacao_ids
+    const targetIds = TARGET_SITUACOES
+      .map(name => situacaoIdMap.get(name))
+      .filter(Boolean) as string[];
+    
+    console.log("Target situacao_ids:", targetIds);
+
     const allVendas: any[] = [];
 
-    // Try filtering by nome_situacao for each target situação
-    for (const situacao of TARGET_SITUACOES) {
+    if (targetIds.length > 0) {
+      // Fetch by situacao_id for each target
+      for (const sitId of targetIds) {
+        let page = 1;
+        const maxPages = 20;
+        while (page <= maxPages) {
+          const params = new URLSearchParams();
+          params.set("situacao_id", sitId);
+          params.set("pagina", String(page));
+          try {
+            const data = await gcFetch("/vendas", params);
+            const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
+            if (vendas.length === 0) break;
+            allVendas.push(...vendas);
+            console.log(`SitID ${sitId} page ${page}: ${vendas.length} vendas`);
+            const totalPages = data?.meta?.total_paginas || data?.meta?.ultima_pagina || 1;
+            if (page >= totalPages) break;
+            page++;
+          } catch (e) {
+            console.error(`Error fetching sitID ${sitId} page ${page}:`, e);
+            break;
+          }
+        }
+      }
+    } else {
+      // Fallback: scan recent pages and filter locally
+      console.log("No situacao_ids found, scanning all vendas...");
       let page = 1;
-      const maxPages = 20;
+      const maxPages = 100;
       while (page <= maxPages) {
         const params = new URLSearchParams();
-        params.set("nome_situacao", situacao);
         params.set("pagina", String(page));
         try {
           const data = await gcFetch("/vendas", params);
           const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
           if (vendas.length === 0) break;
-          allVendas.push(...vendas);
-          console.log(`Situacao "${situacao}" page ${page}: ${vendas.length} vendas found`);
+          for (const v of vendas) {
+            const venda = v.venda || v;
+            const sit = venda.nome_situacao || venda.situacao || "";
+            if (TARGET_SITUACOES.some(t => t.toLowerCase() === sit.toLowerCase())) {
+              allVendas.push(venda);
+            }
+          }
           const totalPages = data?.meta?.total_paginas || data?.meta?.ultima_pagina || 1;
           if (page >= totalPages) break;
           page++;
         } catch (e) {
-          console.error(`Error fetching situacao "${situacao}" page ${page}:`, e);
+          console.error(`Error scanning page ${page}:`, e);
           break;
         }
       }
