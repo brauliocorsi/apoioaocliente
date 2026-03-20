@@ -7,21 +7,15 @@ const corsHeaders = {
 };
 
 const GC_BASE = "https://api.gestaoclick.com/api";
-const TARGET_SITUACOES = [
-  "Encomenda - Fábrica",
-  "Encomenda - Fornecedor",
-  "Encomenda - Fábrica e Fornecedor",
-];
-
 const BATCH_SIZE = 20;
 const MAX_PAGES = 50;
 const CLIENT_BATCH_SIZE = 10;
 
 const isTargetSituacao = (situacao: string | null | undefined): boolean => {
   if (!situacao) return false;
-  return TARGET_SITUACOES.some(target =>
-    situacao.toLowerCase().trim() === target.toLowerCase().trim()
-  );
+  const s = situacao.toLowerCase().trim();
+  // Match any situacao containing "encomenda" (covers all variations)
+  return s.includes("encomenda");
 };
 
 Deno.serve(async (req) => {
