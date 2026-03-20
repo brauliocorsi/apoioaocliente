@@ -85,6 +85,8 @@ export default function DelayedOrders() {
   const [filterSla, setFilterSla] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const [vendaDialog, setVendaDialog] = useState<{ open: boolean; vendaId: string; vendaCodigo: string }>({ open: false, vendaId: "", vendaCodigo: "" });
+  const [loadingVendaId, setLoadingVendaId] = useState<string | null>(null);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
