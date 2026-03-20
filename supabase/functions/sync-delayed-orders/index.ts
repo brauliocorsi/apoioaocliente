@@ -8,14 +8,34 @@ const corsHeaders = {
 
 const GC_BASE = "https://api.gestaoclick.com/api";
 const BATCH_SIZE = 20;
-const MAX_PAGES = 50;
 const CLIENT_BATCH_SIZE = 10;
 
-const isTargetSituacao = (situacao: string | null | undefined): boolean => {
-  if (!situacao) return false;
-  const s = situacao.toLowerCase().trim();
-  // Match any situacao containing "encomenda" (covers all variations)
-  return s.includes("encomenda");
+const DEFAULT_TARGET_SITUACOES = [
+  "Encomenda",
+  "Encomenda Fornecedor",
+  "Encomenda Fabrica",
+  "Encomenda Fornecedor - Fábrica",
+  "Encomenda - Fornecedor",
+  "Encomenda - Fábrica",
+  "Encomenda - Fábrica e Fornecedor",
+];
+
+const normalizeSituacao = (value: string): string =>
+  value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+
+const buildSituacaoMatcher = (situacoes: string[]) => {
+  const normalizedTargets = situacoes.map(normalizeSituacao).filter(Boolean);
+  return (situacao: string | null | undefined): boolean => {
+    if (!situacao) return false;
+    const normalized = normalizeSituacao(situacao);
+    return normalizedTargets.includes(normalized);
+  };
 };
 
 Deno.serve(async (req) => {
@@ -79,12 +99,33 @@ Deno.serve(async (req) => {
   };
 
   try {
-    // Step 1: Fetch pages in parallel
+    let requestedSituacoes: string[] = [];
+    let pageLimitOverride: number | null = null;
+
+    try {
+      const rawBody = await req.text();
+      if (rawBody) {
+        const parsedBody = JSON.parse(rawBody);
+        if (Array.isArray(parsedBody?.situacoes)) {
+          requestedSituacoes = parsedBody.situacoes.filter((value: unknown): value is string => typeof value === "string");
+        }
+        if (Number.isFinite(parsedBody?.max_pages) && parsedBody.max_pages > 0) {
+          pageLimitOverride = Number(parsedBody.max_pages);
+        }
+      }
+    } catch {
+      // ignore malformed/empty body and use defaults
+    }
+
+    const targetSituacoes = requestedSituacoes.length > 0 ? requestedSituacoes : DEFAULT_TARGET_SITUACOES;
+    const isTargetSituacao = buildSituacaoMatcher(targetSituacoes);
+
+    // Step 1: Fetch all pages in parallel batches
     const firstData = await gcFetch("/vendas", (() => { const p = new URLSearchParams(); p.set("pagina", "1"); return p; })());
-    const totalPages = firstData?.meta?.total_paginas || 1;
+    const totalPages = Number(firstData?.meta?.total_paginas || 1);
     const firstVendas = firstData?.data || firstData?.vendas || (Array.isArray(firstData) ? firstData : []);
-    const pagesToScan = Math.min(totalPages, MAX_PAGES);
-    console.log(`Total pages: ${totalPages}, scanning first ${pagesToScan}`);
+    const pagesToScan = pageLimitOverride ? Math.min(totalPages, pageLimitOverride) : totalPages;
+    console.log(`Total pages: ${totalPages}, scanning ${pagesToScan} (full sync)`);
 
     const allVendas: any[] = [...firstVendas];
 
@@ -99,20 +140,30 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Step 2: Deduplicate + filter
+    // Step 2: Filter target situacoes first, then deduplicate by order number keeping newest
+    const onlyTargetSituacoes = allVendas
+      .map((v: any) => v.venda || v)
+      .filter((venda: any) => isTargetSituacao(venda.nome_situacao || venda.situacao || ""));
+
     const uniqueMap = new Map<string, any>();
-    allVendas.forEach((v: any) => {
-      const venda = v.venda || v;
+    for (const venda of onlyTargetSituacoes) {
       const code = String(venda.codigo || venda.id || "");
-      if (code && !uniqueMap.has(code)) uniqueMap.set(code, venda);
-    });
+      if (!code) continue;
 
-    const filteredVendas = Array.from(uniqueMap.values()).filter(venda => {
-      const sit = venda.nome_situacao || venda.situacao || "";
-      return isTargetSituacao(sit);
-    });
+      const existing = uniqueMap.get(code);
+      if (!existing) {
+        uniqueMap.set(code, venda);
+        continue;
+      }
 
-    console.log(`Filtered: ${filteredVendas.length} of ${uniqueMap.size} match target situacoes`);
+      const existingDate = new Date(existing.data || existing.data_emissao || existing.data_venda || 0).getTime();
+      const currentDate = new Date(venda.data || venda.data_emissao || venda.data_venda || 0).getTime();
+      if (currentDate >= existingDate) uniqueMap.set(code, venda);
+    }
+
+    const filteredVendas = Array.from(uniqueMap.values());
+
+    console.log(`Filtered: ${filteredVendas.length} of ${allVendas.length} rows match target situacoes`);
 
     // Step 3: Fetch client phones for unique client IDs
     const clientIds = [...new Set(filteredVendas.map(v => String(v.cliente_id || "")).filter(Boolean))];
