@@ -7,24 +7,17 @@ const corsHeaders = {
 };
 
 const GC_BASE = "https://api.gestaoclick.com/api";
+const BATCH_SIZE = 10;
+const MAX_PAGES = 120;
 const CLIENT_BATCH_SIZE = 5;
 
-// The exact situacao search terms to send to the GestãoClick API.
-// The API does partial matching, so "Encomenda - F" will match
-// "Encomenda - Fábrica" and "Encomenda - Fábrica e Fornecedor".
-const SITUACAO_SEARCH_TERMS = [
+const DEFAULT_TARGET_SITUACOES = [
   "Encomenda - Fábrica",
   "Encomenda - Fornecedor",
   "Encomenda - Fábrica e Fornecedor",
-];
-
-// For local validation after fetching: normalized strings that ARE valid
-const VALID_NORMALIZED = [
-  "encomenda fabrica",
-  "encomenda fornecedor",
-  "encomenda fabrica e fornecedor",
-  "encomenda fornecedor fabrica",
-  "encomenda fornecedor e fabrica",
+  "Encomenda Fornecedor - Fábrica",
+  "Encomenda Fabrica",
+  "Encomenda Fornecedor",
 ];
 
 const normalizeSituacao = (value: string): string =>
@@ -36,13 +29,26 @@ const normalizeSituacao = (value: string): string =>
     .trim()
     .replace(/\s+/g, " ");
 
-const isValidSituacao = (situacao: string | null | undefined): boolean => {
-  if (!situacao) return false;
-  const n = normalizeSituacao(situacao);
-  // Must contain "encomenda" AND at least one of "fabrica" or "fornecedor"
-  if (!n.includes("encomenda")) return false;
-  if (!n.includes("fabrica") && !n.includes("fornecedor")) return false;
-  return true;
+const buildSituacaoMatcher = (situacoes: string[]) => {
+  const normalizedTargets = situacoes.map(normalizeSituacao).filter(Boolean);
+
+  return (situacao: string | null | undefined): boolean => {
+    if (!situacao) return false;
+
+    const normalized = normalizeSituacao(situacao);
+
+    // Exact target match first
+    if (normalizedTargets.includes(normalized)) return true;
+
+    // Fallback for spelling variations: must be "encomenda" word + fábrica/fornecedor
+    const hasEncomendaWord = /(^|\s)encomenda(\s|$)/.test(normalized);
+    if (!hasEncomendaWord) return false;
+
+    const hasFabrica = /(^|\s)fabrica(\s|$)/.test(normalized);
+    const hasFornecedor = /(^|\s)fornecedor(\s|$)/.test(normalized);
+
+    return hasFabrica || hasFornecedor;
+  };
 };
 
 Deno.serve(async (req) => {
