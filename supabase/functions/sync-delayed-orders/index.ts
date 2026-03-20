@@ -202,7 +202,7 @@ Deno.serve(async (req) => {
 
       const { data: existing } = await supabaseAdmin
         .from("delayed_orders")
-        .select("id, situacao, client_phone, order_date, sla_deadline_at")
+        .select("id, situacao, client_phone, order_date, sla_deadline_at, is_archived")
         .eq("order_number", orderNumber)
         .maybeSingle();
 
@@ -214,6 +214,7 @@ Deno.serve(async (req) => {
           updates.order_date = orderDate.substring(0, 10);
           updates.sla_deadline_at = new Date(new Date(orderDate).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
         }
+        if (existing.is_archived) updates.is_archived = false;
         if (Object.keys(updates).length > 0) {
           updates.updated_at = new Date().toISOString();
           await supabaseAdmin.from("delayed_orders").update(updates).eq("id", existing.id);
