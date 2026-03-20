@@ -514,6 +514,7 @@ export default function DelayedOrders() {
                   <TableHead>Dias / SLA</TableHead>
                   <TableHead>Contactos</TableHead>
                   <TableHead>Último Contacto</TableHead>
+                  <TableHead>Próximo Contacto</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
