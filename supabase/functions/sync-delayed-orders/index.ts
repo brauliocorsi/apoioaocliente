@@ -8,14 +8,34 @@ const corsHeaders = {
 
 const GC_BASE = "https://api.gestaoclick.com/api";
 const BATCH_SIZE = 20;
-const MAX_PAGES = 50;
 const CLIENT_BATCH_SIZE = 10;
 
-const isTargetSituacao = (situacao: string | null | undefined): boolean => {
-  if (!situacao) return false;
-  const s = situacao.toLowerCase().trim();
-  // Match any situacao containing "encomenda" (covers all variations)
-  return s.includes("encomenda");
+const DEFAULT_TARGET_SITUACOES = [
+  "Encomenda",
+  "Encomenda Fornecedor",
+  "Encomenda Fabrica",
+  "Encomenda Fornecedor - Fábrica",
+  "Encomenda - Fornecedor",
+  "Encomenda - Fábrica",
+  "Encomenda - Fábrica e Fornecedor",
+];
+
+const normalizeSituacao = (value: string): string =>
+  value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+
+const buildSituacaoMatcher = (situacoes: string[]) => {
+  const normalizedTargets = situacoes.map(normalizeSituacao).filter(Boolean);
+  return (situacao: string | null | undefined): boolean => {
+    if (!situacao) return false;
+    const normalized = normalizeSituacao(situacao);
+    return normalizedTargets.includes(normalized);
+  };
 };
 
 Deno.serve(async (req) => {
