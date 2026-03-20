@@ -7,8 +7,9 @@ const corsHeaders = {
 };
 
 const GC_BASE = "https://api.gestaoclick.com/api";
-const BATCH_SIZE = 20;
-const CLIENT_BATCH_SIZE = 10;
+const BATCH_SIZE = 10;
+const MAX_PAGES = 100;
+const CLIENT_BATCH_SIZE = 5;
 
 const DEFAULT_TARGET_SITUACOES = [
   "Encomenda",
