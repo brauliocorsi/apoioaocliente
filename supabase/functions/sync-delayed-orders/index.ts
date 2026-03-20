@@ -8,13 +8,21 @@ const corsHeaders = {
 
 const GC_BASE = "https://api.gestaoclick.com/api";
 const TARGET_SITUACOES = [
-  "Encomenda",
-  "Encomenda Fornecedor",
-  "Encomenda Fabrica",
-  "Encomenda Fornecedor - Fábrica",
+  "Encomenda - Fábrica",
+  "Encomenda - Fornecedor",
+  "Encomenda - Fábrica e Fornecedor",
+];
+
+// Known situacao_ids from GestãoClick (discovered via diagnose mode)
+const TARGET_SITUACAO_IDS = [
+  "2211651",   // Encomenda - Fábrica
+  "8578323",   // Encomenda - Fornecedor
+  "8578342",   // Encomenda - Fábrica e Fornecedor
 ];
 
 Deno.serve(async (req) => {
+  const url = new URL(req.url);
+  const diagnose = url.searchParams.get("diagnose") === "true";
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -47,32 +55,85 @@ Deno.serve(async (req) => {
     console.log(`GC request: ${url}`);
     const res = await fetch(url, { method: "GET", headers: gcHeaders });
     const text = await res.text();
+    console.log(`GC response [${res.status}]: ${text.substring(0, 800)}`);
     let data;
     try { data = JSON.parse(text); } catch { data = { raw: text }; }
-    if (!res.ok) throw new Error(`GC API error [${res.status}]`);
+    if (!res.ok) throw new Error(`GC API error [${res.status}]: ${text.substring(0, 200)}`);
     return data;
   };
+
+  // Diagnose mode: scan sampled pages to discover all unique situações
+  if (diagnose) {
+    try {
+      const situacoes = new Map<string, { id: string; count: number }>();
+      const firstParams = new URLSearchParams();
+      firstParams.set("pagina", "1");
+      const firstData = await gcFetch("/vendas", firstParams);
+      const totalPages = firstData?.meta?.total_paginas || 1;
+      
+      // Sample ~8 evenly spaced pages for speed
+      const samplePages = new Set<number>();
+      const step = Math.max(1, Math.floor(totalPages / 8));
+      for (let i = 1; i <= totalPages; i += step) samplePages.add(i);
+      samplePages.add(totalPages);
+      
+      for (const p of samplePages) {
+        const params = new URLSearchParams();
+        params.set("pagina", String(p));
+        const data = await gcFetch("/vendas", params);
+        const vendas = data?.data || [];
+        for (const v of vendas) {
+          const venda = v.venda || v;
+          const sit = venda.nome_situacao || venda.situacao || "N/A";
+          const sitId = String(venda.situacao_id || "");
+          const existing = situacoes.get(sit) || { id: sitId, count: 0 };
+          existing.count++;
+          situacoes.set(sit, existing);
+        }
+      }
+      
+      const result = Object.fromEntries(
+        [...situacoes.entries()].sort((a, b) => b[1].count - a[1].count)
+      );
+      
+      return new Response(JSON.stringify({ 
+        totalPages, 
+        samplePagesScanned: samplePages.size,
+        situacoes: result 
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (e: any) {
+      return new Response(JSON.stringify({ error: e.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
 
   try {
     const allVendas: any[] = [];
 
-    for (const situacao of TARGET_SITUACOES) {
+    // Fetch vendas for each target situacao_id
+    for (const sitId of TARGET_SITUACAO_IDS) {
       let page = 1;
       const maxPages = 20;
       while (page <= maxPages) {
         const params = new URLSearchParams();
-        params.set("situacao", situacao);
+        params.set("situacao_id", sitId);
         params.set("pagina", String(page));
         try {
           const data = await gcFetch("/vendas", params);
           const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
           if (vendas.length === 0) break;
           allVendas.push(...vendas);
+          console.log(`SitID ${sitId} page ${page}: ${vendas.length} vendas`);
           const totalPages = data?.meta?.total_paginas || data?.meta?.ultima_pagina || 1;
           if (page >= totalPages) break;
           page++;
         } catch (e) {
-          console.error(`Error fetching situacao "${situacao}" page ${page}:`, e);
+          console.error(`Error fetching sitID ${sitId} page ${page}:`, e);
           break;
         }
       }
