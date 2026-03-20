@@ -236,6 +236,12 @@ export default function DelayedOrders() {
       if (filterSla === "no_contact") {
         if ((contacts[o.id] || []).length > 0) return false;
       }
+      if (filterSla === "today_contact") {
+        const next = getNextContact(o.id);
+        if (!next) return false;
+        const nextDate = new Date(next);
+        if (!isToday(nextDate) && !isBefore(nextDate, startOfDay(new Date()))) return false;
+      }
     }
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
