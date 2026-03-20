@@ -13,7 +13,8 @@ const TARGET_SITUACOES = [
   "Encomenda - Fábrica e Fornecedor",
 ];
 
-const BATCH_SIZE = 10; // concurrent pages per batch
+const BATCH_SIZE = 20; // concurrent pages per batch
+const MAX_PAGES = 200; // only scan recent orders (newest first)
 
 const isTargetSituacao = (situacao: string | null | undefined): boolean => {
   if (!situacao) return false;
