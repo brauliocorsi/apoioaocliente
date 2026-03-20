@@ -79,13 +79,13 @@ Deno.serve(async (req) => {
     const totalPages = firstData?.meta?.total_paginas || 1;
     const firstVendas = firstData?.data || firstData?.vendas || (Array.isArray(firstData) ? firstData : []);
 
-    const pagesToScan = Math.min(totalPages, MAX_PAGES);
+    console.log(`Total pages: ${totalPages}, scanning first ${pagesToScan} pages`);
 
     const allVendas: any[] = [...firstVendas];
 
     // Step 2: Fetch remaining pages in parallel batches
-    for (let batchStart = 2; batchStart <= totalPages; batchStart += BATCH_SIZE) {
-      const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, totalPages);
+    for (let batchStart = 2; batchStart <= pagesToScan; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, pagesToScan);
       const pagePromises: Promise<any[]>[] = [];
       for (let p = batchStart; p <= batchEnd; p++) {
         pagePromises.push(fetchPage(p));
@@ -94,8 +94,8 @@ Deno.serve(async (req) => {
       for (const vendas of results) {
         allVendas.push(...vendas);
       }
-      if (batchEnd % 100 === 0 || batchEnd === totalPages) {
-        console.log(`Fetched up to page ${batchEnd}/${totalPages}, total: ${allVendas.length}`);
+      if (batchEnd % 50 === 0 || batchEnd === pagesToScan) {
+        console.log(`Fetched up to page ${batchEnd}/${pagesToScan}, total: ${allVendas.length}`);
       }
     }
 
