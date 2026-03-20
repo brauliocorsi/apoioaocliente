@@ -57,25 +57,33 @@ Deno.serve(async (req) => {
   try {
     const allVendas: any[] = [];
 
-    for (const situacao of TARGET_SITUACOES) {
-      let page = 1;
-      const maxPages = 20;
-      while (page <= maxPages) {
-        const params = new URLSearchParams();
-        params.set("situacao", situacao);
-        params.set("pagina", String(page));
-        try {
-          const data = await gcFetch("/vendas", params);
-          const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
-          if (vendas.length === 0) break;
-          allVendas.push(...vendas);
-          const totalPages = data?.meta?.total_paginas || data?.meta?.ultima_pagina || 1;
-          if (page >= totalPages) break;
-          page++;
-        } catch (e) {
-          console.error(`Error fetching situacao "${situacao}" page ${page}:`, e);
-          break;
+    // Fetch all vendas (paginated) and filter locally by situacao
+    let page = 1;
+    const maxPages = 50;
+    while (page <= maxPages) {
+      const params = new URLSearchParams();
+      params.set("pagina", String(page));
+      try {
+        const data = await gcFetch("/vendas", params);
+        const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
+        if (vendas.length === 0) break;
+
+        // Filter locally by target situações
+        for (const v of vendas) {
+          const venda = v.venda || v;
+          const sit = venda.nome_situacao || venda.situacao || venda.status || "";
+          if (TARGET_SITUACOES.some(t => t.toLowerCase() === sit.toLowerCase())) {
+            allVendas.push(venda);
+          }
         }
+
+        console.log(`Page ${page}: ${vendas.length} vendas, ${allVendas.length} matching so far`);
+        const totalPages = data?.meta?.total_paginas || data?.meta?.ultima_pagina || 1;
+        if (page >= totalPages) break;
+        page++;
+      } catch (e) {
+        console.error(`Error fetching page ${page}:`, e);
+        break;
       }
     }
 
