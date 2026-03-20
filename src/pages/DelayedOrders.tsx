@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertTriangle, Bell, Clock, Eye, Phone, PhoneCall, RefreshCw, Search, Timer, Archive, CheckCircle, Loader2, Zap, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
-import { format, differenceInDays, parseISO } from "date-fns";
+import { format, differenceInDays, parseISO, isToday, isBefore, startOfDay } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
