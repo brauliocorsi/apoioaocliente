@@ -160,6 +160,11 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Save last sync timestamp
+    await supabaseAdmin
+      .from("system_settings")
+      .upsert({ key: "delayed_orders_last_sync", value: new Date().toISOString() }, { onConflict: "key" });
+
     const summary = { imported, updated, archived, totalFetched: uniqueVendas.length };
     console.log("Sync complete:", summary);
 
