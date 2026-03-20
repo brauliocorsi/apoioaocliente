@@ -14,7 +14,7 @@ const TARGET_SITUACOES = [
 ];
 
 const BATCH_SIZE = 20; // concurrent pages per batch
-const MAX_PAGES = 200; // only scan recent orders (newest first)
+const MAX_PAGES = 50; // ~1500 most recent orders (covers ~4 months)
 
 const isTargetSituacao = (situacao: string | null | undefined): boolean => {
   if (!situacao) return false;
