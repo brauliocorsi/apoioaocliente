@@ -123,29 +123,34 @@ Deno.serve(async (req) => {
   try {
     const allVendas: any[] = [];
 
-    // Fetch vendas for each target situacao_id
-    for (const sitId of TARGET_SITUACAO_IDS) {
-      let page = 1;
-      const maxPages = 20;
-      while (page <= maxPages) {
-        const params = new URLSearchParams();
-        params.set("situacao_id", sitId);
-        params.set("pagina", String(page));
-        try {
-          const data = await gcFetch("/vendas", params);
-          const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
-          if (vendas.length === 0) break;
-          allVendas.push(...vendas);
-          console.log(`SitID ${sitId} page ${page}: ${vendas.length} vendas`);
-          const totalPages = data?.meta?.total_paginas || data?.meta?.ultima_pagina || 1;
-          if (page >= totalPages) break;
-          page++;
-        } catch (e) {
-          console.error(`Error fetching sitID ${sitId} page ${page}:`, e);
-          break;
-        }
+    // Fetch ALL vendas pages — the API ignores situacao_id filter,
+    // so we scan everything and filter post-fetch
+    let page = 1;
+    const firstData = await gcFetch("/vendas", (() => { const p = new URLSearchParams(); p.set("pagina", "1"); return p; })());
+    const totalPages = firstData?.meta?.total_paginas || firstData?.meta?.ultima_pagina || 1;
+    const firstVendas = firstData?.data || firstData?.vendas || (Array.isArray(firstData) ? firstData : []);
+    allVendas.push(...firstVendas);
+    console.log(`Page 1/${totalPages}: ${firstVendas.length} vendas`);
+
+    // Scan remaining pages
+    page = 2;
+    while (page <= totalPages) {
+      const params = new URLSearchParams();
+      params.set("pagina", String(page));
+      try {
+        const data = await gcFetch("/vendas", params);
+        const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
+        if (vendas.length === 0) break;
+        allVendas.push(...vendas);
+        if (page % 50 === 0) console.log(`Page ${page}/${totalPages}: total fetched so far ${allVendas.length}`);
+        page++;
+      } catch (e) {
+        console.error(`Error fetching page ${page}:`, e);
+        break;
       }
     }
+
+    console.log(`Total vendas fetched from ${page - 1} pages: ${allVendas.length}`);
 
     console.log(`Total vendas fetched: ${allVendas.length}`);
 
