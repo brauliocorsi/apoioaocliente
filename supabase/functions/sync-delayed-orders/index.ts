@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
     const totalPages = firstData?.meta?.total_paginas || 1;
     const firstVendas = firstData?.data || firstData?.vendas || (Array.isArray(firstData) ? firstData : []);
 
-    console.log(`Total pages: ${totalPages}, first page: ${firstVendas.length} vendas`);
+    const pagesToScan = Math.min(totalPages, MAX_PAGES);
 
     const allVendas: any[] = [...firstVendas];
 
