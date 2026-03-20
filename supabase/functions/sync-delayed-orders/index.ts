@@ -113,96 +113,28 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Step 1: Try to find situacao IDs from various endpoints
-    const situacaoEndpoints = ["/situacoes", "/situacoes_vendas", "/situacoes/vendas"];
-    let allSituacoes: any[] = [];
-    
-    for (const endpoint of situacaoEndpoints) {
-      try {
-        const data = await gcFetch(endpoint);
-        const items = data?.data || data?.situacoes || (Array.isArray(data) ? data : []);
-        if (items.length > 0) {
-          allSituacoes = items;
-          console.log(`Found ${items.length} situacoes from ${endpoint}`);
-          // Log all situação names for debugging
-          items.forEach((s: any) => {
-            const sit = s.situacao || s;
-            console.log(`  Situacao: id=${sit.id || s.id}, nome="${sit.nome || sit.name || s.nome || s.name}"`);
-          });
-          break;
-        }
-      } catch (e) {
-        console.log(`Endpoint ${endpoint} failed:`, (e as Error).message || e);
-      }
-    }
-
-    // Build map of target situacao names -> IDs
-    const targetSitIds: string[] = [];
-    for (const s of allSituacoes) {
-      const sit = s.situacao || s;
-      const nome = (sit.nome || sit.name || s.nome || s.name || "").trim();
-      const id = String(sit.id || s.id || "");
-      if (TARGET_SITUACOES.some(t => t.toLowerCase() === nome.toLowerCase()) && id) {
-        targetSitIds.push(id);
-        console.log(`Matched target: "${nome}" -> id=${id}`);
-      }
-    }
-
     const allVendas: any[] = [];
 
-    if (targetSitIds.length > 0) {
-      // Use situacao_id filter
-      for (const sitId of targetSitIds) {
-        let page = 1;
-        const maxPages = 20;
-        while (page <= maxPages) {
-          const params = new URLSearchParams();
-          params.set("situacao_id", sitId);
-          params.set("pagina", String(page));
-          try {
-            const data = await gcFetch("/vendas", params);
-            const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
-            if (vendas.length === 0) break;
-            allVendas.push(...vendas);
-            const totalPages = data?.meta?.total_paginas || data?.meta?.ultima_pagina || 1;
-            if (page >= totalPages) break;
-            page++;
-          } catch (e) {
-            console.error(`Error fetching sitID ${sitId} page ${page}:`, e);
-            break;
-          }
-        }
-      }
-    } else {
-      // No situacao IDs found - scan last pages (newest vendas) + first pages 
-      // to catch vendas in "Encomenda" status
-      console.log("No situacao IDs matched. Scanning last pages for recent encomendas...");
-      
-      // Get total pages from first request
-      const firstParams = new URLSearchParams();
-      firstParams.set("pagina", "1");
-      const firstData = await gcFetch("/vendas", firstParams);
-      const totalPages = firstData?.meta?.total_paginas || 1;
-      console.log(`Total pages: ${totalPages}`);
-      
-      // Scan from the last page backwards (newest records)
-      const pagesToScan = Math.min(totalPages, 30);
-      for (let p = totalPages; p > totalPages - pagesToScan && p >= 1; p--) {
+    // Fetch vendas for each target situacao_id
+    for (const sitId of TARGET_SITUACAO_IDS) {
+      let page = 1;
+      const maxPages = 20;
+      while (page <= maxPages) {
         const params = new URLSearchParams();
-        params.set("pagina", String(p));
+        params.set("situacao_id", sitId);
+        params.set("pagina", String(page));
         try {
           const data = await gcFetch("/vendas", params);
           const vendas = data?.data || data?.vendas || (Array.isArray(data) ? data : []);
-          if (vendas.length === 0) continue;
-          for (const v of vendas) {
-            const venda = v.venda || v;
-            const sit = venda.nome_situacao || venda.situacao || "";
-            if (TARGET_SITUACOES.some(t => t.toLowerCase() === sit.toLowerCase())) {
-              allVendas.push(venda);
-            }
-          }
+          if (vendas.length === 0) break;
+          allVendas.push(...vendas);
+          console.log(`SitID ${sitId} page ${page}: ${vendas.length} vendas`);
+          const totalPages = data?.meta?.total_paginas || data?.meta?.ultima_pagina || 1;
+          if (page >= totalPages) break;
+          page++;
         } catch (e) {
-          console.error(`Error scanning page ${p}:`, e);
+          console.error(`Error fetching sitID ${sitId} page ${page}:`, e);
+          break;
         }
       }
     }
