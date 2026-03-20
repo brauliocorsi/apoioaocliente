@@ -157,7 +157,14 @@ Deno.serve(async (req) => {
       if (code && !uniqueMap.has(code)) uniqueMap.set(code, venda);
     });
 
-    const uniqueVendas = Array.from(uniqueMap.values());
+    // Post-fetch filter: API may return vendas with other situacoes
+    const filteredVendas = Array.from(uniqueMap.values()).filter(venda => {
+      const sit = venda.nome_situacao || venda.situacao || "";
+      return isTargetSituacao(sit);
+    });
+
+    console.log(`After filtering: ${filteredVendas.length} of ${uniqueMap.size} vendas match target situacoes`);
+    const uniqueVendas = filteredVendas;
     let imported = 0;
     let updated = 0;
 
