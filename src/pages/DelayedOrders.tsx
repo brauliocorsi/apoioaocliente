@@ -383,7 +383,61 @@ export default function DelayedOrders() {
               </div>
             </CardContent>
           </Card>
+          <Card className={`cursor-pointer hover:border-blue-500/50 transition-colors ${stats.todayContacts > 0 ? "border-blue-500/50 ring-1 ring-blue-500/20" : ""}`} onClick={() => setFilterSla("today_contact")}>
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/20">
+                <Bell className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <p className="text-xl font-bold leading-none text-blue-600 dark:text-blue-400">{stats.todayContacts}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Contactar hoje</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+
+        {/* Today's contacts reminder */}
+        {todayContactOrders.length > 0 && (
+          <Card className="border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2 text-blue-700 dark:text-blue-300">
+                <Bell className="h-4 w-4" />
+                Contactos Agendados para Hoje ({todayContactOrders.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-2">
+                {todayContactOrders.map((order) => {
+                  const next = getNextContact(order.id);
+                  const nextDate = next ? new Date(next) : null;
+                  const isOverdue = nextDate && isBefore(nextDate, startOfDay(new Date()));
+                  const sla = getSlaInfo(order.order_date);
+                  return (
+                    <div key={order.id} className="flex items-center gap-3 text-sm bg-background/80 rounded-lg p-2 border border-border/50">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${isOverdue ? "bg-destructive" : "bg-blue-500"}`} />
+                      <span className="font-mono font-medium text-xs">#{order.order_number}</span>
+                      <span className="font-medium truncate">{order.client_name}</span>
+                      <span className="text-muted-foreground text-xs">{order.client_phone || "—"}</span>
+                      <Badge className={`text-[10px] ml-auto ${slaColors[sla.level]}`}>{sla.label}</Badge>
+                      {nextDate && (
+                        <span className={`text-xs whitespace-nowrap ${isOverdue ? "text-destructive font-medium" : "text-blue-600 dark:text-blue-400"}`}>
+                          {isOverdue ? "⚠️ Atrasado" : format(nextDate, "HH:mm")}
+                        </span>
+                      )}
+                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => {
+                        setContactDialog({ open: true, order });
+                        setContactNotes("");
+                        setContactNextDate("");
+                      }}>
+                        <Phone className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Info banner */}
         <Card className="border-primary/20 bg-primary/5">
