@@ -581,6 +581,23 @@ export default function DelayedOrders() {
                             <span className={sla.level !== "normal" ? "text-destructive" : ""}>Nunca</span>
                           )}
                         </TableCell>
+                        <TableCell className="text-xs">
+                          {(() => {
+                            const next = getNextContact(order.id);
+                            if (!next) return <span className="text-muted-foreground">—</span>;
+                            const nextDate = new Date(next);
+                            const overdue = isBefore(nextDate, startOfDay(new Date()));
+                            const today = isToday(nextDate);
+                            return (
+                              <div className={`flex items-center gap-1 ${overdue ? "text-destructive font-medium" : today ? "text-blue-600 dark:text-blue-400 font-medium" : "text-muted-foreground"}`}>
+                                <CalendarClock className="h-3 w-3 shrink-0" />
+                                <span>{format(nextDate, "dd/MM HH:mm")}</span>
+                                {overdue && <span className="text-[10px]">⚠️</span>}
+                                {today && !overdue && <span className="text-[10px]">📅</span>}
+                              </div>
+                            );
+                          })()}
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             <Tooltip>
