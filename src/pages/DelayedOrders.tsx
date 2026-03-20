@@ -9,9 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AlertTriangle, Clock, Eye, Phone, PhoneCall, RefreshCw, Search, Timer, Archive, CheckCircle, Loader2, Zap, CalendarClock } from "lucide-react";
+import { AlertTriangle, Bell, Clock, Eye, Phone, PhoneCall, RefreshCw, Search, Timer, Archive, CheckCircle, Loader2, Zap, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
-import { format, differenceInDays, parseISO } from "date-fns";
+import { format, differenceInDays, parseISO, isToday, isBefore, startOfDay } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
@@ -236,6 +236,12 @@ export default function DelayedOrders() {
       if (filterSla === "no_contact") {
         if ((contacts[o.id] || []).length > 0) return false;
       }
+      if (filterSla === "today_contact") {
+        const next = getNextContact(o.id);
+        if (!next) return false;
+        const nextDate = new Date(next);
+        if (!isToday(nextDate) && !isBefore(nextDate, startOfDay(new Date()))) return false;
+      }
     }
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -250,6 +256,23 @@ export default function DelayedOrders() {
 
   const uniqueSituacoes = [...new Set(orders.map((o) => o.situacao).filter(Boolean))] as string[];
 
+  // Get the latest next_contact_at for each order
+  const getNextContact = (orderId: string): string | null => {
+    const orderContacts = contacts[orderId] || [];
+    const withNext = orderContacts
+      .filter((c) => c.next_contact_at)
+      .sort((a, b) => new Date(b.contacted_at).getTime() - new Date(a.contacted_at).getTime());
+    return withNext.length > 0 ? withNext[0].next_contact_at : null;
+  };
+
+  // Orders with contact scheduled for today or overdue
+  const todayContactOrders = orders.filter((o) => {
+    const next = getNextContact(o.id);
+    if (!next) return false;
+    const nextDate = new Date(next);
+    return isToday(nextDate) || isBefore(nextDate, startOfDay(new Date()));
+  });
+
   const stats = {
     total: orders.length,
     critical: orders.filter((o) => getSlaInfo(o.order_date).level === "critical").length,
@@ -257,6 +280,7 @@ export default function DelayedOrders() {
     attention: orders.filter((o) => getSlaInfo(o.order_date).level === "attention").length,
     withContact: orders.filter((o) => (contacts[o.id] || []).length > 0).length,
     noContact: orders.filter((o) => (contacts[o.id] || []).length === 0).length,
+    todayContacts: todayContactOrders.length,
   };
 
   return (
@@ -365,7 +389,61 @@ export default function DelayedOrders() {
               </div>
             </CardContent>
           </Card>
+          <Card className={`cursor-pointer hover:border-blue-500/50 transition-colors ${stats.todayContacts > 0 ? "border-blue-500/50 ring-1 ring-blue-500/20" : ""}`} onClick={() => setFilterSla("today_contact")}>
+            <CardContent className="p-3 flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/20">
+                <Bell className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <p className="text-xl font-bold leading-none text-blue-600 dark:text-blue-400">{stats.todayContacts}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Contactar hoje</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+
+        {/* Today's contacts reminder */}
+        {todayContactOrders.length > 0 && (
+          <Card className="border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/10">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2 text-blue-700 dark:text-blue-300">
+                <Bell className="h-4 w-4" />
+                Contactos Agendados para Hoje ({todayContactOrders.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-2">
+                {todayContactOrders.map((order) => {
+                  const next = getNextContact(order.id);
+                  const nextDate = next ? new Date(next) : null;
+                  const isOverdue = nextDate && isBefore(nextDate, startOfDay(new Date()));
+                  const sla = getSlaInfo(order.order_date);
+                  return (
+                    <div key={order.id} className="flex items-center gap-3 text-sm bg-background/80 rounded-lg p-2 border border-border/50">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${isOverdue ? "bg-destructive" : "bg-blue-500"}`} />
+                      <span className="font-mono font-medium text-xs">#{order.order_number}</span>
+                      <span className="font-medium truncate">{order.client_name}</span>
+                      <span className="text-muted-foreground text-xs">{order.client_phone || "—"}</span>
+                      <Badge className={`text-[10px] ml-auto ${slaColors[sla.level]}`}>{sla.label}</Badge>
+                      {nextDate && (
+                        <span className={`text-xs whitespace-nowrap ${isOverdue ? "text-destructive font-medium" : "text-blue-600 dark:text-blue-400"}`}>
+                          {isOverdue ? "⚠️ Atrasado" : format(nextDate, "HH:mm")}
+                        </span>
+                      )}
+                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => {
+                        setContactDialog({ open: true, order });
+                        setContactNotes("");
+                        setContactNextDate("");
+                      }}>
+                        <Phone className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Info banner */}
         <Card className="border-primary/20 bg-primary/5">
@@ -413,6 +491,7 @@ export default function DelayedOrders() {
               <SelectItem value="attention">🟡 Atenção (15-20d)</SelectItem>
               <SelectItem value="contacted">✅ Com contacto</SelectItem>
               <SelectItem value="no_contact">⚪ Sem contacto</SelectItem>
+              <SelectItem value="today_contact">📅 Contactar hoje</SelectItem>
             </SelectContent>
           </Select>
           {(filterSla !== "all" || filterSituacao !== "all" || searchTerm) && (
@@ -436,19 +515,20 @@ export default function DelayedOrders() {
                   <TableHead>Dias / SLA</TableHead>
                   <TableHead>Contactos</TableHead>
                   <TableHead>Último Contacto</TableHead>
+                  <TableHead>Próximo Contacto</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8">
+                    <TableCell colSpan={10} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                     </TableCell>
                   </TableRow>
                 ) : filteredOrders.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                       {orders.length === 0
                         ? "Nenhuma encomenda pendente. Clique em \"Sincronizar agora\" para buscar do GestãoClick."
                         : "Nenhuma encomenda encontrada com os filtros atuais."}
@@ -500,6 +580,23 @@ export default function DelayedOrders() {
                           ) : (
                             <span className={sla.level !== "normal" ? "text-destructive" : ""}>Nunca</span>
                           )}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {(() => {
+                            const next = getNextContact(order.id);
+                            if (!next) return <span className="text-muted-foreground">—</span>;
+                            const nextDate = new Date(next);
+                            const overdue = isBefore(nextDate, startOfDay(new Date()));
+                            const today = isToday(nextDate);
+                            return (
+                              <div className={`flex items-center gap-1 ${overdue ? "text-destructive font-medium" : today ? "text-blue-600 dark:text-blue-400 font-medium" : "text-muted-foreground"}`}>
+                                <CalendarClock className="h-3 w-3 shrink-0" />
+                                <span>{format(nextDate, "dd/MM HH:mm")}</span>
+                                {overdue && <span className="text-[10px]">⚠️</span>}
+                                {today && !overdue && <span className="text-[10px]">📅</span>}
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
