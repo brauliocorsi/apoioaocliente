@@ -56,6 +56,56 @@ Deno.serve(async (req) => {
     return data;
   };
 
+  // Diagnose mode: scan sampled pages to discover all unique situações
+  if (diagnose) {
+    try {
+      const situacoes = new Map<string, { id: string; count: number }>();
+      const firstParams = new URLSearchParams();
+      firstParams.set("pagina", "1");
+      const firstData = await gcFetch("/vendas", firstParams);
+      const totalPages = firstData?.meta?.total_paginas || 1;
+      
+      // Sample ~20 evenly spaced pages
+      const samplePages = new Set<number>();
+      const step = Math.max(1, Math.floor(totalPages / 20));
+      for (let i = 1; i <= totalPages; i += step) samplePages.add(i);
+      samplePages.add(totalPages);
+      
+      for (const p of samplePages) {
+        const params = new URLSearchParams();
+        params.set("pagina", String(p));
+        const data = await gcFetch("/vendas", params);
+        const vendas = data?.data || [];
+        for (const v of vendas) {
+          const venda = v.venda || v;
+          const sit = venda.nome_situacao || venda.situacao || "N/A";
+          const sitId = String(venda.situacao_id || "");
+          const existing = situacoes.get(sit) || { id: sitId, count: 0 };
+          existing.count++;
+          situacoes.set(sit, existing);
+        }
+      }
+      
+      const result = Object.fromEntries(
+        [...situacoes.entries()].sort((a, b) => b[1].count - a[1].count)
+      );
+      
+      return new Response(JSON.stringify({ 
+        totalPages, 
+        samplePagesScanned: samplePages.size,
+        situacoes: result 
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    } catch (e: any) {
+      return new Response(JSON.stringify({ error: e.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  }
+
   try {
     // Step 1: Try to find situacao IDs from various endpoints
     const situacaoEndpoints = ["/situacoes", "/situacoes_vendas", "/situacoes/vendas"];
