@@ -270,7 +270,8 @@ Deno.serve(async (req) => {
       updated,
       archived,
       totalFetched: filteredVendas.length,
-      totalApiPages,
+      totalPages,
+      pagesScanned: pagesToScan,
       clientsWithPhone: [...phoneMap.values()].filter(Boolean).length,
     };
     console.log("Sync complete:", summary);
