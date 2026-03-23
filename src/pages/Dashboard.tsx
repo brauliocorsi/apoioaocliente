@@ -358,10 +358,10 @@ export default function Dashboard() {
         <TabsContent value="tickets" className="space-y-4">
           <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
             <StatCard title="Abertos" value={openTickets.length} icon={<Ticket className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
-            <StatCard title="Criados Hoje" value={createdToday.length} icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />} />
+            <StatCard title="Criados" value={fTickets.length} icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />} />
             <StatCard title="SLA em Risco" value={slaAtRisk.length} icon={<AlertTriangle className="h-4 w-4 text-destructive" />} accent="bg-destructive/[0.03]" />
-            <StatCard title="Resolvidos Hoje" value={resolvedToday.length} icon={<CheckCircle2 className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
-            <StatCard title="Emails Recebidos" value={emailsReceived} icon={<Inbox className="h-4 w-4 text-blue-500" />} accent="bg-blue-500/[0.03]" />
+            <StatCard title="Resolvidos" value={resolvedInPeriod.length} icon={<CheckCircle2 className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
+            <StatCard title="Emails Recebidos" value={emailsReceived} icon={<Inbox className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
             <StatCard title="Tempo Médio" value={`${avgResolutionHours}h`} icon={<Clock className="h-4 w-4 text-muted-foreground" />} subtitle="resolução" />
           </div>
 
