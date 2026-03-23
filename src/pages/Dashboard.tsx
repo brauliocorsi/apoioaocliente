@@ -207,47 +207,42 @@ export default function Dashboard() {
   }, [user]);
 
   /* ---------- computed stats ---------- */
-  const today = startOfDay(new Date());
-  const last7 = subDays(today, 7);
-
-  // Tickets
-  const openTickets = tickets.filter((t) => !["resolvido", "encerrado"].includes(t.status));
+  // Tickets (filtered by period)
+  const openTickets = fTickets.filter((t) => !["resolvido", "encerrado"].includes(t.status));
   const slaAtRisk = openTickets.filter((t) => {
     if (!t.sla_first_response_at || t.first_responded_at) return false;
     return new Date(t.sla_first_response_at) < new Date();
   });
-  const resolvedToday = tickets.filter((t) => t.resolved_at && isToday(new Date(t.resolved_at)));
-  const createdToday = tickets.filter((t) => isToday(new Date(t.created_at)));
+  const resolvedInPeriod = fTickets.filter((t) => t.resolved_at && inPeriod(t.resolved_at));
   const ticketsByPriority = { P1: 0, P2: 0, P3: 0 };
   openTickets.forEach((t) => { if (t.priority in ticketsByPriority) ticketsByPriority[t.priority as keyof typeof ticketsByPriority]++; });
   const avgResolutionHours = useMemo(() => {
-    const resolved = tickets.filter((t) => t.resolved_at);
+    const resolved = fTickets.filter((t) => t.resolved_at);
     if (resolved.length === 0) return 0;
     const total = resolved.reduce((acc, t) => acc + (new Date(t.resolved_at!).getTime() - new Date(t.created_at).getTime()), 0);
     return Math.round(total / resolved.length / (1000 * 60 * 60));
-  }, [tickets]);
+  }, [fTickets]);
 
-  // Phone calls
-  const openCalls = phoneCalls.filter((c) => !c.closed_at);
-  const callsToday = phoneCalls.filter((c) => isToday(new Date(c.created_at)));
-  const closedToday = phoneCalls.filter((c) => c.closed_at && isToday(new Date(c.closed_at)));
+  // Phone calls (filtered)
+  const openCalls = fCalls.filter((c) => !c.closed_at);
+  const closedInPeriod = fCalls.filter((c) => c.closed_at);
 
-  // Deliveries
-  const deliveriesToday = deliveries.filter((d) => isToday(new Date(d.created_at)));
-  const confirmed = deliveries.filter((d) => d.confirmed);
-  const notConfirmed = deliveries.filter((d) => !d.confirmed);
-  const confirmRate = deliveries.length > 0 ? Math.round((confirmed.length / deliveries.length) * 100) : 0;
+  // Deliveries (filtered)
+  const confirmed = fDeliveries.filter((d) => d.confirmed);
+  const notConfirmed = fDeliveries.filter((d) => !d.confirmed);
+  const confirmRate = fDeliveries.length > 0 ? Math.round((confirmed.length / fDeliveries.length) * 100) : 0;
 
-  // Post deliveries
-  const postToday = postDeliveries.filter((p) => isToday(new Date(p.created_at)));
-  const satisfied = postDeliveries.filter((p) => p.client_satisfied);
-  const satisfactionRate = postDeliveries.length > 0 ? Math.round((satisfied.length / postDeliveries.length) * 100) : 0;
+  // Post deliveries (filtered)
+  const satisfied = fPostDeliveries.filter((p) => p.client_satisfied);
+  const satisfactionRate = fPostDeliveries.length > 0 ? Math.round((satisfied.length / fPostDeliveries.length) * 100) : 0;
   const avgNps = useMemo(() => {
-    const withNps = postDeliveries.filter((p) => p.assembly_nps !== null);
+    const withNps = fPostDeliveries.filter((p) => p.assembly_nps !== null);
     if (withNps.length === 0) return null;
     return (withNps.reduce((acc, p) => acc + (p.assembly_nps || 0), 0) / withNps.length).toFixed(1);
-  }, [postDeliveries]);
-  const issuesCount = postDeliveries.filter((p) => p.issues_reported).length;
+  }, [fPostDeliveries]);
+  const issuesCount = fPostDeliveries.filter((p) => p.issues_reported).length;
+
+  const periodLabel = period === "today" ? "hoje" : period === "7d" ? "últimos 7 dias" : "últimos 30 dias";
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
