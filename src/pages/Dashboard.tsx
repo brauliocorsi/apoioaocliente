@@ -119,8 +119,23 @@ export default function Dashboard() {
   const [emailsReceived, setEmailsReceived] = useState(0);
   const [emailTicketsCount, setEmailTicketsCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<PeriodFilter>("30d");
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  const periodStart = useMemo(() => {
+    const now = startOfDay(new Date());
+    if (period === "today") return now;
+    if (period === "7d") return subDays(now, 7);
+    return subDays(now, 30);
+  }, [period]);
+
+  const inPeriod = (dateStr: string) => isAfter(new Date(dateStr), periodStart);
+
+  const fTickets = useMemo(() => tickets.filter((t) => inPeriod(t.created_at)), [tickets, periodStart]);
+  const fCalls = useMemo(() => phoneCalls.filter((c) => inPeriod(c.created_at)), [phoneCalls, periodStart]);
+  const fDeliveries = useMemo(() => deliveries.filter((d) => inPeriod(d.created_at)), [deliveries, periodStart]);
+  const fPostDeliveries = useMemo(() => postDeliveries.filter((p) => inPeriod(p.created_at)), [postDeliveries, periodStart]);
 
   useEffect(() => {
     const fetchAll = async () => {
