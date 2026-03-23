@@ -512,10 +512,10 @@ export default function Dashboard() {
         {/* ===================== TAB: REG. LIGAÇÕES ===================== */}
         <TabsContent value="deliveries" className="space-y-4">
           <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-            <StatCard title="Total Registos" value={deliveries.length} icon={<Truck className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
-            <StatCard title="Hoje" value={deliveriesToday.length} icon={<CalendarClock className="h-4 w-4 text-blue-500" />} accent="bg-blue-500/[0.03]" />
+            <StatCard title="Total Registos" value={fDeliveries.length} icon={<Truck className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
             <StatCard title="Confirmados" value={confirmed.length} icon={<CheckCircle2 className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" subtitle={`${confirmRate}%`} />
             <StatCard title="Não Confirmados" value={notConfirmed.length} icon={<AlertTriangle className="h-4 w-4 text-destructive" />} accent="bg-destructive/[0.03]" />
+            <StatCard title="Taxa Confirmação" value={`${confirmRate}%`} icon={<TrendingUp className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
           </div>
 
           {/* Recent deliveries */}
