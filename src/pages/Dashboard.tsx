@@ -562,8 +562,8 @@ export default function Dashboard() {
         {/* ===================== TAB: PÓS-ENTREGA ===================== */}
         <TabsContent value="post" className="space-y-4">
           <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
-            <StatCard title="Total Inquéritos" value={postDeliveries.length} icon={<ClipboardCheck className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
-            <StatCard title="Hoje" value={postToday.length} icon={<CalendarClock className="h-4 w-4 text-blue-500" />} accent="bg-blue-500/[0.03]" />
+            <StatCard title="Total Inquéritos" value={fPostDeliveries.length} icon={<ClipboardCheck className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
+            <StatCard title="Satisfação" value={`${satisfactionRate}%`} icon={<ThumbsUp className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
             <StatCard title="Satisfação" value={`${satisfactionRate}%`} icon={<ThumbsUp className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
             <StatCard title="Com Problemas" value={issuesCount} icon={<ThumbsDown className="h-4 w-4 text-destructive" />} accent="bg-destructive/[0.03]" />
             {avgNps !== null && <StatCard title="NPS Montagem" value={avgNps} icon={<Star className="h-4 w-4 text-warning" />} accent="bg-warning/[0.03]" />}
