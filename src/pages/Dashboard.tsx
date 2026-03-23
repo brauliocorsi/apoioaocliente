@@ -3,16 +3,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Ticket, Clock, AlertTriangle, CheckCircle2, Loader2, Users, Bell,
   ArrowUpRight, Mail, MailOpen, Inbox, Eye, Phone, PhoneCall, PhoneIncoming,
   PhoneOutgoing, Truck, ClipboardCheck, TrendingUp, TrendingDown, BarChart3,
-  CalendarClock, Star, ThumbsUp, ThumbsDown, Package
+  CalendarClock, Star, ThumbsUp, ThumbsDown, Package, Calendar
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { formatDistanceToNow, format, isToday, subDays, startOfDay } from "date-fns";
+import { formatDistanceToNow, format, isToday, subDays, startOfDay, isAfter } from "date-fns";
 import { pt } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
+
+type PeriodFilter = "today" | "7d" | "30d";
 
 /* ---------- types ---------- */
 type TicketRow = {
