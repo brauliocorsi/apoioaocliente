@@ -249,9 +249,22 @@ export default function Dashboard() {
   return (
     <div className="space-y-5 max-w-[1400px] mx-auto">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground text-sm">Visão geral do suporte ao cliente</p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground text-sm">Visão geral do suporte ao cliente · {periodLabel}</p>
+        </div>
+        <ToggleGroup type="single" value={period} onValueChange={(v) => v && setPeriod(v as PeriodFilter)} className="bg-muted rounded-lg p-0.5">
+          <ToggleGroupItem value="today" className="text-xs px-3 h-8 rounded-md data-[state=on]:bg-background data-[state=on]:shadow-sm">
+            <Calendar className="h-3.5 w-3.5 mr-1" /> Hoje
+          </ToggleGroupItem>
+          <ToggleGroupItem value="7d" className="text-xs px-3 h-8 rounded-md data-[state=on]:bg-background data-[state=on]:shadow-sm">
+            7 dias
+          </ToggleGroupItem>
+          <ToggleGroupItem value="30d" className="text-xs px-3 h-8 rounded-md data-[state=on]:bg-background data-[state=on]:shadow-sm">
+            30 dias
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       {/* Reminders banner */}
