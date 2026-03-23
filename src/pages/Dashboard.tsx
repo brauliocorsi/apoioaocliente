@@ -444,8 +444,8 @@ export default function Dashboard() {
         <TabsContent value="calls" className="space-y-4">
           <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
             <StatCard title="Ligações Abertas" value={openCalls.length} icon={<PhoneCall className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
-            <StatCard title="Registadas Hoje" value={callsToday.length} icon={<PhoneIncoming className="h-4 w-4 text-blue-500" />} accent="bg-blue-500/[0.03]" />
-            <StatCard title="Fechadas Hoje" value={closedToday.length} icon={<CheckCircle2 className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
+            <StatCard title="Registadas" value={fCalls.length} icon={<PhoneIncoming className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
+            <StatCard title="Fechadas" value={closedInPeriod.length} icon={<CheckCircle2 className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
             <StatCard title="Lembretes Pendentes" value={upcomingReminders.length} icon={<Bell className="h-4 w-4 text-warning" />} accent="bg-warning/[0.03]" />
           </div>
 
