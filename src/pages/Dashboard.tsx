@@ -3,16 +3,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Ticket, Clock, AlertTriangle, CheckCircle2, Loader2, Users, Bell,
   ArrowUpRight, Mail, MailOpen, Inbox, Eye, Phone, PhoneCall, PhoneIncoming,
   PhoneOutgoing, Truck, ClipboardCheck, TrendingUp, TrendingDown, BarChart3,
-  CalendarClock, Star, ThumbsUp, ThumbsDown, Package
+  CalendarClock, Star, ThumbsUp, ThumbsDown, Package, Calendar
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { formatDistanceToNow, format, isToday, subDays, startOfDay } from "date-fns";
+import { formatDistanceToNow, format, isToday, subDays, startOfDay, isAfter } from "date-fns";
 import { pt } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
+
+type PeriodFilter = "today" | "7d" | "30d";
 
 /* ---------- types ---------- */
 type TicketRow = {
@@ -116,8 +119,23 @@ export default function Dashboard() {
   const [emailsReceived, setEmailsReceived] = useState(0);
   const [emailTicketsCount, setEmailTicketsCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<PeriodFilter>("30d");
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  const periodStart = useMemo(() => {
+    const now = startOfDay(new Date());
+    if (period === "today") return now;
+    if (period === "7d") return subDays(now, 7);
+    return subDays(now, 30);
+  }, [period]);
+
+  const inPeriod = (dateStr: string) => isAfter(new Date(dateStr), periodStart);
+
+  const fTickets = useMemo(() => tickets.filter((t) => inPeriod(t.created_at)), [tickets, periodStart]);
+  const fCalls = useMemo(() => phoneCalls.filter((c) => inPeriod(c.created_at)), [phoneCalls, periodStart]);
+  const fDeliveries = useMemo(() => deliveries.filter((d) => inPeriod(d.created_at)), [deliveries, periodStart]);
+  const fPostDeliveries = useMemo(() => postDeliveries.filter((p) => inPeriod(p.created_at)), [postDeliveries, periodStart]);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -189,56 +207,64 @@ export default function Dashboard() {
   }, [user]);
 
   /* ---------- computed stats ---------- */
-  const today = startOfDay(new Date());
-  const last7 = subDays(today, 7);
-
-  // Tickets
-  const openTickets = tickets.filter((t) => !["resolvido", "encerrado"].includes(t.status));
+  // Tickets (filtered by period)
+  const openTickets = fTickets.filter((t) => !["resolvido", "encerrado"].includes(t.status));
   const slaAtRisk = openTickets.filter((t) => {
     if (!t.sla_first_response_at || t.first_responded_at) return false;
     return new Date(t.sla_first_response_at) < new Date();
   });
-  const resolvedToday = tickets.filter((t) => t.resolved_at && isToday(new Date(t.resolved_at)));
-  const createdToday = tickets.filter((t) => isToday(new Date(t.created_at)));
+  const resolvedInPeriod = fTickets.filter((t) => t.resolved_at && inPeriod(t.resolved_at));
   const ticketsByPriority = { P1: 0, P2: 0, P3: 0 };
   openTickets.forEach((t) => { if (t.priority in ticketsByPriority) ticketsByPriority[t.priority as keyof typeof ticketsByPriority]++; });
   const avgResolutionHours = useMemo(() => {
-    const resolved = tickets.filter((t) => t.resolved_at);
+    const resolved = fTickets.filter((t) => t.resolved_at);
     if (resolved.length === 0) return 0;
     const total = resolved.reduce((acc, t) => acc + (new Date(t.resolved_at!).getTime() - new Date(t.created_at).getTime()), 0);
     return Math.round(total / resolved.length / (1000 * 60 * 60));
-  }, [tickets]);
+  }, [fTickets]);
 
-  // Phone calls
-  const openCalls = phoneCalls.filter((c) => !c.closed_at);
-  const callsToday = phoneCalls.filter((c) => isToday(new Date(c.created_at)));
-  const closedToday = phoneCalls.filter((c) => c.closed_at && isToday(new Date(c.closed_at)));
+  // Phone calls (filtered)
+  const openCalls = fCalls.filter((c) => !c.closed_at);
+  const closedInPeriod = fCalls.filter((c) => c.closed_at);
 
-  // Deliveries
-  const deliveriesToday = deliveries.filter((d) => isToday(new Date(d.created_at)));
-  const confirmed = deliveries.filter((d) => d.confirmed);
-  const notConfirmed = deliveries.filter((d) => !d.confirmed);
-  const confirmRate = deliveries.length > 0 ? Math.round((confirmed.length / deliveries.length) * 100) : 0;
+  // Deliveries (filtered)
+  const confirmed = fDeliveries.filter((d) => d.confirmed);
+  const notConfirmed = fDeliveries.filter((d) => !d.confirmed);
+  const confirmRate = fDeliveries.length > 0 ? Math.round((confirmed.length / fDeliveries.length) * 100) : 0;
 
-  // Post deliveries
-  const postToday = postDeliveries.filter((p) => isToday(new Date(p.created_at)));
-  const satisfied = postDeliveries.filter((p) => p.client_satisfied);
-  const satisfactionRate = postDeliveries.length > 0 ? Math.round((satisfied.length / postDeliveries.length) * 100) : 0;
+  // Post deliveries (filtered)
+  const satisfied = fPostDeliveries.filter((p) => p.client_satisfied);
+  const satisfactionRate = fPostDeliveries.length > 0 ? Math.round((satisfied.length / fPostDeliveries.length) * 100) : 0;
   const avgNps = useMemo(() => {
-    const withNps = postDeliveries.filter((p) => p.assembly_nps !== null);
+    const withNps = fPostDeliveries.filter((p) => p.assembly_nps !== null);
     if (withNps.length === 0) return null;
     return (withNps.reduce((acc, p) => acc + (p.assembly_nps || 0), 0) / withNps.length).toFixed(1);
-  }, [postDeliveries]);
-  const issuesCount = postDeliveries.filter((p) => p.issues_reported).length;
+  }, [fPostDeliveries]);
+  const issuesCount = fPostDeliveries.filter((p) => p.issues_reported).length;
+
+  const periodLabel = period === "today" ? "hoje" : period === "7d" ? "últimos 7 dias" : "últimos 30 dias";
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
   return (
     <div className="space-y-5 max-w-[1400px] mx-auto">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground text-sm">Visão geral do suporte ao cliente</p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground text-sm">Visão geral do suporte ao cliente · {periodLabel}</p>
+        </div>
+        <ToggleGroup type="single" value={period} onValueChange={(v) => v && setPeriod(v as PeriodFilter)} className="bg-muted rounded-lg p-0.5">
+          <ToggleGroupItem value="today" className="text-xs px-3 h-8 rounded-md data-[state=on]:bg-background data-[state=on]:shadow-sm">
+            <Calendar className="h-3.5 w-3.5 mr-1" /> Hoje
+          </ToggleGroupItem>
+          <ToggleGroupItem value="7d" className="text-xs px-3 h-8 rounded-md data-[state=on]:bg-background data-[state=on]:shadow-sm">
+            7 dias
+          </ToggleGroupItem>
+          <ToggleGroupItem value="30d" className="text-xs px-3 h-8 rounded-md data-[state=on]:bg-background data-[state=on]:shadow-sm">
+            30 dias
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
 
       {/* Reminders banner */}
@@ -332,10 +358,10 @@ export default function Dashboard() {
         <TabsContent value="tickets" className="space-y-4">
           <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
             <StatCard title="Abertos" value={openTickets.length} icon={<Ticket className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
-            <StatCard title="Criados Hoje" value={createdToday.length} icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />} />
+            <StatCard title="Criados" value={fTickets.length} icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />} />
             <StatCard title="SLA em Risco" value={slaAtRisk.length} icon={<AlertTriangle className="h-4 w-4 text-destructive" />} accent="bg-destructive/[0.03]" />
-            <StatCard title="Resolvidos Hoje" value={resolvedToday.length} icon={<CheckCircle2 className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
-            <StatCard title="Emails Recebidos" value={emailsReceived} icon={<Inbox className="h-4 w-4 text-blue-500" />} accent="bg-blue-500/[0.03]" />
+            <StatCard title="Resolvidos" value={resolvedInPeriod.length} icon={<CheckCircle2 className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
+            <StatCard title="Emails Recebidos" value={emailsReceived} icon={<Inbox className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
             <StatCard title="Tempo Médio" value={`${avgResolutionHours}h`} icon={<Clock className="h-4 w-4 text-muted-foreground" />} subtitle="resolução" />
           </div>
 
@@ -418,8 +444,8 @@ export default function Dashboard() {
         <TabsContent value="calls" className="space-y-4">
           <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
             <StatCard title="Ligações Abertas" value={openCalls.length} icon={<PhoneCall className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
-            <StatCard title="Registadas Hoje" value={callsToday.length} icon={<PhoneIncoming className="h-4 w-4 text-blue-500" />} accent="bg-blue-500/[0.03]" />
-            <StatCard title="Fechadas Hoje" value={closedToday.length} icon={<CheckCircle2 className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
+            <StatCard title="Registadas" value={fCalls.length} icon={<PhoneIncoming className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
+            <StatCard title="Fechadas" value={closedInPeriod.length} icon={<CheckCircle2 className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
             <StatCard title="Lembretes Pendentes" value={upcomingReminders.length} icon={<Bell className="h-4 w-4 text-warning" />} accent="bg-warning/[0.03]" />
           </div>
 
@@ -486,10 +512,10 @@ export default function Dashboard() {
         {/* ===================== TAB: REG. LIGAÇÕES ===================== */}
         <TabsContent value="deliveries" className="space-y-4">
           <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-            <StatCard title="Total Registos" value={deliveries.length} icon={<Truck className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
-            <StatCard title="Hoje" value={deliveriesToday.length} icon={<CalendarClock className="h-4 w-4 text-blue-500" />} accent="bg-blue-500/[0.03]" />
+            <StatCard title="Total Registos" value={fDeliveries.length} icon={<Truck className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
             <StatCard title="Confirmados" value={confirmed.length} icon={<CheckCircle2 className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" subtitle={`${confirmRate}%`} />
             <StatCard title="Não Confirmados" value={notConfirmed.length} icon={<AlertTriangle className="h-4 w-4 text-destructive" />} accent="bg-destructive/[0.03]" />
+            <StatCard title="Taxa Confirmação" value={`${confirmRate}%`} icon={<TrendingUp className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
           </div>
 
           {/* Recent deliveries */}
@@ -536,8 +562,8 @@ export default function Dashboard() {
         {/* ===================== TAB: PÓS-ENTREGA ===================== */}
         <TabsContent value="post" className="space-y-4">
           <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
-            <StatCard title="Total Inquéritos" value={postDeliveries.length} icon={<ClipboardCheck className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
-            <StatCard title="Hoje" value={postToday.length} icon={<CalendarClock className="h-4 w-4 text-blue-500" />} accent="bg-blue-500/[0.03]" />
+            <StatCard title="Total Inquéritos" value={fPostDeliveries.length} icon={<ClipboardCheck className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
+            <StatCard title="Satisfação" value={`${satisfactionRate}%`} icon={<ThumbsUp className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
             <StatCard title="Satisfação" value={`${satisfactionRate}%`} icon={<ThumbsUp className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
             <StatCard title="Com Problemas" value={issuesCount} icon={<ThumbsDown className="h-4 w-4 text-destructive" />} accent="bg-destructive/[0.03]" />
             {avgNps !== null && <StatCard title="NPS Montagem" value={avgNps} icon={<Star className="h-4 w-4 text-warning" />} accent="bg-warning/[0.03]" />}
