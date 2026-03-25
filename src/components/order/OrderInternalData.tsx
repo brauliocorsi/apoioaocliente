@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Ticket, Phone, TruckIcon, ClipboardCheck, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { Ticket, Phone, PhoneOff, TruckIcon, ClipboardCheck, AlertTriangle, CheckCircle2, XCircle, Wrench } from "lucide-react";
 import { format } from "date-fns";
 
 interface OrderInternalDataProps {
@@ -94,7 +94,9 @@ export default function OrderInternalData({ data }: OrderInternalDataProps) {
             <ClipboardCheck className="h-3 w-3" /> Pós-Entrega ({postDeliveryConfirmations.length})
           </p>
           {postDeliveryConfirmations.map((pd: any) => {
-            const allOk = pd.client_satisfied && pd.product_ok && pd.assembly_ok && pd.no_damage;
+            const assemblyCheck = pd.assembly_status ? pd.assembly_status === "ok" || pd.assembly_status === "sem_montagem" : pd.assembly_ok;
+            const allOk = pd.client_satisfied && pd.product_ok && assemblyCheck && pd.no_damage;
+            const assemblyLabel = pd.assembly_status === "sem_montagem" ? "Sem montagem" : pd.assembly_status === "nao_aplicavel" ? "N/A" : "Montagem OK";
             return (
               <div key={pd.id} className="text-[11px] bg-muted/40 rounded px-2 py-1.5 space-y-0.5">
                 <div className="flex items-center gap-2">
@@ -104,12 +106,18 @@ export default function OrderInternalData({ data }: OrderInternalDataProps) {
                     <AlertTriangle className="h-3 w-3 text-yellow-600 shrink-0" />
                   )}
                   <span className="font-medium">{pd.client_name}</span>
+                  {pd.call_status && (
+                    <span className={`inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full ${pd.call_status === "atendeu" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"}`}>
+                      {pd.call_status === "atendeu" ? <Phone className="h-2 w-2" /> : <PhoneOff className="h-2 w-2" />}
+                      {pd.call_status === "atendeu" ? "Atendeu" : "Não atendeu"}
+                    </span>
+                  )}
                   <span className="ml-auto text-[10px] text-muted-foreground">{fmtDt(pd.created_at)}</span>
                 </div>
                 <div className="flex gap-2 flex-wrap">
                   <StatusPill ok={pd.client_satisfied} label="Satisfeito" />
                   <StatusPill ok={pd.product_ok} label="Produto OK" />
-                  <StatusPill ok={pd.assembly_ok} label="Montagem OK" />
+                  <StatusPill ok={assemblyCheck} label={assemblyLabel} />
                   <StatusPill ok={pd.no_damage} label="Sem danos" />
                 </div>
                 {pd.issues_reported && (
