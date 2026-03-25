@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Ticket, Phone, TruckIcon, ClipboardCheck, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { Ticket, Phone, PhoneOff, TruckIcon, ClipboardCheck, AlertTriangle, CheckCircle2, XCircle, Wrench } from "lucide-react";
 import { format } from "date-fns";
 
 interface OrderInternalDataProps {

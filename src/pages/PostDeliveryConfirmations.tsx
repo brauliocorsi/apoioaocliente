@@ -15,7 +15,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
-import { ClipboardCheck, Search, Plus, Trash2, Pencil, Check, X, CalendarDays, CheckCircle2, XCircle, Star, FileText, Wrench, PhoneOff } from "lucide-react";
+import { ClipboardCheck, Search, Plus, Trash2, Pencil, Check, X, CalendarDays, CheckCircle2, XCircle, Star, FileText, Wrench, PhoneOff, Phone } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -39,6 +39,8 @@ interface PostDeliveryRecord {
   notes: string | null;
   created_by: string;
   created_at: string;
+  call_status: string | null;
+  assembly_status: string | null;
 }
 
 interface AgentProfile {
@@ -79,6 +81,8 @@ export default function PostDeliveryConfirmations() {
   const [assemblyNps, setAssemblyNps] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [callStatus, setCallStatus] = useState<string>("atendeu");
+  const [assemblyStatus, setAssemblyStatus] = useState<string>("ok");
 
   // Edit
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -104,19 +108,22 @@ export default function PostDeliveryConfirmations() {
       return;
     }
     setSubmitting(true);
+    const assemblyOkDerived = assemblyStatus === "ok";
     const { error } = await supabase.from("post_delivery_confirmations").insert({
       order_number: orderNumber.trim(),
       client_name: clientName.trim(),
       client_phone: clientPhone.trim(),
       delivery_date: deliveryDate || null,
       product_ok: productOk,
-      assembly_ok: assemblyOk,
+      assembly_ok: assemblyOkDerived,
       no_damage: noDamage,
       client_satisfied: clientSatisfied,
       issues_reported: issuesReported.trim() || null,
       assembly_nps: assemblyNps,
       notes: notes.trim() || null,
       created_by: user!.id,
+      call_status: callStatus,
+      assembly_status: assemblyStatus,
     } as any);
     setSubmitting(false);
     if (error) {
@@ -126,6 +133,7 @@ export default function PostDeliveryConfirmations() {
       setOrderNumber(""); setClientName(""); setClientPhone(""); setDeliveryDate("");
       setProductOk(false); setAssemblyOk(false); setNoDamage(false); setClientSatisfied(false);
       setIssuesReported(""); setAssemblyNps(null); setNotes("");
+      setCallStatus("atendeu"); setAssemblyStatus("ok");
       fetchData();
     }
   };
@@ -146,18 +154,21 @@ export default function PostDeliveryConfirmations() {
       toast({ title: "Preencha os campos obrigatórios", variant: "destructive" });
       return;
     }
+    const assemblyOkDerived = (editData.assembly_status || "ok") === "ok";
     const { error } = await supabase.from("post_delivery_confirmations").update({
       order_number: editData.order_number!.trim(),
       client_name: editData.client_name!.trim(),
       client_phone: editData.client_phone!.trim(),
       delivery_date: editData.delivery_date || null,
       product_ok: editData.product_ok ?? false,
-      assembly_ok: editData.assembly_ok ?? false,
+      assembly_ok: assemblyOkDerived,
       no_damage: editData.no_damage ?? false,
       client_satisfied: editData.client_satisfied ?? false,
       issues_reported: editData.issues_reported?.trim() || null,
       assembly_nps: editData.assembly_nps ?? null,
       notes: editData.notes?.trim() || null,
+      call_status: editData.call_status || null,
+      assembly_status: editData.assembly_status || null,
     } as any).eq("id", editingId!);
     if (error) {
       toast({ title: "Erro ao atualizar", description: error.message, variant: "destructive" });
@@ -187,13 +198,18 @@ export default function PostDeliveryConfirmations() {
     return matchesSearch && matchesDate;
   });
 
-  const checkCount = (r: PostDeliveryRecord) => [r.product_ok, r.assembly_ok, r.no_damage, r.client_satisfied].filter(Boolean).length;
+  const checkCount = (r: PostDeliveryRecord) => {
+    const assemblyCheck = r.assembly_status ? r.assembly_status === "ok" || r.assembly_status === "sem_montagem" : r.assembly_ok;
+    return [r.product_ok, assemblyCheck, r.no_damage, r.client_satisfied].filter(Boolean).length;
+  };
 
   const today = new Date().toDateString();
   const todayRecords = records.filter(r => new Date(r.created_at).toDateString() === today);
   const allOkToday = todayRecords.filter(r => checkCount(r) === 4).length;
   const npsRecords = records.filter(r => r.assembly_nps != null && r.assembly_nps > 0);
   const avgNps = npsRecords.length > 0 ? (npsRecords.reduce((sum, r) => sum + (r.assembly_nps || 0), 0) / npsRecords.length) : null;
+  const answeredToday = todayRecords.filter(r => r.call_status === "atendeu").length;
+  const notAnsweredToday = todayRecords.filter(r => r.call_status === "nao_atendeu").length;
 
   const CheckItem = ({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) => (
     <div className="flex items-center gap-2">
@@ -220,6 +236,39 @@ export default function PostDeliveryConfirmations() {
     </div>
   );
 
+  const CallStatusBadge = ({ status }: { status: string | null }) => {
+    if (status === "atendeu") return (
+      <Badge className="bg-green-500/15 text-green-700 border-green-300 dark:text-green-400 gap-1">
+        <Phone className="h-3 w-3" /> Atendeu
+      </Badge>
+    );
+    if (status === "nao_atendeu") return (
+      <Badge variant="destructive" className="gap-1">
+        <PhoneOff className="h-3 w-3" /> Não atendeu
+      </Badge>
+    );
+    return <span className="text-xs text-muted-foreground">—</span>;
+  };
+
+  const AssemblyStatusBadge = ({ status, legacyOk }: { status: string | null; legacyOk: boolean }) => {
+    const effectiveStatus = status || (legacyOk ? "ok" : "nao_aplicavel");
+    if (effectiveStatus === "ok") return (
+      <Badge className="bg-green-500/15 text-green-700 border-green-300 dark:text-green-400 gap-0.5 text-[10px]">
+        <Wrench className="h-2.5 w-2.5" /> Montagem OK
+      </Badge>
+    );
+    if (effectiveStatus === "sem_montagem") return (
+      <Badge variant="outline" className="gap-0.5 text-[10px]">
+        <X className="h-2.5 w-2.5" /> Sem montagem
+      </Badge>
+    );
+    return (
+      <Badge variant="outline" className="gap-0.5 text-[10px] text-muted-foreground">
+        N/A
+      </Badge>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -228,7 +277,7 @@ export default function PostDeliveryConfirmations() {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">Hoje</p>
@@ -255,6 +304,24 @@ export default function PostDeliveryConfirmations() {
         </Card>
         <Card>
           <CardContent className="pt-6 flex items-center gap-3">
+            <Phone className="h-5 w-5 text-green-500" />
+            <div>
+              <p className="text-sm text-muted-foreground">Atendeu</p>
+              <p className="text-3xl font-bold text-foreground">{answeredToday}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-3">
+            <PhoneOff className="h-5 w-5 text-destructive" />
+            <div>
+              <p className="text-sm text-muted-foreground">Não atendeu</p>
+              <p className="text-3xl font-bold text-foreground">{notAnsweredToday}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 flex items-center gap-3">
             <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
             <div>
               <p className="text-sm text-muted-foreground">NPS Montagem</p>
@@ -276,7 +343,7 @@ export default function PostDeliveryConfirmations() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="space-y-2">
                 <Label>Nº Encomenda *</Label>
                 <Input placeholder="Ex: 12345" value={orderNumber} onChange={e => setOrderNumber(e.target.value)} />
@@ -293,13 +360,33 @@ export default function PostDeliveryConfirmations() {
                 <Label>Data da Entrega</Label>
                 <Input type="date" value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)} />
               </div>
+              <div className="space-y-2">
+                <Label>Cliente atendeu?</Label>
+                <Select value={callStatus} onValueChange={setCallStatus}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="atendeu">✅ Atendeu</SelectItem>
+                    <SelectItem value="nao_atendeu">❌ Não atendeu</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
               <Label className="text-sm font-semibold">Checklist de Verificação</Label>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <CheckItem label="Produto OK" checked={productOk} onChange={setProductOk} />
-                <CheckItem label="Montagem OK" checked={assemblyOk} onChange={setAssemblyOk} />
+                <div className="space-y-1">
+                  <Label className="text-sm">Montagem</Label>
+                  <Select value={assemblyStatus} onValueChange={v => { setAssemblyStatus(v); setAssemblyOk(v === "ok"); }}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ok">✅ Montagem OK</SelectItem>
+                      <SelectItem value="sem_montagem">📦 Sem montagem</SelectItem>
+                      <SelectItem value="nao_aplicavel">➖ N/A</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <CheckItem label="Sem danos" checked={noDamage} onChange={setNoDamage} />
                 <CheckItem label="Cliente satisfeito" checked={clientSatisfied} onChange={setClientSatisfied} />
               </div>
@@ -363,6 +450,7 @@ export default function PostDeliveryConfirmations() {
                     <TableHead>Nº Encomenda</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Telefone</TableHead>
+                    <TableHead>Chamada</TableHead>
                     <TableHead>Checklist</TableHead>
                     <TableHead>NPS Montagem</TableHead>
                     <TableHead>Problemas</TableHead>
@@ -382,9 +470,25 @@ export default function PostDeliveryConfirmations() {
                           <TableCell><Input value={editData.client_name || ""} onChange={e => setEditData(d => ({ ...d, client_name: e.target.value }))} className="h-8 text-sm" /></TableCell>
                           <TableCell><Input value={editData.client_phone || ""} onChange={e => setEditData(d => ({ ...d, client_phone: e.target.value }))} className="h-8 text-sm" /></TableCell>
                           <TableCell>
+                            <Select value={editData.call_status || "atendeu"} onValueChange={v => setEditData(d => ({ ...d, call_status: v }))}>
+                              <SelectTrigger className="h-8 text-xs w-[130px]"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="atendeu">Atendeu</SelectItem>
+                                <SelectItem value="nao_atendeu">Não atendeu</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
                             <div className="flex flex-col gap-1">
                               <CheckItem label="Produto" checked={editData.product_ok ?? false} onChange={v => setEditData(d => ({ ...d, product_ok: v }))} />
-                              <CheckItem label="Montagem" checked={editData.assembly_ok ?? false} onChange={v => setEditData(d => ({ ...d, assembly_ok: v }))} />
+                              <Select value={editData.assembly_status || "ok"} onValueChange={v => setEditData(d => ({ ...d, assembly_status: v, assembly_ok: v === "ok" }))}>
+                                <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="ok">Montagem OK</SelectItem>
+                                  <SelectItem value="sem_montagem">Sem montagem</SelectItem>
+                                  <SelectItem value="nao_aplicavel">N/A</SelectItem>
+                                </SelectContent>
+                              </Select>
                               <CheckItem label="Sem danos" checked={editData.no_damage ?? false} onChange={v => setEditData(d => ({ ...d, no_damage: v }))} />
                               <CheckItem label="Satisfeito" checked={editData.client_satisfied ?? false} onChange={v => setEditData(d => ({ ...d, client_satisfied: v }))} />
                             </div>
@@ -407,10 +511,12 @@ export default function PostDeliveryConfirmations() {
                           <TableCell>{r.client_name}</TableCell>
                           <TableCell>{r.client_phone}</TableCell>
                           <TableCell>
+                            <CallStatusBadge status={r.call_status} />
+                          </TableCell>
+                          <TableCell>
                             <div className="flex gap-1 flex-wrap">
                               {[
                                 { ok: r.product_ok, label: "Produto", icon: null },
-                                { ok: r.assembly_ok, label: "Montagem", icon: <Wrench className="h-2.5 w-2.5" /> },
                                 { ok: r.no_damage, label: "Sem danos", icon: null },
                                 { ok: r.client_satisfied, label: "Satisfeito", icon: null },
                               ].map(item => (
@@ -418,6 +524,7 @@ export default function PostDeliveryConfirmations() {
                                   {item.icon || (item.ok ? <CheckCircle2 className="h-2.5 w-2.5" /> : <XCircle className="h-2.5 w-2.5" />)} {item.label}
                                 </Badge>
                               ))}
+                              <AssemblyStatusBadge status={r.assembly_status} legacyOk={r.assembly_ok} />
                             </div>
                           </TableCell>
                           <TableCell>
