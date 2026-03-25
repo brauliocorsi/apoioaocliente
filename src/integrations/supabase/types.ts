@@ -740,6 +740,8 @@ export type Database = {
         Row: {
           assembly_nps: number | null
           assembly_ok: boolean
+          assembly_status: string | null
+          call_status: string | null
           client_name: string
           client_phone: string
           client_satisfied: boolean
@@ -756,6 +758,8 @@ export type Database = {
         Insert: {
           assembly_nps?: number | null
           assembly_ok?: boolean
+          assembly_status?: string | null
+          call_status?: string | null
           client_name: string
           client_phone: string
           client_satisfied?: boolean
@@ -772,6 +776,8 @@ export type Database = {
         Update: {
           assembly_nps?: number | null
           assembly_ok?: boolean
+          assembly_status?: string | null
+          call_status?: string | null
           client_name?: string
           client_phone?: string
           client_satisfied?: boolean
