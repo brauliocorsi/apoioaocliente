@@ -241,6 +241,9 @@ export default function Dashboard() {
     return (withNps.reduce((acc, p) => acc + (p.assembly_nps || 0), 0) / withNps.length).toFixed(1);
   }, [fPostDeliveries]);
   const issuesCount = fPostDeliveries.filter((p) => p.issues_reported).length;
+  const answeredCalls = fPostDeliveries.filter((p) => p.call_status === "atendeu").length;
+  const notAnsweredCalls = fPostDeliveries.filter((p) => p.call_status === "nao_atendeu").length;
+  const answerRate = fPostDeliveries.length > 0 ? Math.round((answeredCalls / fPostDeliveries.length) * 100) : 0;
 
   const periodLabel = period === "today" ? "hoje" : period === "7d" ? "últimos 7 dias" : "últimos 30 dias";
 
