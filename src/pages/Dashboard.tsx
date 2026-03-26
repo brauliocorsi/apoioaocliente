@@ -40,7 +40,7 @@ type PostDeliveryRow = {
   id: string; order_number: string; client_name: string; client_phone: string;
   client_satisfied: boolean; product_ok: boolean; no_damage: boolean;
   assembly_ok: boolean; assembly_nps: number | null; created_at: string;
-  issues_reported: string | null;
+  issues_reported: string | null; call_status: string | null; assembly_status: string | null;
 };
 
 type ReminderRow = {
