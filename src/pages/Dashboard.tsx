@@ -579,7 +579,7 @@ export default function Dashboard() {
             {[
               { label: "Produto OK", value: postDeliveries.filter((p) => p.product_ok).length, total: postDeliveries.length, icon: Package, color: "text-success" },
               { label: "Sem Danos", value: postDeliveries.filter((p) => p.no_damage).length, total: postDeliveries.length, icon: CheckCircle2, color: "text-success" },
-              { label: "Montagem OK", value: postDeliveries.filter((p) => p.assembly_ok).length, total: postDeliveries.length, icon: ClipboardCheck, color: "text-primary" },
+              { label: "Montagem OK", value: postDeliveries.filter((p) => p.assembly_status ? p.assembly_status === "ok" : p.assembly_ok).length, total: postDeliveries.length, icon: ClipboardCheck, color: "text-primary" },
               { label: "Cliente Satisfeito", value: satisfied.length, total: postDeliveries.length, icon: ThumbsUp, color: "text-success" },
             ].map((item) => (
               <Card key={item.label}>
