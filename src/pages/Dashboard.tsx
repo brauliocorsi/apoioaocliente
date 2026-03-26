@@ -40,7 +40,7 @@ type PostDeliveryRow = {
   id: string; order_number: string; client_name: string; client_phone: string;
   client_satisfied: boolean; product_ok: boolean; no_damage: boolean;
   assembly_ok: boolean; assembly_nps: number | null; created_at: string;
-  issues_reported: string | null;
+  issues_reported: string | null; call_status: string | null; assembly_status: string | null;
 };
 
 type ReminderRow = {
@@ -241,6 +241,9 @@ export default function Dashboard() {
     return (withNps.reduce((acc, p) => acc + (p.assembly_nps || 0), 0) / withNps.length).toFixed(1);
   }, [fPostDeliveries]);
   const issuesCount = fPostDeliveries.filter((p) => p.issues_reported).length;
+  const answeredCalls = fPostDeliveries.filter((p) => p.call_status === "atendeu").length;
+  const notAnsweredCalls = fPostDeliveries.filter((p) => p.call_status === "nao_atendeu").length;
+  const answerRate = fPostDeliveries.length > 0 ? Math.round((answeredCalls / fPostDeliveries.length) * 100) : 0;
 
   const periodLabel = period === "today" ? "hoje" : period === "7d" ? "últimos 7 dias" : "últimos 30 dias";
 
@@ -561,11 +564,13 @@ export default function Dashboard() {
 
         {/* ===================== TAB: PÓS-ENTREGA ===================== */}
         <TabsContent value="post" className="space-y-4">
-          <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
             <StatCard title="Total Inquéritos" value={fPostDeliveries.length} icon={<ClipboardCheck className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
             <StatCard title="Satisfação" value={`${satisfactionRate}%`} icon={<ThumbsUp className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
-            <StatCard title="Satisfação" value={`${satisfactionRate}%`} icon={<ThumbsUp className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
             <StatCard title="Com Problemas" value={issuesCount} icon={<ThumbsDown className="h-4 w-4 text-destructive" />} accent="bg-destructive/[0.03]" />
+            <StatCard title="Taxa Atendimento" value={`${answerRate}%`} icon={<Phone className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" subtitle={`${answeredCalls} atendeu · ${notAnsweredCalls} não atendeu`} />
+            <StatCard title="Atendeu" value={answeredCalls} icon={<PhoneIncoming className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
+            <StatCard title="Não Atendeu" value={notAnsweredCalls} icon={<PhoneOutgoing className="h-4 w-4 text-destructive" />} accent="bg-destructive/[0.03]" />
             {avgNps !== null && <StatCard title="NPS Montagem" value={avgNps} icon={<Star className="h-4 w-4 text-warning" />} accent="bg-warning/[0.03]" />}
           </div>
 
@@ -574,7 +579,7 @@ export default function Dashboard() {
             {[
               { label: "Produto OK", value: postDeliveries.filter((p) => p.product_ok).length, total: postDeliveries.length, icon: Package, color: "text-success" },
               { label: "Sem Danos", value: postDeliveries.filter((p) => p.no_damage).length, total: postDeliveries.length, icon: CheckCircle2, color: "text-success" },
-              { label: "Montagem OK", value: postDeliveries.filter((p) => p.assembly_ok).length, total: postDeliveries.length, icon: ClipboardCheck, color: "text-primary" },
+              { label: "Montagem OK", value: postDeliveries.filter((p) => p.assembly_status ? p.assembly_status === "ok" : p.assembly_ok).length, total: postDeliveries.length, icon: ClipboardCheck, color: "text-primary" },
               { label: "Cliente Satisfeito", value: satisfied.length, total: postDeliveries.length, icon: ThumbsUp, color: "text-success" },
             ].map((item) => (
               <Card key={item.label}>
