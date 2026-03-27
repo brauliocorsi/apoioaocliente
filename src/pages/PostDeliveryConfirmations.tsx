@@ -58,6 +58,7 @@ export default function PostDeliveryConfirmations() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [callStatusFilter, setCallStatusFilter] = useState<"all" | "atendeu" | "nao_atendeu">("all");
 
   useEffect(() => {
     if (autoNew && formRef.current) {
@@ -195,7 +196,8 @@ export default function PostDeliveryConfirmations() {
       r.client_phone.includes(search);
     const cutoff = getDateCutoff(dateFilter);
     const matchesDate = !cutoff || isAfter(new Date(r.created_at), cutoff);
-    return matchesSearch && matchesDate;
+    const matchesCallStatus = callStatusFilter === "all" || r.call_status === callStatusFilter;
+    return matchesSearch && matchesDate && matchesCallStatus;
   });
 
   const checkCount = (r: PostDeliveryRecord) => {
@@ -421,6 +423,17 @@ export default function PostDeliveryConfirmations() {
             <div className="flex items-center gap-3 flex-1">
               <Search className="h-4 w-4 text-muted-foreground" />
               <Input placeholder="Pesquisar..." value={search} onChange={e => setSearch(e.target.value)} className="max-w-sm" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Phone className="h-4 w-4 text-muted-foreground" />
+              <Select value={callStatusFilter} onValueChange={(v) => setCallStatusFilter(v as "all" | "atendeu" | "nao_atendeu")}>
+                <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas chamadas</SelectItem>
+                  <SelectItem value="atendeu">✅ Atendeu</SelectItem>
+                  <SelectItem value="nao_atendeu">❌ Não atendeu</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-muted-foreground" />
