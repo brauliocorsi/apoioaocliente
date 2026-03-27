@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertTriangle, Bell, Clock, Eye, Phone, PhoneCall, RefreshCw, Search, Timer, Archive, CheckCircle, Loader2, Zap, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
-import { format, differenceInDays, parseISO, isToday, isBefore, startOfDay } from "date-fns";
+import { format, differenceInBusinessDays, parseISO, isToday, isBefore, startOfDay } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
@@ -49,11 +49,11 @@ type SlaLevel = "normal" | "attention" | "alert" | "critical";
 
 function getSlaInfo(orderDate: string | null): { label: string; level: SlaLevel; days: number; progress: number } {
   if (!orderDate) return { label: "Sem data", level: "normal", days: 0, progress: 0 };
-  const days = differenceInDays(new Date(), parseISO(orderDate));
-  if (days > 30) return { label: `${days}d — Vencido!`, level: "critical", days, progress: 100 };
-  if (days >= 20) return { label: `${days}d — Alerta`, level: "alert", days, progress: Math.round((days / 30) * 100) };
-  if (days >= 15) return { label: `${days}d — Atenção`, level: "attention", days, progress: Math.round((days / 30) * 100) };
-  return { label: `${days}d`, level: "normal", days, progress: Math.round((days / 30) * 100) };
+  const days = differenceInBusinessDays(new Date(), parseISO(orderDate));
+  if (days > 22) return { label: `${days}dú — Vencido!`, level: "critical", days, progress: 100 };
+  if (days >= 14) return { label: `${days}dú — Alerta`, level: "alert", days, progress: Math.round((days / 22) * 100) };
+  if (days >= 11) return { label: `${days}dú — Atenção`, level: "attention", days, progress: Math.round((days / 22) * 100) };
+  return { label: `${days}dú`, level: "normal", days, progress: Math.round((days / 22) * 100) };
 }
 
 const slaColors: Record<SlaLevel, string> = {
