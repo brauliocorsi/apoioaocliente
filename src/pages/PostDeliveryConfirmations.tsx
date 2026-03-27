@@ -425,6 +425,17 @@ export default function PostDeliveryConfirmations() {
               <Input placeholder="Pesquisar..." value={search} onChange={e => setSearch(e.target.value)} className="max-w-sm" />
             </div>
             <div className="flex items-center gap-2">
+              <Phone className="h-4 w-4 text-muted-foreground" />
+              <Select value={callStatusFilter} onValueChange={(v) => setCallStatusFilter(v as "all" | "atendeu" | "nao_atendeu")}>
+                <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas chamadas</SelectItem>
+                  <SelectItem value="atendeu">✅ Atendeu</SelectItem>
+                  <SelectItem value="nao_atendeu">❌ Não atendeu</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-muted-foreground" />
               <Select value={dateFilter} onValueChange={(v) => setDateFilter(v as DateFilter)}>
                 <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
