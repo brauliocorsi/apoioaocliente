@@ -555,10 +555,20 @@ export default function DelayedOrders() {
                           <Badge variant="outline" className="text-xs">{order.situacao || "N/A"}</Badge>
                         </TableCell>
                         <TableCell>
-                          <div className="space-y-1 min-w-[120px]">
-                            <Badge className={`text-xs ${slaColors[sla.level]}`}>{sla.label}</Badge>
-                            <Progress value={sla.progress} className={`h-1.5 ${slaProgressColors[sla.level]}`} />
-                          </div>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="space-y-1 min-w-[120px] cursor-help">
+                                <Badge className={`text-xs ${slaColors[sla.level]}`}>{sla.label}</Badge>
+                                <Progress value={sla.progress} className={`h-1.5 ${slaProgressColors[sla.level]}`} />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="text-xs space-y-1 max-w-[220px]">
+                              <p className="font-semibold">📅 Encomenda: {sla.dateFormatted || "N/A"}</p>
+                              <p>Dias úteis: <span className="font-bold">{sla.days}dú</span></p>
+                              <p>Dias corridos: <span className="text-muted-foreground">{sla.calendarDays}d</span></p>
+                              <p>Limite: 22 dias úteis</p>
+                            </TooltipContent>
+                          </Tooltip>
                         </TableCell>
                         <TableCell>
                           <Tooltip>
