@@ -47,13 +47,16 @@ type OrderContact = {
 
 type SlaLevel = "normal" | "attention" | "alert" | "critical";
 
-function getSlaInfo(orderDate: string | null): { label: string; level: SlaLevel; days: number; progress: number } {
-  if (!orderDate) return { label: "Sem data", level: "normal", days: 0, progress: 0 };
-  const days = differenceInBusinessDays(new Date(), parseISO(orderDate));
-  if (days > 22) return { label: `${days}dú — Vencido!`, level: "critical", days, progress: 100 };
-  if (days >= 14) return { label: `${days}dú — Alerta`, level: "alert", days, progress: Math.round((days / 22) * 100) };
-  if (days >= 11) return { label: `${days}dú — Atenção`, level: "attention", days, progress: Math.round((days / 22) * 100) };
-  return { label: `${days}dú`, level: "normal", days, progress: Math.round((days / 22) * 100) };
+function getSlaInfo(orderDate: string | null): { label: string; level: SlaLevel; days: number; calendarDays: number; progress: number; dateFormatted: string } {
+  if (!orderDate) return { label: "Sem data", level: "normal", days: 0, calendarDays: 0, progress: 0, dateFormatted: "" };
+  const parsed = parseISO(orderDate);
+  const days = differenceInBusinessDays(new Date(), parsed);
+  const calendarDays = differenceInDays(new Date(), parsed);
+  const dateFormatted = format(parsed, "dd/MM/yyyy");
+  if (days > 22) return { label: `${days}dú — Vencido!`, level: "critical", days, calendarDays, progress: 100, dateFormatted };
+  if (days >= 14) return { label: `${days}dú — Alerta`, level: "alert", days, calendarDays, progress: Math.round((days / 22) * 100), dateFormatted };
+  if (days >= 11) return { label: `${days}dú — Atenção`, level: "attention", days, calendarDays, progress: Math.round((days / 22) * 100), dateFormatted };
+  return { label: `${days}dú`, level: "normal", days, calendarDays, progress: Math.round((days / 22) * 100), dateFormatted };
 }
 
 const slaColors: Record<SlaLevel, string> = {
