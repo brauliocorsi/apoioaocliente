@@ -65,10 +65,10 @@ const contactChartConfig: ChartConfig = {
 
 function getSlaLevel(orderDate: string | null) {
   if (!orderDate) return "normal";
-  const days = differenceInDays(new Date(), parseISO(orderDate));
-  if (days > 30) return "critical";
-  if (days >= 20) return "alert";
-  if (days >= 15) return "attention";
+  const days = differenceInBusinessDays(new Date(), parseISO(orderDate));
+  if (days > 22) return "critical";
+  if (days >= 14) return "alert";
+  if (days >= 11) return "attention";
   return "normal";
 }
 
