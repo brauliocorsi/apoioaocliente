@@ -58,6 +58,7 @@ export default function PostDeliveryConfirmations() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [callStatusFilter, setCallStatusFilter] = useState<"all" | "atendeu" | "nao_atendeu">("all");
 
   useEffect(() => {
     if (autoNew && formRef.current) {
