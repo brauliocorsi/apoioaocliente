@@ -196,7 +196,8 @@ export default function PostDeliveryConfirmations() {
       r.client_phone.includes(search);
     const cutoff = getDateCutoff(dateFilter);
     const matchesDate = !cutoff || isAfter(new Date(r.created_at), cutoff);
-    return matchesSearch && matchesDate;
+    const matchesCallStatus = callStatusFilter === "all" || r.call_status === callStatusFilter;
+    return matchesSearch && matchesDate && matchesCallStatus;
   });
 
   const checkCount = (r: PostDeliveryRecord) => {
