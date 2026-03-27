@@ -100,17 +100,17 @@ export default function DelayedOrdersCharts({ orders, contacts }: DelayedOrdersC
 
   const agingData = useMemo(() => {
     const buckets = [
-      { label: "0-7d", min: 0, max: 7, count: 0 },
-      { label: "8-14d", min: 8, max: 14, count: 0 },
-      { label: "15-20d", min: 15, max: 20, count: 0 },
-      { label: "21-30d", min: 21, max: 30, count: 0 },
-      { label: "31-45d", min: 31, max: 45, count: 0 },
-      { label: "46-60d", min: 46, max: 60, count: 0 },
-      { label: ">60d", min: 61, max: 9999, count: 0 },
+      { label: "0-5dú", min: 0, max: 5, count: 0 },
+      { label: "6-10dú", min: 6, max: 10, count: 0 },
+      { label: "11-14dú", min: 11, max: 14, count: 0 },
+      { label: "15-22dú", min: 15, max: 22, count: 0 },
+      { label: "23-33dú", min: 23, max: 33, count: 0 },
+      { label: "34-44dú", min: 34, max: 44, count: 0 },
+      { label: ">44dú", min: 45, max: 9999, count: 0 },
     ];
     orders.forEach((o) => {
       if (!o.order_date) return;
-      const days = differenceInDays(new Date(), parseISO(o.order_date));
+      const days = differenceInBusinessDays(new Date(), parseISO(o.order_date));
       const bucket = buckets.find((b) => days >= b.min && days <= b.max);
       if (bucket) bucket.count++;
     });
@@ -118,11 +118,11 @@ export default function DelayedOrdersCharts({ orders, contacts }: DelayedOrdersC
       name: b.label,
       count: b.count,
       fill:
-        b.min >= 31
+        b.min >= 23
           ? "hsl(var(--destructive))"
-          : b.min >= 21
-          ? "hsl(25, 95%, 53%)"
           : b.min >= 15
+          ? "hsl(25, 95%, 53%)"
+          : b.min >= 11
           ? "hsl(45, 93%, 47%)"
           : "hsl(var(--primary))",
     }));
