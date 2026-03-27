@@ -18,7 +18,7 @@ import {
   CartesianGrid,
   Tooltip,
 } from "recharts";
-import { differenceInDays, parseISO, format, startOfWeek, addWeeks } from "date-fns";
+import { differenceInBusinessDays, parseISO, format, startOfWeek, addWeeks } from "date-fns";
 import { pt } from "date-fns/locale";
 
 type DelayedOrder = {
