@@ -80,10 +80,10 @@ export default function DelayedOrdersCharts({ orders, contacts }: DelayedOrdersC
       counts[level]++;
     });
     return [
-      { name: "Normal (<15d)", value: counts.normal, fill: PIE_COLORS[0] },
-      { name: "Atenção (15-20d)", value: counts.attention, fill: PIE_COLORS[1] },
-      { name: "Alerta (20-30d)", value: counts.alert, fill: PIE_COLORS[2] },
-      { name: "Vencidas (>30d)", value: counts.critical, fill: PIE_COLORS[3] },
+      { name: "Normal (<11dú)", value: counts.normal, fill: PIE_COLORS[0] },
+      { name: "Atenção (11-14dú)", value: counts.attention, fill: PIE_COLORS[1] },
+      { name: "Alerta (14-22dú)", value: counts.alert, fill: PIE_COLORS[2] },
+      { name: "Vencidas (>22dú)", value: counts.critical, fill: PIE_COLORS[3] },
     ].filter((d) => d.value > 0);
   }, [orders]);
 
