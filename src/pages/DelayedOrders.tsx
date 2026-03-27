@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertTriangle, Bell, Clock, Eye, Phone, PhoneCall, RefreshCw, Search, Timer, Archive, CheckCircle, Loader2, Zap, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
-import { format, differenceInBusinessDays, parseISO, isToday, isBefore, startOfDay } from "date-fns";
+import { format, differenceInBusinessDays, differenceInDays, parseISO, isToday, isBefore, startOfDay } from "date-fns";
 import { pt } from "date-fns/locale";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
@@ -47,13 +47,16 @@ type OrderContact = {
 
 type SlaLevel = "normal" | "attention" | "alert" | "critical";
 
-function getSlaInfo(orderDate: string | null): { label: string; level: SlaLevel; days: number; progress: number } {
-  if (!orderDate) return { label: "Sem data", level: "normal", days: 0, progress: 0 };
-  const days = differenceInBusinessDays(new Date(), parseISO(orderDate));
-  if (days > 22) return { label: `${days}dú — Vencido!`, level: "critical", days, progress: 100 };
-  if (days >= 14) return { label: `${days}dú — Alerta`, level: "alert", days, progress: Math.round((days / 22) * 100) };
-  if (days >= 11) return { label: `${days}dú — Atenção`, level: "attention", days, progress: Math.round((days / 22) * 100) };
-  return { label: `${days}dú`, level: "normal", days, progress: Math.round((days / 22) * 100) };
+function getSlaInfo(orderDate: string | null): { label: string; level: SlaLevel; days: number; calendarDays: number; progress: number; dateFormatted: string } {
+  if (!orderDate) return { label: "Sem data", level: "normal", days: 0, calendarDays: 0, progress: 0, dateFormatted: "" };
+  const parsed = parseISO(orderDate);
+  const days = differenceInBusinessDays(new Date(), parsed);
+  const calendarDays = differenceInDays(new Date(), parsed);
+  const dateFormatted = format(parsed, "dd/MM/yyyy");
+  if (days > 22) return { label: `${days}dú — Vencido!`, level: "critical", days, calendarDays, progress: 100, dateFormatted };
+  if (days >= 14) return { label: `${days}dú — Alerta`, level: "alert", days, calendarDays, progress: Math.round((days / 22) * 100), dateFormatted };
+  if (days >= 11) return { label: `${days}dú — Atenção`, level: "attention", days, calendarDays, progress: Math.round((days / 22) * 100), dateFormatted };
+  return { label: `${days}dú`, level: "normal", days, calendarDays, progress: Math.round((days / 22) * 100), dateFormatted };
 }
 
 const slaColors: Record<SlaLevel, string> = {
@@ -552,10 +555,20 @@ export default function DelayedOrders() {
                           <Badge variant="outline" className="text-xs">{order.situacao || "N/A"}</Badge>
                         </TableCell>
                         <TableCell>
-                          <div className="space-y-1 min-w-[120px]">
-                            <Badge className={`text-xs ${slaColors[sla.level]}`}>{sla.label}</Badge>
-                            <Progress value={sla.progress} className={`h-1.5 ${slaProgressColors[sla.level]}`} />
-                          </div>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="space-y-1 min-w-[120px] cursor-help">
+                                <Badge className={`text-xs ${slaColors[sla.level]}`}>{sla.label}</Badge>
+                                <Progress value={sla.progress} className={`h-1.5 ${slaProgressColors[sla.level]}`} />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="text-xs space-y-1 max-w-[220px]">
+                              <p className="font-semibold">📅 Encomenda: {sla.dateFormatted || "N/A"}</p>
+                              <p>Dias úteis: <span className="font-bold">{sla.days}dú</span></p>
+                              <p>Dias corridos: <span className="text-muted-foreground">{sla.calendarDays}d</span></p>
+                              <p>Limite: 22 dias úteis</p>
+                            </TooltipContent>
+                          </Tooltip>
                         </TableCell>
                         <TableCell>
                           <Tooltip>
