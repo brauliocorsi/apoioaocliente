@@ -65,6 +65,7 @@ type TicketRow = {
   priority: string;
   status: string;
   order_number: string | null;
+  service_number: string | null;
   created_at: string;
   assigned_to: string | null;
   sla_first_response_at: string | null;
