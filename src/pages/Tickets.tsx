@@ -160,7 +160,7 @@ export default function Tickets() {
     const fetch = async () => {
       let query = supabase
         .from("tickets")
-        .select("id, ticket_number, client_name, client_phone, subject, category_id, priority, status, order_number, created_at, assigned_to, sla_first_response_at, sla_resolution_at, sla_paused_at, sla_paused_total_seconds, first_responded_at, resolved_at, sla_stage_deadline_at")
+        .select("id, ticket_number, client_name, client_phone, subject, category_id, priority, status, order_number, service_number, created_at, assigned_to, sla_first_response_at, sla_resolution_at, sla_paused_at, sla_paused_total_seconds, first_responded_at, resolved_at, sla_stage_deadline_at")
         .order("created_at", { ascending: false });
       
       if (statusFilter !== "all") query = query.eq("status", statusFilter as any);
@@ -266,6 +266,7 @@ export default function Tickets() {
         t.client_name.toLowerCase().includes(q) ||
         t.subject.toLowerCase().includes(q) ||
         (t.order_number && t.order_number.toLowerCase().includes(q)) ||
+        (t.service_number && t.service_number.toLowerCase().includes(q)) ||
         (t.client_phone && t.client_phone.includes(search)) ||
         String(t.ticket_number).includes(search);
       if (!matchesSearch) return;
@@ -281,6 +282,7 @@ export default function Tickets() {
       t.client_name.toLowerCase().includes(q) ||
       t.subject.toLowerCase().includes(q) ||
       (t.order_number && t.order_number.toLowerCase().includes(q)) ||
+      (t.service_number && t.service_number.toLowerCase().includes(q)) ||
       (t.client_phone && t.client_phone.includes(search)) ||
         String(t.ticket_number).includes(search);
     if (!matchesSearch) return false;
@@ -327,7 +329,7 @@ export default function Tickets() {
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Pesquisar por nome, telefone, assunto, nº encomenda..." className="pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input placeholder="Pesquisar por nome, telefone, assunto, nº encomenda, nº assistência..." className="pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         {view === "list" && (
           <Select value={statusFilter} onValueChange={setStatusFilter}>
