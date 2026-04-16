@@ -600,10 +600,13 @@ export default function DelayedOrders() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {lastContact ? (
-                            <div>
+                            <button
+                              className="text-left hover:underline cursor-pointer"
+                              onClick={() => setContactHistoryDialog({ open: true, order, contacts: orderContacts })}
+                            >
                               <div>{format(new Date(lastContact.contacted_at), "dd/MM HH:mm", { locale: pt })}</div>
                               {lastContact.notes && <div className="truncate max-w-[120px] text-[10px]">{lastContact.notes}</div>}
-                            </div>
+                            </button>
                           ) : (
                             <span className={sla.level !== "normal" ? "text-destructive" : ""}>Nunca</span>
                           )}
