@@ -434,7 +434,7 @@ export default function DelayedOrders() {
                       <div className={`w-2 h-2 rounded-full shrink-0 ${isOverdue ? "bg-destructive" : "bg-blue-500"}`} />
                       <span className="font-mono font-medium text-xs">#{order.order_number}</span>
                       <span className="font-medium truncate">{order.client_name}</span>
-                      <span className="text-muted-foreground text-xs">{order.client_phone || "—"}</span>
+                      <span className="text-muted-foreground text-xs">{formatPhone(order.client_phone)}</span>
                       <Badge className={`text-[10px] ml-auto ${slaColors[sla.level]}`}>{sla.label}</Badge>
                       {nextDate && (
                         <span className={`text-xs whitespace-nowrap ${isOverdue ? "text-destructive font-medium" : "text-blue-600 dark:text-blue-400"}`}>
