@@ -235,6 +235,7 @@ Deno.serve(async (req) => {
         client_phone: clientPhone,
         order_date: orderDate ? orderDate.substring(0, 10) : null,
         situacao,
+        valor_total: valorTotal,
         sla_deadline_at: slaDeadline,
         created_by: "00000000-0000-0000-0000-000000000000",
       });
