@@ -774,6 +774,46 @@ export default function DelayedOrders() {
           vendaId={vendaDialog.vendaId}
           vendaCodigo={vendaDialog.vendaCodigo}
         />
+
+        {/* Contact History Popup */}
+        <Dialog open={contactHistoryDialog.open} onOpenChange={(open) => setContactHistoryDialog({ open, order: open ? contactHistoryDialog.order : null, contacts: open ? contactHistoryDialog.contacts : [] })}>
+          <DialogContent className="max-w-lg max-h-[70vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-primary" />
+                Histórico de Contactos — #{contactHistoryDialog.order?.order_number}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground mb-3">
+                {contactHistoryDialog.order?.client_name} • {formatPhone(contactHistoryDialog.order?.client_phone ?? null)}
+              </p>
+              {contactHistoryDialog.contacts.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">Nenhum contacto registado.</p>
+              ) : (
+                contactHistoryDialog.contacts.map((c) => (
+                  <div key={c.id} className="border border-border rounded-lg p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium">
+                        {format(new Date(c.contacted_at), "dd/MM/yyyy HH:mm", { locale: pt })}
+                      </span>
+                      <Badge variant="outline" className="text-[10px]">
+                        {c.contact_type === "phone_call" ? "Ligação" : "Contacto rápido"}
+                      </Badge>
+                    </div>
+                    {c.notes && <p className="text-sm text-muted-foreground">{c.notes}</p>}
+                    {c.next_contact_at && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <CalendarClock className="h-3 w-3" />
+                        Próximo: {format(new Date(c.next_contact_at), "dd/MM/yyyy HH:mm")}
+                      </p>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </TooltipProvider>
   );
