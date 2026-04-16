@@ -97,6 +97,7 @@ export default function DelayedOrders() {
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [vendaDialog, setVendaDialog] = useState<{ open: boolean; vendaId: string; vendaCodigo: string }>({ open: false, vendaId: "", vendaCodigo: "" });
   const [loadingVendaId, setLoadingVendaId] = useState<string | null>(null);
+  const [contactHistoryDialog, setContactHistoryDialog] = useState<{ open: boolean; order: DelayedOrder | null; contacts: OrderContact[] }>({ open: false, order: null, contacts: [] });
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
