@@ -534,13 +534,13 @@ export default function DelayedOrders() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8">
+                    <TableCell colSpan={11} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                     </TableCell>
                   </TableRow>
                 ) : filteredOrders.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                       {orders.length === 0
                         ? "Nenhuma encomenda pendente. Clique em \"Sincronizar agora\" para buscar do GestãoClick."
                         : "Nenhuma encomenda encontrada com os filtros atuais."}
@@ -556,7 +556,12 @@ export default function DelayedOrders() {
                       <TableRow key={order.id} className={sla.level === "critical" ? "bg-destructive/5" : sla.level === "alert" ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}>
                         <TableCell className="font-mono font-medium text-sm">#{order.order_number}</TableCell>
                         <TableCell className="font-medium">{order.client_name}</TableCell>
-                        <TableCell className="text-muted-foreground text-sm">{order.client_phone || "—"}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">{formatPhone(order.client_phone)}</TableCell>
+                        <TableCell className="text-sm font-medium">
+                          {order.valor_total != null
+                            ? Number(order.valor_total).toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €"
+                            : "—"}
+                        </TableCell>
                         <TableCell className="text-sm">
                           {order.order_date ? format(parseISO(order.order_date), "dd/MM/yyyy") : "—"}
                         </TableCell>
