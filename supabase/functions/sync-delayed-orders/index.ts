@@ -199,10 +199,11 @@ Deno.serve(async (req) => {
       const clienteId = String(venda.cliente_id || "");
       const clientPhone = phoneMap.get(clienteId) || null;
       const situacao = venda.nome_situacao || venda.situacao || null;
+      const valorTotal = venda.valor_total ? parseFloat(venda.valor_total) : null;
 
       const { data: existing } = await supabaseAdmin
         .from("delayed_orders")
-        .select("id, situacao, client_phone, order_date, sla_deadline_at, is_archived")
+        .select("id, situacao, client_phone, order_date, sla_deadline_at, is_archived, valor_total")
         .eq("order_number", orderNumber)
         .maybeSingle();
 
@@ -210,6 +211,7 @@ Deno.serve(async (req) => {
         const updates: Record<string, any> = {};
         if (existing.situacao !== situacao) updates.situacao = situacao;
         if (!existing.client_phone && clientPhone) updates.client_phone = clientPhone;
+        if (valorTotal != null && existing.valor_total !== valorTotal) updates.valor_total = valorTotal;
         if (!existing.order_date && orderDate) {
           updates.order_date = orderDate.substring(0, 10);
           updates.sla_deadline_at = new Date(new Date(orderDate).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -233,6 +235,7 @@ Deno.serve(async (req) => {
         client_phone: clientPhone,
         order_date: orderDate ? orderDate.substring(0, 10) : null,
         situacao,
+        valor_total: valorTotal,
         sla_deadline_at: slaDeadline,
         created_by: "00000000-0000-0000-0000-000000000000",
       });

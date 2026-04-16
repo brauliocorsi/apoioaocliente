@@ -31,6 +31,13 @@ type DelayedOrder = {
   created_by: string;
   created_at: string;
   updated_at: string;
+  valor_total: number | null;
+};
+
+// Strip country code prefixes (e.g. +351, 00351) from phone numbers
+const formatPhone = (phone: string | null): string => {
+  if (!phone) return "—";
+  return phone.replace(/^(\+|00)?351\s?/, "").replace(/^(\+|00)\d{1,3}\s?/, "").trim() || phone;
 };
 
 type OrderContact = {
@@ -90,6 +97,7 @@ export default function DelayedOrders() {
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [vendaDialog, setVendaDialog] = useState<{ open: boolean; vendaId: string; vendaCodigo: string }>({ open: false, vendaId: "", vendaCodigo: "" });
   const [loadingVendaId, setLoadingVendaId] = useState<string | null>(null);
+  const [contactHistoryDialog, setContactHistoryDialog] = useState<{ open: boolean; order: DelayedOrder | null; contacts: OrderContact[] }>({ open: false, order: null, contacts: [] });
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -426,7 +434,7 @@ export default function DelayedOrders() {
                       <div className={`w-2 h-2 rounded-full shrink-0 ${isOverdue ? "bg-destructive" : "bg-blue-500"}`} />
                       <span className="font-mono font-medium text-xs">#{order.order_number}</span>
                       <span className="font-medium truncate">{order.client_name}</span>
-                      <span className="text-muted-foreground text-xs">{order.client_phone || "—"}</span>
+                      <span className="text-muted-foreground text-xs">{formatPhone(order.client_phone)}</span>
                       <Badge className={`text-[10px] ml-auto ${slaColors[sla.level]}`}>{sla.label}</Badge>
                       {nextDate && (
                         <span className={`text-xs whitespace-nowrap ${isOverdue ? "text-destructive font-medium" : "text-blue-600 dark:text-blue-400"}`}>
@@ -513,6 +521,7 @@ export default function DelayedOrders() {
                   <TableHead>Nota</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Telefone</TableHead>
+                  <TableHead>Valor</TableHead>
                   <TableHead>Data Venda</TableHead>
                   <TableHead>Situação</TableHead>
                   <TableHead>Dias / SLA</TableHead>
@@ -525,13 +534,13 @@ export default function DelayedOrders() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8">
+                    <TableCell colSpan={11} className="text-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                     </TableCell>
                   </TableRow>
                 ) : filteredOrders.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                       {orders.length === 0
                         ? "Nenhuma encomenda pendente. Clique em \"Sincronizar agora\" para buscar do GestãoClick."
                         : "Nenhuma encomenda encontrada com os filtros atuais."}
@@ -547,7 +556,12 @@ export default function DelayedOrders() {
                       <TableRow key={order.id} className={sla.level === "critical" ? "bg-destructive/5" : sla.level === "alert" ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}>
                         <TableCell className="font-mono font-medium text-sm">#{order.order_number}</TableCell>
                         <TableCell className="font-medium">{order.client_name}</TableCell>
-                        <TableCell className="text-muted-foreground text-sm">{order.client_phone || "—"}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">{formatPhone(order.client_phone)}</TableCell>
+                        <TableCell className="text-sm font-medium">
+                          {order.valor_total != null
+                            ? Number(order.valor_total).toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €"
+                            : "—"}
+                        </TableCell>
                         <TableCell className="text-sm">
                           {order.order_date ? format(parseISO(order.order_date), "dd/MM/yyyy") : "—"}
                         </TableCell>
@@ -586,10 +600,13 @@ export default function DelayedOrders() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {lastContact ? (
-                            <div>
+                            <button
+                              className="text-left hover:underline cursor-pointer"
+                              onClick={() => setContactHistoryDialog({ open: true, order, contacts: orderContacts })}
+                            >
                               <div>{format(new Date(lastContact.contacted_at), "dd/MM HH:mm", { locale: pt })}</div>
                               {lastContact.notes && <div className="truncate max-w-[120px] text-[10px]">{lastContact.notes}</div>}
-                            </div>
+                            </button>
                           ) : (
                             <span className={sla.level !== "normal" ? "text-destructive" : ""}>Nunca</span>
                           )}
@@ -757,6 +774,46 @@ export default function DelayedOrders() {
           vendaId={vendaDialog.vendaId}
           vendaCodigo={vendaDialog.vendaCodigo}
         />
+
+        {/* Contact History Popup */}
+        <Dialog open={contactHistoryDialog.open} onOpenChange={(open) => setContactHistoryDialog({ open, order: open ? contactHistoryDialog.order : null, contacts: open ? contactHistoryDialog.contacts : [] })}>
+          <DialogContent className="max-w-lg max-h-[70vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-primary" />
+                Histórico de Contactos — #{contactHistoryDialog.order?.order_number}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground mb-3">
+                {contactHistoryDialog.order?.client_name} • {formatPhone(contactHistoryDialog.order?.client_phone ?? null)}
+              </p>
+              {contactHistoryDialog.contacts.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">Nenhum contacto registado.</p>
+              ) : (
+                contactHistoryDialog.contacts.map((c) => (
+                  <div key={c.id} className="border border-border rounded-lg p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium">
+                        {format(new Date(c.contacted_at), "dd/MM/yyyy HH:mm", { locale: pt })}
+                      </span>
+                      <Badge variant="outline" className="text-[10px]">
+                        {c.contact_type === "phone_call" ? "Ligação" : "Contacto rápido"}
+                      </Badge>
+                    </div>
+                    {c.notes && <p className="text-sm text-muted-foreground">{c.notes}</p>}
+                    {c.next_contact_at && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <CalendarClock className="h-3 w-3" />
+                        Próximo: {format(new Date(c.next_contact_at), "dd/MM/yyyy HH:mm")}
+                      </p>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </TooltipProvider>
   );
