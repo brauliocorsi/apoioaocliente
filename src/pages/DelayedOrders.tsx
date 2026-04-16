@@ -521,6 +521,7 @@ export default function DelayedOrders() {
                   <TableHead>Nota</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Telefone</TableHead>
+                  <TableHead>Valor</TableHead>
                   <TableHead>Data Venda</TableHead>
                   <TableHead>Situação</TableHead>
                   <TableHead>Dias / SLA</TableHead>
