@@ -31,6 +31,13 @@ type DelayedOrder = {
   created_by: string;
   created_at: string;
   updated_at: string;
+  valor_total: number | null;
+};
+
+// Strip country code prefixes (e.g. +351, 00351) from phone numbers
+const formatPhone = (phone: string | null): string => {
+  if (!phone) return "—";
+  return phone.replace(/^(\+|00)?351\s?/, "").replace(/^(\+|00)\d{1,3}\s?/, "").trim() || phone;
 };
 
 type OrderContact = {
