@@ -267,6 +267,7 @@ export type Database = {
           situacao: string | null
           sla_deadline_at: string | null
           updated_at: string
+          valor_total: number | null
         }
         Insert: {
           client_name: string
@@ -281,6 +282,7 @@ export type Database = {
           situacao?: string | null
           sla_deadline_at?: string | null
           updated_at?: string
+          valor_total?: number | null
         }
         Update: {
           client_name?: string
@@ -295,6 +297,7 @@ export type Database = {
           situacao?: string | null
           sla_deadline_at?: string | null
           updated_at?: string
+          valor_total?: number | null
         }
         Relationships: []
       }

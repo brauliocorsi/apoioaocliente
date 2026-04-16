@@ -1,0 +1,1 @@
+ALTER TABLE public.delayed_orders ADD COLUMN valor_total numeric DEFAULT NULL;
