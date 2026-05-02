@@ -22,6 +22,7 @@ type Agent = {
   created_at: string;
   role: string;
   agent_color: string;
+  is_active: boolean;
 };
 
 export default function AgentsTab() {
