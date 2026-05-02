@@ -8,7 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Loader2, UserPlus, Shield, User } from "lucide-react";
+import { Plus, Loader2, UserPlus, Shield, User, Trash2, Power, PowerOff } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Switch } from "@/components/ui/switch";
 
 type Agent = {
   id: string;
@@ -17,10 +22,11 @@ type Agent = {
   created_at: string;
   role: string;
   agent_color: string;
+  is_active: boolean;
 };
 
 export default function AgentsTab() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const { toast } = useToast();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,21 +43,30 @@ export default function AgentsTab() {
     const roleMap: Record<string, string> = {};
     roles?.forEach((r) => { roleMap[r.user_id] = r.role; });
 
-    const agentList = ((profs as any[]) || []).map((p: any) => ({
+    const agentList: Agent[] = ((profs as any[]) || []).map((p: any) => ({
       id: p.id,
       full_name: p.full_name,
       email: "",
       created_at: "",
       role: roleMap[p.id] || p.role || "agent",
       agent_color: "#6b7280",
+      is_active: true,
     }));
 
-    // Fetch emails and colors for the filtered agents
+    // Fetch emails, colors and active status
     if (agentList.length > 0) {
-      const { data: profiles } = await supabase.from("profiles").select("id, email, created_at, agent_color").in("id", agentList.map((a) => a.id));
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, email, created_at, agent_color, is_active")
+        .in("id", agentList.map((a) => a.id));
       (profiles as any[] || []).forEach((p: any) => {
         const agent = agentList.find((a) => a.id === p.id);
-        if (agent) { agent.email = p.email; agent.created_at = p.created_at; agent.agent_color = p.agent_color || "#6b7280"; }
+        if (agent) {
+          agent.email = p.email;
+          agent.created_at = p.created_at;
+          agent.agent_color = p.agent_color || "#6b7280";
+          agent.is_active = p.is_active !== false;
+        }
       });
     }
 
@@ -137,8 +152,13 @@ export default function AgentsTab() {
           )}
 
           <div className="space-y-2">
-            {agents.map((agent) => (
-              <div key={agent.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+            {agents.map((agent) => {
+              const isSelf = user?.id === agent.id;
+              return (
+              <div
+                key={agent.id}
+                className={`flex items-center justify-between p-3 rounded-lg border bg-muted/30 ${!agent.is_active ? "opacity-60" : ""}`}
+              >
                 <div className="flex items-center gap-3">
                   <div
                     className="flex h-8 w-8 items-center justify-center rounded-full text-white"
@@ -147,7 +167,14 @@ export default function AgentsTab() {
                     {agent.role === "supervisor" ? <Shield className="h-4 w-4" /> : <User className="h-4 w-4" />}
                   </div>
                   <div>
-                    <p className="text-sm font-medium">{agent.full_name || "Sem nome"}</p>
+                    <p className="text-sm font-medium flex items-center gap-2">
+                      {agent.full_name || "Sem nome"}
+                      {!agent.is_active && (
+                        <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-destructive/40 text-destructive">
+                          Inativo
+                        </Badge>
+                      )}
+                    </p>
                     <p className="text-xs text-muted-foreground">{agent.email}</p>
                   </div>
                 </div>
@@ -174,9 +201,78 @@ export default function AgentsTab() {
                   <Badge variant={agent.role === "supervisor" ? "default" : "secondary"} className="capitalize">
                     {agent.role === "supervisor" ? "Supervisor" : "Agente"}
                   </Badge>
+                  {isSupervisor && !isSelf && (
+                    <>
+                      <div className="flex items-center gap-1.5 ml-1" title={agent.is_active ? "Desativar acesso" : "Ativar acesso"}>
+                        {agent.is_active ? <Power className="h-3.5 w-3.5 text-emerald-600" /> : <PowerOff className="h-3.5 w-3.5 text-muted-foreground" />}
+                        <Switch
+                          checked={agent.is_active}
+                          onCheckedChange={async (checked) => {
+                            setAgents((prev) => prev.map((a) => a.id === agent.id ? { ...a, is_active: checked } : a));
+                            const { error } = await supabase
+                              .from("profiles")
+                              .update({ is_active: checked } as any)
+                              .eq("id", agent.id);
+                            if (error) {
+                              toast({ title: "Erro", description: error.message, variant: "destructive" });
+                              fetchAgents();
+                            } else {
+                              toast({
+                                title: checked ? "Agente ativado" : "Agente desativado",
+                                description: checked
+                                  ? `${agent.full_name} pode aceder novamente`
+                                  : `${agent.full_name} foi desconectado e perdeu o acesso`,
+                              });
+                            }
+                          }}
+                        />
+                      </div>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Eliminar agente permanentemente?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Vai eliminar definitivamente <strong>{agent.full_name}</strong> ({agent.email}) do sistema.
+                              Os tickets e chamadas atribuídos serão desvinculados (histórico preservado), mas o utilizador
+                              perderá o acesso de imediato. Esta ação é irreversível.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              className="bg-destructive hover:bg-destructive/90"
+                              onClick={async () => {
+                                const { data, error } = await supabase.functions.invoke("delete-agent", {
+                                  body: { user_id: agent.id },
+                                });
+                                if (error || data?.error) {
+                                  toast({
+                                    title: "Erro ao eliminar",
+                                    description: data?.error || error?.message,
+                                    variant: "destructive",
+                                  });
+                                } else {
+                                  toast({ title: "Agente eliminado", description: `${agent.full_name} foi removido.` });
+                                  fetchAgents();
+                                }
+                              }}
+                            >
+                              Eliminar
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </>
+                  )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>
