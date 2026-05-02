@@ -25,9 +25,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchProfile = async (userId: string) => {
     const { data: profileData } = await supabase
       .from("profiles")
-      .select("full_name, email, avatar_url")
+      .select("full_name, email, avatar_url, is_active")
       .eq("id", userId)
       .single();
+
+    // If account is deactivated, force sign out immediately
+    if (profileData && (profileData as any).is_active === false) {
+      await supabase.auth.signOut();
+      setProfile(null);
+      setRole(null);
+      if (typeof window !== "undefined") {
+        alert("A sua conta foi desativada. Contacte um supervisor.");
+        window.location.href = "/auth";
+      }
+      return;
+    }
+
     if (profileData) setProfile(profileData as any);
 
     const { data: roleData } = await supabase
