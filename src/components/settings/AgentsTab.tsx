@@ -43,21 +43,30 @@ export default function AgentsTab() {
     const roleMap: Record<string, string> = {};
     roles?.forEach((r) => { roleMap[r.user_id] = r.role; });
 
-    const agentList = ((profs as any[]) || []).map((p: any) => ({
+    const agentList: Agent[] = ((profs as any[]) || []).map((p: any) => ({
       id: p.id,
       full_name: p.full_name,
       email: "",
       created_at: "",
       role: roleMap[p.id] || p.role || "agent",
       agent_color: "#6b7280",
+      is_active: true,
     }));
 
-    // Fetch emails and colors for the filtered agents
+    // Fetch emails, colors and active status
     if (agentList.length > 0) {
-      const { data: profiles } = await supabase.from("profiles").select("id, email, created_at, agent_color").in("id", agentList.map((a) => a.id));
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, email, created_at, agent_color, is_active")
+        .in("id", agentList.map((a) => a.id));
       (profiles as any[] || []).forEach((p: any) => {
         const agent = agentList.find((a) => a.id === p.id);
-        if (agent) { agent.email = p.email; agent.created_at = p.created_at; agent.agent_color = p.agent_color || "#6b7280"; }
+        if (agent) {
+          agent.email = p.email;
+          agent.created_at = p.created_at;
+          agent.agent_color = p.agent_color || "#6b7280";
+          agent.is_active = p.is_active !== false;
+        }
       });
     }
 
