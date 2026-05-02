@@ -26,7 +26,7 @@ type Agent = {
 };
 
 export default function AgentsTab() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const { toast } = useToast();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
