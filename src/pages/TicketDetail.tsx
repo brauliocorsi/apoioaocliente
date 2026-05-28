@@ -25,6 +25,7 @@ import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import MentionTextarea from "@/components/MentionTextarea";
 import ResolutionCard from "@/components/ticket/ResolutionCard";
 import MessageReactions from "@/components/chat/MessageReactions";
+import { TicketContinuationBadges } from "@/components/ticket/TicketContinuationBadges";
 
 // Detect HTML content
 function isHtmlContent(text: string): boolean {
@@ -642,6 +643,7 @@ export default function TicketDetail() {
             <PriorityFlag priority={ticket.priority} showLabel />
           </div>
           <p className="text-sm text-muted-foreground">{ticket.client_name}{ticket.order_number ? ` · Enc. ${ticket.order_number}` : ""}{ticket.service_number ? ` · OS ${ticket.service_number}` : ""}</p>
+          <TicketContinuationBadges ticketId={ticket.id} parentTicketId={(ticket as any).parent_ticket_id} />
         </div>
         <div className="flex items-center gap-2">
           <Select value={ticket.status} onValueChange={updateStatus}>

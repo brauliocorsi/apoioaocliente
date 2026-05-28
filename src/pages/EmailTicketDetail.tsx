@@ -15,6 +15,7 @@ import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import { formatDistanceToNow, format } from "date-fns";
 import { pt } from "date-fns/locale";
 import FileUpload from "@/components/FileUpload";
+import { TicketContinuationBadges } from "@/components/ticket/TicketContinuationBadges";
 
 // Check if content looks like HTML
 function isHtmlContent(text: string): boolean {
@@ -321,6 +322,7 @@ export default function EmailTicketDetail() {
             {ticket.client_email ? ` · ${ticket.client_email}` : ""}
             {emailThread ? ` · Thread: ${emailThread.email_address}` : ""}
           </p>
+          <TicketContinuationBadges ticketId={ticket.id} parentTicketId={(ticket as any).parent_ticket_id} basePath="/emails" />
         </div>
         {ticket.client_email && (
           <Button variant="outline" size="sm" onClick={refetchEmails} disabled={refetching} className="shrink-0 gap-1.5">
