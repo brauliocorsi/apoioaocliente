@@ -124,7 +124,7 @@ export default function SlaStatusCard({ ticket }: { ticket: Ticket }) {
           <p className="text-xs text-destructive italic">{ticket.sla_breach_reason}</p>
         )}
         <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/50">
-          Prazos em horário operacional: Seg–Sáb 08:00–20:00 (Europe/Lisbon).
+          Prazos em horário operacional: Seg–Sáb 08:00–20:00 (Europe/Lisbon). Exclui feriados ativos.
         </p>
       </CardContent>
     </Card>
