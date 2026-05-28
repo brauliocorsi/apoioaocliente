@@ -895,6 +895,144 @@ async function isBlocked(
   return { blocked: false, reason: "" };
 }
 
+// ──────────────────────────────────────────────────────────────
+// Phase 2 — Inbound event tracking + basic anti-spam scoring
+// ──────────────────────────────────────────────────────────────
+type InboundEventInsert = {
+  message_id?: string | null;
+  email_fingerprint?: string | null;
+  from_address: string;
+  from_name?: string | null;
+  subject?: string | null;
+  body_preview?: string | null;
+  received_at?: string;
+};
+
+async function recordInboundEvent(
+  adminClient: ReturnType<typeof createClient>,
+  fields: InboundEventInsert,
+): Promise<string | null> {
+  try {
+    const { data, error } = await adminClient
+      .from("inbound_email_events")
+      .insert(fields)
+      .select("id")
+      .single();
+    if (error) { console.error("recordInboundEvent:", error.message); return null; }
+    return (data as { id: string } | null)?.id ?? null;
+  } catch (e) {
+    console.error("recordInboundEvent failed:", (e as Error).message);
+    return null;
+  }
+}
+
+async function updateInboundEvent(
+  adminClient: ReturnType<typeof createClient>,
+  id: string | null,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  if (!id) return;
+  try {
+    await adminClient.from("inbound_email_events").update(fields).eq("id", id);
+  } catch (e) {
+    console.error("updateInboundEvent failed:", (e as Error).message);
+  }
+}
+
+function calculateInboundSpamScore(opts: {
+  fromAddress: string;
+  subject?: string | null;
+  bodyText?: string | null;
+  bodyHtml?: string | null;
+  attachmentNames?: string[];
+  recentCountFromSender?: number;
+  knownClient?: boolean;
+  hasOpenTicketReference?: boolean;
+  hasRecentOpenTicket?: boolean;
+  blocklistedDomain?: boolean;
+  blocklistedSender?: boolean;
+}): { score: number; reasons: string[] } {
+  let score = 0;
+  const reasons: string[] = [];
+  const from = (opts.fromAddress || "").toLowerCase();
+  const subject = (opts.subject || "").toLowerCase();
+  const body = (opts.bodyText || "").toLowerCase();
+  const html = (opts.bodyHtml || "").toLowerCase();
+
+  if (["noreply", "no-reply", "mailer-daemon", "postmaster"].some((s) => from.includes(s))) {
+    score += 50; reasons.push("auto-sender:+50");
+  }
+  if (!subject.trim()) { score += 15; reasons.push("empty-subject:+15"); }
+  const bodyLen = Math.max(body.trim().length, html.replace(/<[^>]+>/g, " ").trim().length);
+  if (bodyLen < 10) { score += 20; reasons.push("empty-body:+20"); }
+
+  const linkCount = (html.match(/<a\s+href=/g) || []).length + (body.match(/https?:\/\//g) || []).length;
+  if (linkCount > 5) { score += 30; reasons.push(`many-links(${linkCount}):+30`); }
+
+  const dangerous = [".exe", ".js", ".bat", ".scr", ".cmd", ".vbs", ".jar", ".ps1"];
+  const dangerHit = (opts.attachmentNames || []).find((n) => dangerous.some((ext) => n.toLowerCase().endsWith(ext)));
+  if (dangerHit) { score += 100; reasons.push(`dangerous-attachment(${dangerHit}):+100`); }
+
+  if ((opts.recentCountFromSender || 0) > 5) {
+    score += 60; reasons.push(`burst(${opts.recentCountFromSender}):+60`);
+  }
+
+  const spammyKeywords = ["viagra", "casino", "loan", "crypto", "winner", "prize", "urgent payment"];
+  const kwHit = spammyKeywords.find((k) => subject.includes(k) || body.includes(k));
+  if (kwHit) { score += 60; reasons.push(`spam-keyword(${kwHit}):+60`); }
+
+  if (opts.blocklistedDomain) { score += 100; reasons.push("blocklisted-domain:+100"); }
+  if (opts.blocklistedSender) { score += 100; reasons.push("blocklisted-sender:+100"); }
+
+  if (opts.knownClient) { score -= 30; reasons.push("known-client:-30"); }
+  if (opts.hasOpenTicketReference) { score -= 40; reasons.push("ticket-reference:-40"); }
+  if (opts.hasRecentOpenTicket) { score -= 20; reasons.push("recent-open-ticket:-20"); }
+
+  return { score: Math.max(0, score), reasons };
+}
+
+async function gatherSpamSignals(
+  adminClient: ReturnType<typeof createClient>,
+  clientEmail: string,
+  subject: string,
+  bodyText: string,
+): Promise<{
+  recentCountFromSender: number;
+  knownClient: boolean;
+  hasOpenTicketReference: boolean;
+  hasRecentOpenTicket: boolean;
+}> {
+  const emailLower = clientEmail.toLowerCase();
+  const since10m = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [recent, known, openTix] = await Promise.all([
+    adminClient.from("inbound_email_events")
+      .select("id", { count: "exact", head: true })
+      .ilike("from_address", emailLower)
+      .gte("received_at", since10m),
+    adminClient.from("client_users")
+      .select("id")
+      .ilike("email", emailLower)
+      .maybeSingle(),
+    adminClient.from("tickets")
+      .select("id", { count: "exact", head: true })
+      .eq("client_email", emailLower)
+      .gte("created_at", since30d),
+  ]);
+
+  const subjectAndPreview = (subject || "") + " " + (bodyText || "").substring(0, 500);
+  const hasOpenTicketReference = /#\d{1,7}\b/.test(subjectAndPreview);
+
+  return {
+    recentCountFromSender: recent.count || 0,
+    knownClient: !!known.data,
+    hasOpenTicketReference,
+    hasRecentOpenTicket: (openTix.count || 0) > 0,
+  };
+}
+
+
 // Generate a fingerprint for dedup when message_id is missing
 async function generateFingerprint(from: string, subject: string, bodySnippet: string): Promise<string> {
   const raw = `${from.toLowerCase()}|${subject.substring(0, 100)}|${bodySnippet.substring(0, 200)}`;
