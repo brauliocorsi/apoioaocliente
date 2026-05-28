@@ -1480,6 +1480,7 @@ export type Database = {
           needs_tpa: boolean | null
           next_action: string | null
           next_action_due_at: string | null
+          next_customer_update_due_at: string | null
           order_lookup_at: string | null
           order_lookup_error: string | null
           order_lookup_status: string | null
@@ -1498,11 +1499,16 @@ export type Database = {
           resolution_type: string | null
           resolved_at: string | null
           service_number: string | null
+          sla_breach_reason: string | null
+          sla_breached: boolean
           sla_first_response_at: string | null
+          sla_paused: boolean
           sla_paused_at: string | null
+          sla_paused_reason: string | null
           sla_paused_total_seconds: number | null
           sla_resolution_at: string | null
           sla_stage_deadline_at: string | null
+          sla_status: string | null
           status: string
           status_changed_at: string | null
           subcategory_id: string | null
@@ -1532,6 +1538,7 @@ export type Database = {
           needs_tpa?: boolean | null
           next_action?: string | null
           next_action_due_at?: string | null
+          next_customer_update_due_at?: string | null
           order_lookup_at?: string | null
           order_lookup_error?: string | null
           order_lookup_status?: string | null
@@ -1550,11 +1557,16 @@ export type Database = {
           resolution_type?: string | null
           resolved_at?: string | null
           service_number?: string | null
+          sla_breach_reason?: string | null
+          sla_breached?: boolean
           sla_first_response_at?: string | null
+          sla_paused?: boolean
           sla_paused_at?: string | null
+          sla_paused_reason?: string | null
           sla_paused_total_seconds?: number | null
           sla_resolution_at?: string | null
           sla_stage_deadline_at?: string | null
+          sla_status?: string | null
           status?: string
           status_changed_at?: string | null
           subcategory_id?: string | null
@@ -1584,6 +1596,7 @@ export type Database = {
           needs_tpa?: boolean | null
           next_action?: string | null
           next_action_due_at?: string | null
+          next_customer_update_due_at?: string | null
           order_lookup_at?: string | null
           order_lookup_error?: string | null
           order_lookup_status?: string | null
@@ -1602,11 +1615,16 @@ export type Database = {
           resolution_type?: string | null
           resolved_at?: string | null
           service_number?: string | null
+          sla_breach_reason?: string | null
+          sla_breached?: boolean
           sla_first_response_at?: string | null
+          sla_paused?: boolean
           sla_paused_at?: string | null
+          sla_paused_reason?: string | null
           sla_paused_total_seconds?: number | null
           sla_resolution_at?: string | null
           sla_stage_deadline_at?: string | null
+          sla_status?: string | null
           status?: string
           status_changed_at?: string | null
           subcategory_id?: string | null
@@ -1725,6 +1743,14 @@ export type Database = {
           _type: string
         }
         Returns: undefined
+      }
+      sla_default_first_response_hours: {
+        Args: { _priority: string }
+        Returns: number
+      }
+      sla_default_resolution_hours: {
+        Args: { _priority: string }
+        Returns: number
       }
     }
     Enums: {
