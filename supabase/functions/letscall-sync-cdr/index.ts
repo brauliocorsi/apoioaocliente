@@ -169,15 +169,15 @@ Deno.serve(async (req) => {
     const jwt = await getJwt();
 
     // Determine fallback creator (first available agent profile)
-    const { data: creatorRow } = await admin
+    const { data: creatorRow, error: creatorErr } = await admin
       .from("profiles")
       .select("id")
       .eq("is_active", true)
-      .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
     const fallbackCreator = (creatorRow as any)?.id;
-    if (!fallbackCreator) throw new Error("No active profile found to use as creator");
+    console.log("fallbackCreator=", fallbackCreator, "err=", creatorErr?.message);
+    if (!fallbackCreator) throw new Error("No active profile found to use as creator: " + (creatorErr?.message || "no rows"));
 
     const now = new Date();
     const months = [yyyymm(now)];
