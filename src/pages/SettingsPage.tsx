@@ -91,6 +91,11 @@ export default function SettingsPage() {
           <SlaConfigTab />
         </TabsContent>
 
+        <TabsContent value="holidays">
+          <HolidaysTab />
+        </TabsContent>
+
+
         <TabsContent value="rules">
           <DecisionRulesTab />
         </TabsContent>
