@@ -205,6 +205,32 @@ export default function ProfileDialog({
             <Input value={email} disabled className="h-9 text-sm bg-muted" />
           </div>
 
+          {/* Let's Call SIP extension (agents only) */}
+          {table === "profiles" && (
+            <div className="space-y-2 pt-2 border-t">
+              <div className="flex items-center gap-2">
+                <PhoneCall className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-xs font-semibold">Ramal Let's Call (Click-to-Call)</Label>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="ex: 200"
+                  value={extension}
+                  onChange={(e) => setExtension(e.target.value)}
+                  className="h-9 text-sm"
+                />
+                <Button size="sm" className="h-9 gap-1" onClick={handleSaveExtension} disabled={saving}>
+                  <Save className="h-3.5 w-3.5" /> Salvar
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                O ramal será usado para originar chamadas a partir do botão "Ligar agora".
+              </p>
+            </div>
+          )}
+
           {/* Password change */}
           <div className="space-y-3 pt-2 border-t">
             <div className="flex items-center gap-2">
