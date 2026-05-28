@@ -499,3 +499,39 @@ Com os novos campos passamos a poder construir, sem refactor, queries para:
 - Sem feriados municipais/regionais aplicados automaticamente (campo `region` reservado para fase futura).
 - Sem auto-pausa por inatividade.
 - Sem seed automático — equipa cadastra os feriados aplicáveis a cada ano.
+
+## Fase 9 — Caixa de Entrada inteligente, macros úteis e Let's Call/MicroSIP
+
+### Caixa de Entrada — sugestão de ticket aberto
+- Nova Edge Function `suggest-open-ticket-for-inbound-email` (agente/supervisor, read-only).
+- Procura tickets com `client_email = from_address` do evento e devolve `candidates` + `recommendation`:
+  - `auto_append_safe` (1 ticket aberto + evento não-terminal/quarentena/falha/sem routed_ticket_id)
+  - `manual_select` (vários abertos)
+  - `closed_ticket_only` (apenas fechado/resolvido — não anexa, sugere continuação)
+  - `no_open_ticket`
+- UI: card destacado na página `/inbound-events` com botão **Anexar** que reutiliza `handle-inbound-email-event-action` (`append_to_ticket`). Backend continua a bloquear anexar a ticket fechado/resolvido.
+
+### Menu consolidado
+- `Email Tickets` removido do AppSidebar. Rotas `/email-tickets` e `/email-tickets/:id` mantidas para compatibilidade com banner de deprecação que aponta para a Caixa de Entrada.
+
+### Macros (M31–M36) — aditivas
+- M31 Aguarda fornecedor/fábrica, M32 Pedido de atualização de encomenda, M33 Cliente sem número de encomenda, M34 Pedido de contacto telefónico, M35 Resolução proposta, M36 Encerramento com resolução.
+- `INSERT ... ON CONFLICT (id) DO NOTHING` — nenhuma macro existente foi alterada/apagada.
+
+### Sugestão de macros por contexto
+- `MacroSelector` agora recebe `tags` e calcula sugestões por regras simples (sem IA): categoria/tag contém atraso/entrega/garantia/defeito/peça, ticket sem `order_number`, status com pausa por fornecedor/fábrica, ticket resolvido/fechado.
+- Placeholders suportados: `{nome_cliente}`, `{n_encomenda}`, etc. (legado) **e** `[cliente]`, `[ticket]`, `[encomenda]`, `[produto]` (Fase 9). Valores ausentes são substituídos por string vazia — nunca `undefined`/`null`.
+
+### Let's Call / MicroSIP — PENDENTE
+- `https://ccpbx.letscall.net/docs/admin-api-docs.json` devolve **HTTP 401 Unauthorized**.
+- Integração **não foi implementada** (nenhum endpoint inventado). Para avançar é necessário:
+  - JSON da documentação (export autenticado);
+  - método de autenticação (API key, OAuth, Basic);
+  - base URL operacional;
+  - endpoint de histórico de chamadas e formato de resposta;
+  - credenciais a guardar como secret (ex.: `LETSCALL_API_KEY`).
+- Quando disponível, criar `letscall-call-lookup` (agente/supervisor, secrets server-side, sem expor token ao frontend).
+
+### Riscos / fora de âmbito
+- Auto-anexo automático ainda não dispara sem clique — recomendação `auto_append_safe` apenas destaca o botão.
+- Módulo de Ligações não foi tocado destrutivamente; integração de confirmação fica dependente da documentação Let's Call.
