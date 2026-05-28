@@ -12,6 +12,7 @@ import { Pencil, Check, X, UserPlus, Loader2, Phone, Mail, ArrowLeft, ArrowRight
 import TagSelector from "./TagSelector";
 import TicketDocuments from "./TicketDocuments";
 import GestaoClickSearch from "./GestaoClickSearch";
+import OrderContextCard from "./OrderContextCard";
 import { useNavigate } from "react-router-dom";
 
 interface TicketSidebarProps {
@@ -190,6 +191,7 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
 
   return (
     <div className="space-y-4">
+      <OrderContextCard ticket={ticket} userId={userId} onUpdate={onUpdate} />
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
