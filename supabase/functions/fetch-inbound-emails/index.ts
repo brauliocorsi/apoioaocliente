@@ -1960,12 +1960,25 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           }
         }
 
+        await updateInboundEvent(adminClient, eventId, {
+          status: "pending_review",
+          routing_action: "pending_review",
+          routing_reason: "no matching open ticket",
+          pending_email_id: pendingEmail?.id ?? null,
+          processed_at: new Date().toISOString(),
+        });
         pending++;
         await imap.markAsSeen(seqNum);
         newEmailProcessed = true;
         break; // Only 1 new email per call
       } catch (err) {
         console.error(`Email ${seqNum} error: ${(err as Error).message}`);
+        await updateInboundEvent(adminClient, eventId, {
+          status: "failed",
+          routing_action: "processing_error",
+          error_message: (err as Error).message,
+          processed_at: new Date().toISOString(),
+        });
         newEmailProcessed = true;
         break;
       }
