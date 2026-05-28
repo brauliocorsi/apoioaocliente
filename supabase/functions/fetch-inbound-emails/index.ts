@@ -1470,6 +1470,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
         let ticketId: string | null = null;
         let threadExists = false;
+        let closedParentId: string | null = null;
 
         if (existingThread) {
           const { data: ticket } = await adminClient
@@ -1480,37 +1481,91 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
           const { data: statusData } = ticket ? await adminClient
             .from("ticket_statuses")
-            .select("is_closed")
+            .select("is_closed, is_resolved")
             .eq("id", ticket.status)
             .single() : { data: null };
 
-          if (ticket && !statusData?.is_closed) {
+          if (ticket && !statusData?.is_closed && !statusData?.is_resolved) {
             ticketId = ticket.id;
             threadExists = true;
+          } else if (ticket) {
+            closedParentId = ticket.id;
           }
         }
 
         // Fallback: check tickets table directly by client_email
         if (!ticketId) {
-          const { data: openTickets } = await adminClient
+          const { data: candidateTickets } = await adminClient
             .from("tickets")
             .select("id, status")
             .eq("client_email", clientEmail.toLowerCase())
             .order("created_at", { ascending: false })
             .limit(5);
 
-          if (openTickets) {
-            for (const t of openTickets) {
+          if (candidateTickets) {
+            for (const t of candidateTickets) {
               const { data: sd } = await adminClient
                 .from("ticket_statuses")
-                .select("is_closed")
+                .select("is_closed, is_resolved")
                 .eq("id", t.status)
                 .single();
-              if (!sd?.is_closed) {
+              if (!sd?.is_closed && !sd?.is_resolved) {
                 ticketId = t.id;
                 break;
+              } else if (!closedParentId) {
+                closedParentId = t.id;
               }
             }
+          }
+        }
+
+        // No open ticket but the sender has a closed/resolved one →
+        // create a NEW ticket linked to the closed parent (bug fix:
+        // never append client emails into closed tickets).
+        if (!ticketId && closedParentId) {
+          const htmlPreviewC = msg.bodyHtml ? msg.bodyHtml.substring(0, 20000) : "";
+          const htmlFullC = htmlPreviewC ? sanitizeHtml(htmlPreviewC).substring(0, 10000) : "";
+          const textFullC = (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
+          const stripTags = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+          const hasHtmlC = !!htmlFullC && stripTags(htmlFullC).length > 0;
+          const childDescription = hasHtmlC ? htmlFullC : textFullC;
+
+          const child = await createChildTicketFromClosed(
+            adminClient,
+            closedParentId,
+            {
+              subject: msg.subject || "Sem assunto",
+              description: childDescription,
+              clientName,
+              clientEmail,
+              receivedAt: msg.date ? new Date(msg.date).toISOString() : undefined,
+            },
+            createdBy!,
+          );
+
+          if (child) {
+            // Fresh email thread for the new ticket so future replies stay here
+            await adminClient.from("email_threads").insert({
+              ticket_id: child.id,
+              email_address: clientEmail.toLowerCase(),
+              last_message_id: emailFingerprint,
+            });
+
+            if (msg.attachments.length > 0) {
+              for (const att of msg.attachments) {
+                try {
+                  await uploadAttachment(adminClient, child.id, att, createdBy!);
+                } catch (err) {
+                  console.error(`Attachment error: ${(err as Error).message}`);
+                }
+              }
+            }
+            await fetchAttachmentsParts(imap, adminClient, seqNum, child.id, createdBy!);
+
+            created++;
+            await imap.markAsSeen(seqNum);
+            newEmailProcessed = true;
+            break;
           }
         }
 
