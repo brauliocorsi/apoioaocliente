@@ -659,3 +659,130 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
     </div>
   );
 }
+
+/**
+ * Inline editor for `tickets.next_action` and `tickets.next_action_due_at`.
+ * Additive UI — does not touch other fields. Visually highlights overdue items
+ * so the agent / Alessandra can see at a glance what needs attention.
+ */
+function NextActionEditor({ ticket, onUpdate }: { ticket: any; onUpdate: () => void }) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [action, setAction] = useState<string>(ticket.next_action || "");
+  const [due, setDue] = useState<string>(
+    ticket.next_action_due_at
+      ? new Date(ticket.next_action_due_at).toISOString().slice(0, 16)
+      : ""
+  );
+
+  useEffect(() => {
+    setAction(ticket.next_action || "");
+    setDue(
+      ticket.next_action_due_at
+        ? new Date(ticket.next_action_due_at).toISOString().slice(0, 16)
+        : ""
+    );
+  }, [ticket.next_action, ticket.next_action_due_at]);
+
+  const overdue =
+    ticket.next_action_due_at &&
+    new Date(ticket.next_action_due_at).getTime() < Date.now();
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase
+      .from("tickets")
+      .update({
+        next_action: action.trim() || null,
+        next_action_due_at: due ? new Date(due).toISOString() : null,
+      })
+      .eq("id", ticket.id);
+    setSaving(false);
+    if (error) {
+      toast({ title: "Erro a guardar", description: error.message, variant: "destructive" });
+      return;
+    }
+    setEditing(false);
+    onUpdate();
+  };
+
+  const clear = async () => {
+    setSaving(true);
+    const { error } = await supabase
+      .from("tickets")
+      .update({ next_action: null, next_action_due_at: null })
+      .eq("id", ticket.id);
+    setSaving(false);
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      return;
+    }
+    onUpdate();
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Próxima ação</p>
+        {!editing && (
+          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setEditing(true)}>
+            <Pencil className="h-3 w-3 mr-1" /> Editar
+          </Button>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="space-y-2">
+          <Input
+            value={action}
+            onChange={(e) => setAction(e.target.value)}
+            placeholder="Ex: contactar cliente, validar entrega…"
+            className="h-8 text-sm"
+          />
+          <Input
+            type="datetime-local"
+            value={due}
+            onChange={(e) => setDue(e.target.value)}
+            className="h-8 text-sm"
+          />
+          <div className="flex gap-2">
+            <Button size="sm" className="h-7 text-xs flex-1" onClick={save} disabled={saving}>
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 mr-1" />}
+              Guardar
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditing(false)} disabled={saving}>
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      ) : ticket.next_action || ticket.next_action_due_at ? (
+        <div className="space-y-1.5 text-sm">
+          {ticket.next_action && <div className="text-foreground">{ticket.next_action}</div>}
+          {ticket.next_action_due_at && (
+            <div className="flex items-center gap-2">
+              <Badge
+                variant="outline"
+                className={`text-[10px] ${
+                  overdue
+                    ? "border-destructive/50 text-destructive"
+                    : "border-muted-foreground/30 text-muted-foreground"
+                }`}
+              >
+                {overdue ? "Atrasada" : "Prazo"}: {new Date(ticket.next_action_due_at).toLocaleString("pt-PT", {
+                  day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+                })}
+              </Badge>
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-muted-foreground" onClick={clear} disabled={saving}>
+                Limpar
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground italic">Sem próxima ação definida.</p>
+      )}
+    </div>
+  );
+}
+
