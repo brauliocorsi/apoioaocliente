@@ -12,6 +12,7 @@ import SmtpSettingsTab from "@/components/settings/SmtpSettingsTab";
 import EmailLogsTab from "@/components/settings/EmailLogsTab";
 import ClientsTab from "@/components/settings/ClientsTab";
 import SlaConfigTab from "@/components/settings/SlaConfigTab";
+import HolidaysTab from "@/components/settings/HolidaysTab";
 import DecisionRulesTab from "@/components/settings/DecisionRulesTab";
 
 export default function SettingsPage() {
