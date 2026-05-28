@@ -15,6 +15,7 @@ import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import { formatDistanceToNow, format } from "date-fns";
 import { pt } from "date-fns/locale";
 import FileUpload from "@/components/FileUpload";
+import { TicketContinuationBadges } from "@/components/ticket/TicketContinuationBadges";
 
 // Check if content looks like HTML
 function isHtmlContent(text: string): boolean {
