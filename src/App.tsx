@@ -27,6 +27,7 @@ import PortalNewTicket from "./pages/portal/PortalNewTicket";
 import PortalFAQ from "./pages/portal/PortalFAQ";
 import EmailTickets from "./pages/EmailTickets";
 import EmailTicketDetail from "./pages/EmailTicketDetail";
+import InboundEmailEvents from "./pages/InboundEmailEvents";
 
 const queryClient = new QueryClient();
 
