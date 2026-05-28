@@ -89,7 +89,7 @@ function normalizePhone(p: string | null | undefined): string {
   return (p || "").replace(/\D/g, "").replace(/^00351/, "").replace(/^351/, "");
 }
 
-async function upsertCdr(cdr: any, month: number) {
+async function upsertCdr(cdr: any, month: number, fallbackCreator: string) {
   const linkedid = String(cdr.linkedid || cdr.id);
   if (!linkedid) return { skipped: true };
 
@@ -150,6 +150,7 @@ async function upsertCdr(cdr: any, month: number) {
     has_recording: hasRec,
     closed_at: calldate, // historical — auto-close
     ticket_id: ticketId,
+    created_by: fallbackCreator,
   };
 
   const { error } = await admin.from("phone_calls").insert(insert);
@@ -166,6 +167,18 @@ Deno.serve(async (req) => {
 
   try {
     const jwt = await getJwt();
+
+    // Determine fallback creator (first available agent profile)
+    const { data: creatorRow } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("is_active", true)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const fallbackCreator = (creatorRow as any)?.id;
+    if (!fallbackCreator) throw new Error("No active profile found to use as creator");
+
     const now = new Date();
     const months = [yyyymm(now)];
     // also include previous month during the first 3 days
