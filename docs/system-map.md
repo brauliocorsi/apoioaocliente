@@ -285,3 +285,31 @@ Com os novos campos passamos a poder construir, sem refactor, queries para:
 - Divergências (`order_lookup_status='mismatch'`).
 - Cruzamento com `delayed_orders` via `order_number`.
 
+
+---
+
+## Fase 5A — Painel Operacional da Alessandra
+
+**Ficheiros:**
+- `src/pages/OperationalDashboard.tsx` (novo)
+- `src/App.tsx` (rota `/operational-dashboard`)
+- `src/components/AppSidebar.tsx` (item "Painel Operacional")
+
+**Objetivo:** dar à gerência operacional (Alessandra) uma vista única de cobrança — quem está parado, o que está atrasado, o que precisa ação. **Apenas leitura, sem mutações.**
+
+**Indicadores (cards):** clientes sem resposta · sem responsável · ações atrasadas · ações para hoje · sem próxima ação · caixa pendente · quarentena · falhas de e-mail · tickets de continuação · críticos · encomenda não verificada · encomendas com atenção.
+
+**Listas acionáveis:** clientes sem resposta · ações atrasadas · sem responsável · sem próxima ação · caixa que precisa ação · tickets de continuação · encomendas com atenção · indicadores por responsável · indicadores por categoria.
+
+**Regras:**
+- Aberto/fechado usa `ticket_statuses.is_closed/is_resolved` (fallback: status desconhecido = aberto).
+- **Clientes sem resposta** = ticket aberto cuja última `ticket_messages` é `sender_type='client'` sem `agent` posterior. *Limitação:* respostas só via e-mail sem espelho em `ticket_messages` podem não contar; refinar com `email_logs` em fase futura.
+- **Encomendas com atenção** = `order_lookup_status ∈ {not_found, error, multiple_matches, mismatch}` ou `order_number` preenchido sem lookup.
+
+**Filtros:** período (hoje/7d/30d/tudo) · responsável (inclui "sem responsável") · prioridade · categoria.
+
+**Acesso:** apenas agentes/supervisores (rota dentro de `AppLayout` → `AuthProvider`). Portal cliente não tem acesso.
+
+**Base para futuro:** estes indicadores serão fonte para notificações reais, menções, SLA por etapa e cobrança automatizada — não implementados nesta fase.
+
+**Sem alterações destrutivas:** sem migrations, sem DROP/TRUNCATE/DELETE. Apenas leitura de tabelas existentes (`tickets`, `ticket_messages`, `ticket_statuses`, `profiles`, `categories`, `inbound_email_events`, `email_logs`).

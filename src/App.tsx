@@ -28,6 +28,7 @@ import PortalFAQ from "./pages/portal/PortalFAQ";
 import EmailTickets from "./pages/EmailTickets";
 import EmailTicketDetail from "./pages/EmailTicketDetail";
 import InboundEmailEvents from "./pages/InboundEmailEvents";
+import OperationalDashboard from "./pages/OperationalDashboard";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +56,7 @@ const App = () => (
               <Route path="/email-tickets" element={<EmailTickets />} />
               <Route path="/email-tickets/:id" element={<EmailTicketDetail />} />
               <Route path="/inbound-events" element={<InboundEmailEvents />} />
+              <Route path="/operational-dashboard" element={<OperationalDashboard />} />
             </Route>
 
             {/* Portal (client) routes */}
