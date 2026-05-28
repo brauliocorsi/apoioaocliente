@@ -1364,6 +1364,8 @@ export type Database = {
           is_exhibition: boolean | null
           is_personalized: boolean | null
           needs_tpa: boolean | null
+          next_action: string | null
+          next_action_due_at: string | null
           order_number: string | null
           parent_ticket_id: string | null
           payment_method: string | null
@@ -1410,6 +1412,8 @@ export type Database = {
           is_exhibition?: boolean | null
           is_personalized?: boolean | null
           needs_tpa?: boolean | null
+          next_action?: string | null
+          next_action_due_at?: string | null
           order_number?: string | null
           parent_ticket_id?: string | null
           payment_method?: string | null
@@ -1456,6 +1460,8 @@ export type Database = {
           is_exhibition?: boolean | null
           is_personalized?: boolean | null
           needs_tpa?: boolean | null
+          next_action?: string | null
+          next_action_due_at?: string | null
           order_number?: string | null
           parent_ticket_id?: string | null
           payment_method?: string | null
