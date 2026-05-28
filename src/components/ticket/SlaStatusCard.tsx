@@ -14,10 +14,24 @@ type Ticket = {
   next_action?: string | null;
   next_action_due_at?: string | null;
   sla_paused?: boolean | null;
+  sla_paused_at?: string | null;
   sla_paused_reason?: string | null;
+  sla_paused_total_seconds?: number | null;
   sla_breached?: boolean | null;
   sla_breach_reason?: string | null;
 };
+
+function formatSeconds(s: number): string {
+  if (!s || s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}min`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  if (h < 24) return rm ? `${h}h ${rm}min` : `${h}h`;
+  const d = Math.floor(h / 24);
+  const rh = h % 24;
+  return rh ? `${d}d ${rh}h` : `${d}d`;
+}
 
 type State = "on_track" | "warning" | "breached" | "paused" | "resolved" | "closed" | "no_sla";
 
@@ -95,12 +109,23 @@ export default function SlaStatusCard({ ticket }: { ticket: Ticket }) {
             <span className="text-foreground">Ação:</span> {ticket.next_action}
           </p>
         )}
-        {state === "paused" && ticket.sla_paused_reason && (
-          <p className="text-xs text-muted-foreground italic">Pausa: {ticket.sla_paused_reason}</p>
+        {state === "paused" && (
+          <div className="text-xs text-muted-foreground space-y-0.5 pt-1 border-t border-border/50">
+            {ticket.sla_paused_reason && <p className="italic">Pausa: {ticket.sla_paused_reason}</p>}
+            {ticket.sla_paused_at && (
+              <p>Pausado desde {format(new Date(ticket.sla_paused_at), "dd MMM HH:mm", { locale: pt })} ({formatDistanceToNow(new Date(ticket.sla_paused_at), { locale: pt })}).</p>
+            )}
+            {!!ticket.sla_paused_total_seconds && ticket.sla_paused_total_seconds > 0 && (
+              <p>Total pausado anterior: {formatSeconds(ticket.sla_paused_total_seconds)}.</p>
+            )}
+          </div>
         )}
         {state === "breached" && ticket.sla_breach_reason && (
           <p className="text-xs text-destructive italic">{ticket.sla_breach_reason}</p>
         )}
+        <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/50">
+          Prazos em horário operacional: Seg–Sáb 08:00–20:00 (Europe/Lisbon).
+        </p>
       </CardContent>
     </Card>
   );

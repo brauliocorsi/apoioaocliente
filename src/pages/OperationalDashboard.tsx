@@ -65,6 +65,8 @@ type Ticket = {
   resolved_at: string | null;
   next_customer_update_due_at: string | null;
   sla_paused: boolean | null;
+  sla_paused_at: string | null;
+  sla_paused_reason: string | null;
   sla_breached: boolean | null;
   sla_status: string | null;
 };
@@ -120,7 +122,7 @@ export default function OperationalDashboard() {
   async function load() {
     setLoading(true);
     const [tk, st, pr, cat, msgs, ib, fl] = await Promise.all([
-      supabase.from("tickets").select("id, ticket_number, client_name, subject, category_id, priority, status, assigned_to, created_at, next_action, next_action_due_at, parent_ticket_id, order_number, order_lookup_status, order_lookup_error, sla_first_response_at, first_responded_at, sla_resolution_at, resolved_at, next_customer_update_due_at, sla_paused, sla_breached, sla_status").order("created_at", { ascending: false }).limit(1000),
+      supabase.from("tickets").select("id, ticket_number, client_name, subject, category_id, priority, status, assigned_to, created_at, next_action, next_action_due_at, parent_ticket_id, order_number, order_lookup_status, order_lookup_error, sla_first_response_at, first_responded_at, sla_resolution_at, resolved_at, next_customer_update_due_at, sla_paused, sla_paused_at, sla_paused_reason, sla_breached, sla_status").order("created_at", { ascending: false }).limit(1000),
       supabase.from("ticket_statuses").select("id, name, is_closed, is_resolved"),
       supabase.from("profiles").select("id, full_name").eq("is_active", true),
       supabase.from("categories").select("id, name"),
@@ -309,7 +311,7 @@ export default function OperationalDashboard() {
         <KpiCard icon={Clock} label="Primeira resp. vencida" value={loading ? null : frOverdue.length} tone="danger" anchor="sla-breached" />
         <KpiCard icon={Clock} label="Resolução vencida" value={loading ? null : resOverdue.length} tone="danger" anchor="sla-breached" />
         <KpiCard icon={UserX} label="Cliente sem atualização" value={loading ? null : custUpdateOverdue.length} tone="warn" anchor="cust-update" />
-        <KpiCard icon={Clock} label="SLA pausado" value={loading ? null : slaPaused.length} tone="muted" />
+        <KpiCard icon={Clock} label="SLA pausado" value={loading ? null : slaPaused.length} tone="muted" anchor="sla-paused" />
         <KpiCard icon={Clock} label="Sem SLA" value={loading ? null : slaNone.length} tone="muted" />
       </section>
 
@@ -363,8 +365,31 @@ export default function OperationalDashboard() {
         </Table>
       </ListSection>
 
+      <ListSection id="sla-paused" title="Tickets pausados" description="Tickets a aguardar cliente ou fornecedor — SLA pausado.">
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Ticket</TableHead><TableHead>Cliente</TableHead><TableHead>Responsável</TableHead>
+            <TableHead>Motivo</TableHead><TableHead>Pausado desde</TableHead><TableHead>Tempo pausado</TableHead>
+            <TableHead></TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {slaPaused.slice(0, 50).map(t => (
+              <TableRow key={t.id}>
+                <TableCell className="font-mono text-xs">#{t.ticket_number}</TableCell>
+                <TableCell className="text-sm">{t.client_name}</TableCell>
+                <TableCell className="text-sm">{t.assigned_to ? profileMap[t.assigned_to] || "—" : <Badge variant="outline">Sem resp.</Badge>}</TableCell>
+                <TableCell className="text-xs">{t.sla_paused_reason || "—"}</TableCell>
+                <TableCell className="text-xs">{t.sla_paused_at ? format(new Date(t.sla_paused_at), "dd/MM HH:mm", { locale: pt }) : "—"}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{t.sla_paused_at ? formatDistanceToNow(new Date(t.sla_paused_at), { locale: pt }) : "—"}</TableCell>
+                <TableCell><OpenLink to={`/tickets/${t.id}`} /></TableCell>
+              </TableRow>
+            ))}
+            {slaPaused.length === 0 && <EmptyRow cols={7} text="Sem tickets pausados." />}
+          </TableBody>
+        </Table>
+      </ListSection>
 
-      {/* LISTS */}
+
       <ListSection id="no-response" title="Clientes sem resposta" description="Última mensagem é do cliente e nenhum agente respondeu desde então.">
         <Table>
           <TableHeader><TableRow>

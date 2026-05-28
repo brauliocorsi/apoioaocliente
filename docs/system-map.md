@@ -435,3 +435,44 @@ Com os novos campos passamos a poder construir, sem refactor, queries para:
 
 ### Próxima fase recomendada
 - Calendário laboral Mon–Sat 08–20 e pausa automática por status “Aguarda cliente”.
+
+
+## Fase 7 — Calendário laboral e pausa automática do SLA
+
+### Horário operacional
+- Janela: Segunda a Sábado, 08:00–20:00, timezone `Europe/Lisbon`.
+- Domingo não conta. Fora da janela diária não conta. Feriados fora de escopo (próxima fase).
+
+### Helpers SQL (IMMUTABLE)
+- `is_business_day_lx(date) → boolean` — exclui domingo.
+- `next_business_window_start(timestamptz) → timestamptz` — devolve o próximo instante dentro da janela operacional.
+- `add_business_hours(start timestamptz, hours numeric) → timestamptz` — adiciona horas úteis (saltando noites e domingos).
+- `business_minutes_between(start, end) → integer` — minutos úteis (para relatórios futuros).
+
+### Inicialização de SLA
+- `tg_tickets_init_sla` passou a usar `add_business_hours` para `sla_first_response_at`, `sla_resolution_at` e `next_customer_update_due_at`.
+- Defaults por prioridade mantidos, agora em **horas úteis** (urgente 2/24, alta 4/48, normal 24/120, baixa 48/240; próxima atualização 48h úteis).
+- Tickets antigos não são recalculados em massa; só novos INSERT/UPDATE aplicam a nova regra.
+
+### Pausa automática por status
+- Colunas aditivas: `tickets.sla_paused_at`, `tickets.sla_paused_total_seconds`; `ticket_statuses.sla_pause_reason`.
+- Trigger `trg_tickets_sla_pause_on_status` (BEFORE UPDATE OF status):
+  - Entrar em status com `pauses_sla=true` → `sla_paused=true`, `sla_paused_at=now()`, `sla_paused_reason=status.sla_pause_reason | nome`, `sla_status='paused'`. Não altera prazos.
+  - Sair para status sem `pauses_sla` → soma a duração da pausa a `sla_first_response_at` (se primeira resposta ainda pendente), `sla_resolution_at` (se não resolvido) e `next_customer_update_due_at`; incrementa `sla_paused_total_seconds`; limpa `sla_paused*`; `sla_status='on_track'`.
+  - Tickets resolvidos/fechados são ignorados (não entram nem saem da pausa pelo trigger).
+- Statuses afetados (apenas quando o nome bate exatamente): `Aguarda cliente`, `Aguardando cliente`, `Aguardando informação` (motivo "Aguarda cliente") e `Aguarda fornecedor`, `Aguardando fornecedor` (motivo "Aguarda fornecedor"). Restantes não são tocados sem confirmação.
+
+### Resposta do cliente retoma SLA
+- `tg_ticket_messages_sla_marks` foi estendido: quando a mensagem é `client` e o ticket está pausado com motivo contendo "cliente" (e não resolvido/fechado), o SLA é retomado: limpa `sla_paused*`, incrementa `sla_paused_total_seconds`, empurra prazos pelo intervalo da pausa e recalcula `next_customer_update_due_at` em 48h úteis. Cria evento `sla_resumed` em `ticket_events`. Pausas por fornecedor não são retomadas automaticamente.
+
+### UI
+- `SlaStatusCard` mostra motivo da pausa, desde quando, total pausado anterior e uma linha de rodapé indicando o horário operacional.
+- `OperationalDashboard`: nova lista `Tickets pausados` (motivo, pausado desde, tempo pausado). KPIs já filtravam pausados; mantêm-se separados.
+
+### Notificações
+- `generate-operational-notifications` continua a ignorar `sla_paused=true` e tickets resolvidos/fechados. Sem alterações de tipos.
+
+### Limitações
+- Feriados portugueses fora de escopo.
+- Sem calendário por loja/equipa.
+- Tickets antigos mantêm prazos calculados em horas corridas até nova atualização.
