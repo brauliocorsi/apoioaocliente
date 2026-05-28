@@ -14,10 +14,24 @@ type Ticket = {
   next_action?: string | null;
   next_action_due_at?: string | null;
   sla_paused?: boolean | null;
+  sla_paused_at?: string | null;
   sla_paused_reason?: string | null;
+  sla_paused_total_seconds?: number | null;
   sla_breached?: boolean | null;
   sla_breach_reason?: string | null;
 };
+
+function formatSeconds(s: number): string {
+  if (!s || s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}min`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  if (h < 24) return rm ? `${h}h ${rm}min` : `${h}h`;
+  const d = Math.floor(h / 24);
+  const rh = h % 24;
+  return rh ? `${d}d ${rh}h` : `${d}d`;
+}
 
 type State = "on_track" | "warning" | "breached" | "paused" | "resolved" | "closed" | "no_sla";
 
