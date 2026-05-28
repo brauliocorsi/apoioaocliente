@@ -13,7 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import ReminderForm from "./ReminderForm";
 import ReminderList from "./ReminderList";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
-import { Link, X, ExternalLink, Save, Phone, Bell, Ticket, UserPlus, Trash2, CheckCircle2, RotateCcw } from "lucide-react";
+import { Link, X, ExternalLink, Save, Phone, Bell, Ticket, UserPlus, Trash2, CheckCircle2, RotateCcw, PhoneOutgoing, PhoneIncoming, PlayCircle, Zap } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useNavigate } from "react-router-dom";
 
@@ -31,6 +31,13 @@ interface PhoneCall {
   assigned_to?: string | null;
   closed_at?: string | null;
   closed_by?: string | null;
+  // Let's Call integration
+  source?: string;
+  direction?: string | null;
+  duration_seconds?: number | null;
+  attended?: boolean | null;
+  has_recording?: boolean | null;
+  letscall_linkedid?: string | null;
 }
 
 interface AgentProfile {
@@ -227,10 +234,25 @@ export default function PhoneCallDetailDialog({ call, open, onClose, onUpdated }
           {/* Call info */}
           <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
             <div className="text-sm"><span className="text-muted-foreground font-medium">Assunto:</span> {call.subject}</div>
-            <div className="flex gap-4 text-sm">
+            <div className="flex gap-4 text-sm flex-wrap">
               <span><span className="text-muted-foreground font-medium">Nota:</span> {call.invoice_number || "—"}</span>
+              {call.direction && (
+                <span className="flex items-center gap-1 text-xs">
+                  {call.direction === "incoming" ? <PhoneIncoming className="h-3 w-3 text-success" /> : <PhoneOutgoing className="h-3 w-3 text-primary" />}
+                  {call.direction === "incoming" ? "Recebida" : call.direction === "outgoing" ? "Efetuada" : "Interna"}
+                  {typeof call.duration_seconds === "number" && ` · ${Math.floor(call.duration_seconds / 60)}m ${call.duration_seconds % 60}s`}
+                  {call.attended === false && " · Não atendida"}
+                </span>
+              )}
+              {call.source === "letscall" && (
+                <Badge variant="outline" className="text-[10px] gap-1 h-5"><Zap className="h-2.5 w-2.5" /> Auto</Badge>
+              )}
             </div>
           </div>
+
+          {/* Let's Call actions */}
+          <LetsCallActions call={call} />
+
 
           {/* Agent assignment */}
           <div className="space-y-2">
@@ -443,3 +465,64 @@ export default function PhoneCallDetailDialog({ call, open, onClose, onUpdated }
     </Dialog>
   );
 }
+
+/* ---------- Let's Call inline actions: click-to-call + play recording ---------- */
+function LetsCallActions({ call }: { call: PhoneCall }) {
+  const [calling, setCalling] = useState(false);
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [loadingRec, setLoadingRec] = useState(false);
+
+  const handleCall = async () => {
+    setCalling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("letscall-originate-call", {
+        body: { destination: call.client_phone },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast({ title: "A ligar...", description: `O seu ramal vai tocar para chamar ${call.client_phone}` });
+    } catch (e: any) {
+      toast({ title: "Falha na chamada", description: e?.message || "Erro desconhecido", variant: "destructive" });
+    } finally {
+      setCalling(false);
+    }
+  };
+
+  const handlePlay = async () => {
+    if (recordingUrl) return;
+    setLoadingRec(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/letscall-recording?call_id=${call.id}`;
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const blob = await r.blob();
+      setRecordingUrl(URL.createObjectURL(blob));
+    } catch (e: any) {
+      toast({ title: "Erro ao carregar gravação", description: e?.message, variant: "destructive" });
+    } finally {
+      setLoadingRec(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button size="sm" variant="outline" className="gap-1.5" onClick={handleCall} disabled={calling || !call.client_phone}>
+        <Phone className="h-3.5 w-3.5" /> {calling ? "A ligar..." : "Ligar agora"}
+      </Button>
+      {call.has_recording && (
+        <>
+          {!recordingUrl ? (
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={handlePlay} disabled={loadingRec}>
+              <PlayCircle className="h-3.5 w-3.5" /> {loadingRec ? "A carregar..." : "Ouvir gravação"}
+            </Button>
+          ) : (
+            <audio controls src={recordingUrl} className="h-8 max-w-full" />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, Loader2, Lock, Save } from "lucide-react";
+import { Camera, Loader2, Lock, Save, PhoneCall } from "lucide-react";
 
 interface ProfileDialogProps {
   userId: string;
@@ -37,7 +37,31 @@ export default function ProfileDialog({
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [extension, setExtension] = useState<string>("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Load Let's Call extension for agents
+  useEffect(() => {
+    if (!open || table !== "profiles") return;
+    (async () => {
+      const { data } = await supabase.from("profiles").select("letscall_extension").eq("id", userId).maybeSingle();
+      setExtension(((data as any)?.letscall_extension ?? "")?.toString() || "");
+    })();
+  }, [open, table, userId]);
+
+  const handleSaveExtension = async () => {
+    const trimmed = extension.trim();
+    const value = trimmed === "" ? null : parseInt(trimmed, 10);
+    if (trimmed !== "" && (isNaN(value as number) || (value as number) <= 0)) {
+      toast({ title: "Ramal inválido", description: "Digite apenas números (ex: 200)", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from("profiles").update({ letscall_extension: value } as any).eq("id", userId);
+    setSaving(false);
+    if (error) toast({ title: "Erro ao guardar ramal", description: error.message, variant: "destructive" });
+    else toast({ title: "Ramal guardado" });
+  };
 
   const initials = (fullName || "U")
     .split(" ")
@@ -180,6 +204,32 @@ export default function ProfileDialog({
             <Label className="text-xs">Email</Label>
             <Input value={email} disabled className="h-9 text-sm bg-muted" />
           </div>
+
+          {/* Let's Call SIP extension (agents only) */}
+          {table === "profiles" && (
+            <div className="space-y-2 pt-2 border-t">
+              <div className="flex items-center gap-2">
+                <PhoneCall className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-xs font-semibold">Ramal Let's Call (Click-to-Call)</Label>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="ex: 200"
+                  value={extension}
+                  onChange={(e) => setExtension(e.target.value)}
+                  className="h-9 text-sm"
+                />
+                <Button size="sm" className="h-9 gap-1" onClick={handleSaveExtension} disabled={saving}>
+                  <Save className="h-3.5 w-3.5" /> Salvar
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                O ramal será usado para originar chamadas a partir do botão "Ligar agora".
+              </p>
+            </div>
+          )}
 
           {/* Password change */}
           <div className="space-y-3 pt-2 border-t">
