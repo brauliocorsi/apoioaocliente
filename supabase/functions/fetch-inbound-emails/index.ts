@@ -1141,6 +1141,72 @@ async function storePendingAttachment(
   };
 }
 
+// Create a new ticket as a continuation of a closed parent ticket
+// Used when a client replies by email to a ticket that is already closed/resolved
+async function createChildTicketFromClosed(
+  adminClient: ReturnType<typeof createClient>,
+  parentTicketId: string,
+  emailDetails: { subject: string; description: string; clientName: string; clientEmail: string; receivedAt?: string },
+  createdBy: string,
+): Promise<{ id: string; ticket_number: number } | null> {
+  const { data: parent } = await adminClient
+    .from("tickets")
+    .select("ticket_number, client_name, client_email, client_phone, order_number, category_id, subcategory_id, priority")
+    .eq("id", parentTicketId)
+    .single();
+
+  const subjectPrefix = parent?.ticket_number ? `[Continuação #${parent.ticket_number}] ` : "[Continuação] ";
+  const rawSubject = emailDetails.subject || "Sem assunto";
+  const newSubject = (subjectPrefix + rawSubject).substring(0, 200);
+
+  const insertPayload: Record<string, unknown> = {
+    client_name: parent?.client_name || emailDetails.clientName || emailDetails.clientEmail,
+    client_email: parent?.client_email || emailDetails.clientEmail || null,
+    client_phone: parent?.client_phone || null,
+    order_number: parent?.order_number || null,
+    category_id: parent?.category_id || null,
+    subcategory_id: parent?.subcategory_id || null,
+    priority: parent?.priority || "P2",
+    subject: newSubject,
+    description: emailDetails.description,
+    status: "novo",
+    created_by: createdBy,
+    parent_ticket_id: parentTicketId,
+  };
+  if (emailDetails.receivedAt) insertPayload.email_received_at = emailDetails.receivedAt;
+
+  const { data: created, error } = await adminClient
+    .from("tickets")
+    .insert(insertPayload)
+    .select("id, ticket_number")
+    .single();
+
+  if (error || !created) {
+    console.error(`createChildTicketFromClosed failed: ${error?.message}`);
+    return null;
+  }
+
+  // Log events on both tickets so agents have full context
+  await adminClient.from("ticket_events").insert([
+    {
+      ticket_id: created.id,
+      event_type: "note",
+      content: parent?.ticket_number
+        ? `Novo ticket criado por resposta de e-mail ao ticket #${parent.ticket_number} (fechado).`
+        : `Novo ticket criado por resposta de e-mail a ticket anterior (fechado).`,
+      metadata: { parent_ticket_id: parentTicketId },
+    },
+    {
+      ticket_id: parentTicketId,
+      event_type: "note",
+      content: `Cliente respondeu por e-mail — novo ticket #${created.ticket_number} aberto.`,
+      metadata: { child_ticket_id: created.id },
+    },
+  ]);
+
+  return created as { id: string; ticket_number: number };
+}
+
 async function processEmails(params: { fetchRecent: boolean; maxEmails: number; agentId?: string; offset?: number; searchDays?: number }) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
