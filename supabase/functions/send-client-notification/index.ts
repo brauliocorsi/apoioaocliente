@@ -60,6 +60,33 @@ Deno.serve(async (req) => {
   const admin = createClient(supabaseUrl, serviceKey);
 
   try {
+    // --- Autorização: aceitar apenas chamadas internas ---
+    // (a) Authorization: Bearer <service_role_key>, ou
+    // (b) x-dispatch-secret = system_settings.client_notification_dispatch_secret
+    const authHeader = req.headers.get("authorization") || "";
+    const dispatchSecretHeader = req.headers.get("x-dispatch-secret") || "";
+    let authorized = false;
+
+    if (authHeader === `Bearer ${serviceKey}`) {
+      authorized = true;
+    } else if (dispatchSecretHeader) {
+      const { data: row } = await admin
+        .from("system_settings")
+        .select("value")
+        .eq("key", "client_notification_dispatch_secret")
+        .maybeSingle();
+      if (row?.value && row.value === dispatchSecretHeader) {
+        authorized = true;
+      }
+    }
+
+    if (!authorized) {
+      return new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { notification_id } = await req.json();
     if (!notification_id) {
       return new Response(JSON.stringify({ error: "notification_id obrigatório" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
