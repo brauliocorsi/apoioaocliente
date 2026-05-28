@@ -895,6 +895,144 @@ async function isBlocked(
   return { blocked: false, reason: "" };
 }
 
+// ──────────────────────────────────────────────────────────────
+// Phase 2 — Inbound event tracking + basic anti-spam scoring
+// ──────────────────────────────────────────────────────────────
+type InboundEventInsert = {
+  message_id?: string | null;
+  email_fingerprint?: string | null;
+  from_address: string;
+  from_name?: string | null;
+  subject?: string | null;
+  body_preview?: string | null;
+  received_at?: string;
+};
+
+async function recordInboundEvent(
+  adminClient: ReturnType<typeof createClient>,
+  fields: InboundEventInsert,
+): Promise<string | null> {
+  try {
+    const { data, error } = await adminClient
+      .from("inbound_email_events")
+      .insert(fields)
+      .select("id")
+      .single();
+    if (error) { console.error("recordInboundEvent:", error.message); return null; }
+    return (data as { id: string } | null)?.id ?? null;
+  } catch (e) {
+    console.error("recordInboundEvent failed:", (e as Error).message);
+    return null;
+  }
+}
+
+async function updateInboundEvent(
+  adminClient: ReturnType<typeof createClient>,
+  id: string | null,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  if (!id) return;
+  try {
+    await adminClient.from("inbound_email_events").update(fields).eq("id", id);
+  } catch (e) {
+    console.error("updateInboundEvent failed:", (e as Error).message);
+  }
+}
+
+function calculateInboundSpamScore(opts: {
+  fromAddress: string;
+  subject?: string | null;
+  bodyText?: string | null;
+  bodyHtml?: string | null;
+  attachmentNames?: string[];
+  recentCountFromSender?: number;
+  knownClient?: boolean;
+  hasOpenTicketReference?: boolean;
+  hasRecentOpenTicket?: boolean;
+  blocklistedDomain?: boolean;
+  blocklistedSender?: boolean;
+}): { score: number; reasons: string[] } {
+  let score = 0;
+  const reasons: string[] = [];
+  const from = (opts.fromAddress || "").toLowerCase();
+  const subject = (opts.subject || "").toLowerCase();
+  const body = (opts.bodyText || "").toLowerCase();
+  const html = (opts.bodyHtml || "").toLowerCase();
+
+  if (["noreply", "no-reply", "mailer-daemon", "postmaster"].some((s) => from.includes(s))) {
+    score += 50; reasons.push("auto-sender:+50");
+  }
+  if (!subject.trim()) { score += 15; reasons.push("empty-subject:+15"); }
+  const bodyLen = Math.max(body.trim().length, html.replace(/<[^>]+>/g, " ").trim().length);
+  if (bodyLen < 10) { score += 20; reasons.push("empty-body:+20"); }
+
+  const linkCount = (html.match(/<a\s+href=/g) || []).length + (body.match(/https?:\/\//g) || []).length;
+  if (linkCount > 5) { score += 30; reasons.push(`many-links(${linkCount}):+30`); }
+
+  const dangerous = [".exe", ".js", ".bat", ".scr", ".cmd", ".vbs", ".jar", ".ps1"];
+  const dangerHit = (opts.attachmentNames || []).find((n) => dangerous.some((ext) => n.toLowerCase().endsWith(ext)));
+  if (dangerHit) { score += 100; reasons.push(`dangerous-attachment(${dangerHit}):+100`); }
+
+  if ((opts.recentCountFromSender || 0) > 5) {
+    score += 60; reasons.push(`burst(${opts.recentCountFromSender}):+60`);
+  }
+
+  const spammyKeywords = ["viagra", "casino", "loan", "crypto", "winner", "prize", "urgent payment"];
+  const kwHit = spammyKeywords.find((k) => subject.includes(k) || body.includes(k));
+  if (kwHit) { score += 60; reasons.push(`spam-keyword(${kwHit}):+60`); }
+
+  if (opts.blocklistedDomain) { score += 100; reasons.push("blocklisted-domain:+100"); }
+  if (opts.blocklistedSender) { score += 100; reasons.push("blocklisted-sender:+100"); }
+
+  if (opts.knownClient) { score -= 30; reasons.push("known-client:-30"); }
+  if (opts.hasOpenTicketReference) { score -= 40; reasons.push("ticket-reference:-40"); }
+  if (opts.hasRecentOpenTicket) { score -= 20; reasons.push("recent-open-ticket:-20"); }
+
+  return { score: Math.max(0, score), reasons };
+}
+
+async function gatherSpamSignals(
+  adminClient: ReturnType<typeof createClient>,
+  clientEmail: string,
+  subject: string,
+  bodyText: string,
+): Promise<{
+  recentCountFromSender: number;
+  knownClient: boolean;
+  hasOpenTicketReference: boolean;
+  hasRecentOpenTicket: boolean;
+}> {
+  const emailLower = clientEmail.toLowerCase();
+  const since10m = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [recent, known, openTix] = await Promise.all([
+    adminClient.from("inbound_email_events")
+      .select("id", { count: "exact", head: true })
+      .ilike("from_address", emailLower)
+      .gte("received_at", since10m),
+    adminClient.from("client_users")
+      .select("id")
+      .ilike("email", emailLower)
+      .maybeSingle(),
+    adminClient.from("tickets")
+      .select("id", { count: "exact", head: true })
+      .eq("client_email", emailLower)
+      .gte("created_at", since30d),
+  ]);
+
+  const subjectAndPreview = (subject || "") + " " + (bodyText || "").substring(0, 500);
+  const hasOpenTicketReference = /#\d{1,7}\b/.test(subjectAndPreview);
+
+  return {
+    recentCountFromSender: recent.count || 0,
+    knownClient: !!known.data,
+    hasOpenTicketReference,
+    hasRecentOpenTicket: (openTix.count || 0) > 0,
+  };
+}
+
+
 // Generate a fingerprint for dedup when message_id is missing
 async function generateFingerprint(from: string, subject: string, bodySnippet: string): Promise<string> {
   const raw = `${from.toLowerCase()}|${subject.substring(0, 100)}|${bodySnippet.substring(0, 200)}`;
@@ -1330,6 +1468,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
       if (headersChecked >= MAX_HEADER_CHECKS) break;
       headersChecked++;
 
+      let eventId: string | null = null;
       try {
         // Lightweight: fetch only headers (no body download)
         const headers = await imap.fetchHeaders(seqNum);
@@ -1342,6 +1481,16 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
         // Generate fingerprint from headers only
         const emailFingerprint = headers.messageId?.trim() || await generateFingerprint(clientEmail, headers.subject, "");
+
+        // ── Phase 2: record inbound event upfront (every received email) ──
+        eventId = await recordInboundEvent(adminClient, {
+          message_id: headers.messageId || null,
+          email_fingerprint: emailFingerprint,
+          from_address: clientEmail.toLowerCase(),
+          from_name: extractName(headers.from) || null,
+          subject: (headers.subject || "").substring(0, 500),
+          body_preview: null,
+        });
 
         // ── IN-MEMORY dedup check (instant, no DB round-trip) ──
         if (emailFingerprint && knownFingerprints.has(emailFingerprint)) {
@@ -1433,6 +1582,12 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
               console.error(`Attachment backfill error: ${(err as Error).message}`);
             }
           }
+          await updateInboundEvent(adminClient, eventId, {
+            status: "duplicate",
+            routing_action: "duplicate_ignored",
+            routing_reason: "in-memory fingerprint match",
+            processed_at: new Date().toISOString(),
+          });
           skipped++;
           continue;
         }
@@ -1441,7 +1596,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         // Fallback: import as pending with header metadata so the inbox doesn't block.
         if (headers.size && headers.size > MAX_INLINE_EMAIL_SIZE) {
           const clientName = extractName(headers.from);
-          await adminClient.from("pending_emails").insert({
+          const { data: pe } = await adminClient.from("pending_emails").insert({
             from_address: clientEmail.toLowerCase(),
             from_name: clientName,
             subject: headers.subject.substring(0, 500),
@@ -1449,6 +1604,13 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             body_html: "",
             message_id: emailFingerprint,
             status: "pending",
+          }).select("id").single();
+          await updateInboundEvent(adminClient, eventId, {
+            status: "pending_review",
+            routing_action: "large_email_pending",
+            routing_reason: `size=${headers.size}`,
+            pending_email_id: pe?.id ?? null,
+            processed_at: new Date().toISOString(),
           });
           pending++;
           await imap.markAsSeen(seqNum);
@@ -1466,7 +1628,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         // Check blocklist
         const blockCheck = await isBlocked(adminClient, clientEmail, msg.subject);
         if (blockCheck.blocked) {
-          await adminClient.from("pending_emails").insert({
+          const { data: pe } = await adminClient.from("pending_emails").insert({
             from_address: clientEmail.toLowerCase(),
             from_name: clientName,
             subject: msg.subject.substring(0, 500),
@@ -1475,12 +1637,85 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             message_id: msg.messageId,
             status: "blocked",
             rejection_reason: blockCheck.reason,
+          }).select("id").single();
+          await updateInboundEvent(adminClient, eventId, {
+            status: "quarantined",
+            routing_action: "blocklist",
+            routing_reason: blockCheck.reason,
+            pending_email_id: pe?.id ?? null,
+            processed_at: new Date().toISOString(),
           });
           blocked++;
           await imap.markAsSeen(seqNum);
           newEmailProcessed = true;
           break;
         }
+
+        // ── Phase 2: Anti-spam scoring ──
+        const spamSignals = await gatherSpamSignals(adminClient, clientEmail, msg.subject, msg.bodyText || "");
+        const spamResult = calculateInboundSpamScore({
+          fromAddress: clientEmail,
+          subject: msg.subject,
+          bodyText: msg.bodyText,
+          bodyHtml: msg.bodyHtml,
+          attachmentNames: msg.attachments.map((a: { filename: string }) => a.filename || ""),
+          ...spamSignals,
+        });
+        await updateInboundEvent(adminClient, eventId, {
+          spam_score: spamResult.score,
+          spam_reasons: spamResult.reasons,
+          body_preview: ((msg.bodyText || "").replace(/\s+/g, " ").trim()).substring(0, 300),
+        });
+
+        // Quarantine — score >= 80: do not create ticket, do not send confirmation
+        if (spamResult.score >= 80) {
+          const { data: pe } = await adminClient.from("pending_emails").insert({
+            from_address: clientEmail.toLowerCase(),
+            from_name: clientName,
+            subject: msg.subject.substring(0, 500),
+            body_text: (msg.bodyText || "").substring(0, 5000),
+            body_html: (msg.bodyHtml ? sanitizeHtml(msg.bodyHtml) : "").substring(0, 10000),
+            message_id: msg.messageId,
+            status: "blocked",
+            rejection_reason: `spam-score=${spamResult.score}: ${spamResult.reasons.join(", ")}`,
+          }).select("id").single();
+          await updateInboundEvent(adminClient, eventId, {
+            status: "quarantined",
+            routing_action: "spam_quarantine",
+            routing_reason: `score=${spamResult.score}`,
+            pending_email_id: pe?.id ?? null,
+            processed_at: new Date().toISOString(),
+          });
+          blocked++;
+          await imap.markAsSeen(seqNum);
+          newEmailProcessed = true;
+          break;
+        }
+
+        // Mid-score (40-79) — force pending review (no ticket, no auto confirmation yet)
+        if (spamResult.score >= 40) {
+          const { data: pe } = await adminClient.from("pending_emails").insert({
+            from_address: clientEmail.toLowerCase(),
+            from_name: clientName,
+            subject: msg.subject.substring(0, 500),
+            body_text: (msg.bodyText || "").substring(0, 5000),
+            body_html: (msg.bodyHtml ? sanitizeHtml(msg.bodyHtml) : "").substring(0, 10000),
+            message_id: msg.messageId || emailFingerprint,
+            status: "pending",
+          }).select("id").single();
+          await updateInboundEvent(adminClient, eventId, {
+            status: "pending_review",
+            routing_action: "pending_review",
+            routing_reason: `score=${spamResult.score} (mid)`,
+            pending_email_id: pe?.id ?? null,
+            processed_at: new Date().toISOString(),
+          });
+          pending++;
+          await imap.markAsSeen(seqNum);
+          newEmailProcessed = true;
+          break;
+        }
+
 
         // Check if we have an existing open thread OR ticket by client_email
         const { data: existingThread } = await adminClient
@@ -1587,6 +1822,14 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
             await fireTicketCreatedConfirmation(child.id, "email_closed_continuation");
 
+            await updateInboundEvent(adminClient, eventId, {
+              status: "processed",
+              routing_action: "created_child_ticket_from_closed",
+              routed_ticket_id: child.id,
+              parent_ticket_id: closedParentId,
+              routing_reason: "ticket fechado/resolvido",
+              processed_at: new Date().toISOString(),
+            });
             created++;
             await imap.markAsSeen(seqNum);
             newEmailProcessed = true;
@@ -1623,6 +1866,13 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             );
 
             if (isDuplicateContent) {
+              await updateInboundEvent(adminClient, eventId, {
+                status: "duplicate",
+                routing_action: "duplicate_content",
+                routed_ticket_id: ticketId,
+                routing_reason: "content already present on ticket",
+                processed_at: new Date().toISOString(),
+              });
               skipped++;
               await imap.markAsSeen(seqNum);
               newEmailProcessed = true;
@@ -1666,6 +1916,13 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             // Always try BODYSTRUCTURE to catch attachments missed by body parsing (partial fetches, nested MIME)
             await fetchAttachmentsParts(imap, adminClient, seqNum, ticketId, createdBy!);
 
+            await updateInboundEvent(adminClient, eventId, {
+              status: "processed",
+              routing_action: "appended_to_ticket",
+              routed_ticket_id: ticketId,
+              routing_reason: "matched open ticket / thread",
+              processed_at: new Date().toISOString(),
+            });
             updated++;
             await imap.markAsSeen(seqNum);
             newEmailProcessed = true;
@@ -1704,12 +1961,25 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           }
         }
 
+        await updateInboundEvent(adminClient, eventId, {
+          status: "pending_review",
+          routing_action: "pending_review",
+          routing_reason: "no matching open ticket",
+          pending_email_id: pendingEmail?.id ?? null,
+          processed_at: new Date().toISOString(),
+        });
         pending++;
         await imap.markAsSeen(seqNum);
         newEmailProcessed = true;
         break; // Only 1 new email per call
       } catch (err) {
         console.error(`Email ${seqNum} error: ${(err as Error).message}`);
+        await updateInboundEvent(adminClient, eventId, {
+          status: "failed",
+          routing_action: "processing_error",
+          error_message: (err as Error).message,
+          processed_at: new Date().toISOString(),
+        });
         newEmailProcessed = true;
         break;
       }
