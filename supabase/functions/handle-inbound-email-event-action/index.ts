@@ -108,6 +108,20 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (evErr || !ev) return json({ success: false, message: "Evento não encontrado" }, 404);
 
+  // Terminal-state guard (server-side). UI hides actions for terminal events,
+  // but a direct API call must also be rejected.
+  const TERMINAL = new Set(["processed", "duplicate", "spam", "ignored", "reviewed"]);
+  const isTerminal = TERMINAL.has(String(ev.status));
+  const TERMINAL_BLOCKED: Action[] = ["append_to_ticket", "mark_spam", "ignore", "mark_reviewed"];
+  // For create_ticket we use a stronger idempotency guard below (routed_ticket_id check).
+  if (isTerminal && TERMINAL_BLOCKED.includes(action)) {
+    return json({
+      success: false,
+      code: "event_terminal",
+      message: "Este evento já foi processado ou encerrado.",
+    }, 409);
+  }
+
   const baseMeta = {
     action_by: userId,
     action_at: new Date().toISOString(),
