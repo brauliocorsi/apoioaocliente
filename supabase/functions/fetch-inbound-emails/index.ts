@@ -1821,6 +1821,14 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
 
             await fireTicketCreatedConfirmation(child.id, "email_closed_continuation");
 
+            await updateInboundEvent(adminClient, eventId, {
+              status: "processed",
+              routing_action: "created_child_ticket_from_closed",
+              routed_ticket_id: child.id,
+              parent_ticket_id: closedParentId,
+              routing_reason: "ticket fechado/resolvido",
+              processed_at: new Date().toISOString(),
+            });
             created++;
             await imap.markAsSeen(seqNum);
             newEmailProcessed = true;
@@ -1857,6 +1865,13 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             );
 
             if (isDuplicateContent) {
+              await updateInboundEvent(adminClient, eventId, {
+                status: "duplicate",
+                routing_action: "duplicate_content",
+                routed_ticket_id: ticketId,
+                routing_reason: "content already present on ticket",
+                processed_at: new Date().toISOString(),
+              });
               skipped++;
               await imap.markAsSeen(seqNum);
               newEmailProcessed = true;
@@ -1900,6 +1915,13 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             // Always try BODYSTRUCTURE to catch attachments missed by body parsing (partial fetches, nested MIME)
             await fetchAttachmentsParts(imap, adminClient, seqNum, ticketId, createdBy!);
 
+            await updateInboundEvent(adminClient, eventId, {
+              status: "processed",
+              routing_action: "appended_to_ticket",
+              routed_ticket_id: ticketId,
+              routing_reason: "matched open ticket / thread",
+              processed_at: new Date().toISOString(),
+            });
             updated++;
             await imap.markAsSeen(seqNum);
             newEmailProcessed = true;
