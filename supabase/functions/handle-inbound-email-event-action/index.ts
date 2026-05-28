@@ -149,7 +149,64 @@ Deno.serve(async (req) => {
       if (ev.routed_ticket_id) {
         return json({ success: true, status: "already_created", ticket_id: ev.routed_ticket_id });
       }
-      // Try to enrich body from pending_emails if available
+
+      // ---- CLAIM-FIRST (zero-delete) -----------------------------------
+      // Atomically acquire a lock on this event BEFORE creating any ticket.
+      // If another concurrent request already holds the lock or routed the
+      // event, we never insert a ticket — so there is nothing to delete.
+      const LOCK_TTL_MS = 60_000;
+      const lockCutoff = new Date(Date.now() - LOCK_TTL_MS).toISOString();
+      const nowIso = new Date().toISOString();
+
+      const { data: claimedEvents, error: lockErr } = await admin
+        .from("inbound_email_events")
+        .update({
+          processing_locked_at: nowIso,
+          processing_locked_by: userId,
+        })
+        .eq("id", eventId)
+        .is("routed_ticket_id", null)
+        .not("status", "in", "(processed,duplicate,spam,ignored,reviewed)")
+        .or(`processing_locked_at.is.null,processing_locked_at.lt.${lockCutoff}`)
+        .select("id");
+
+      if (lockErr) {
+        return json({ success: false, message: lockErr.message }, 500);
+      }
+
+      if (!claimedEvents || claimedEvents.length === 0) {
+        // Re-read to give the caller a meaningful reason.
+        const { data: refreshed } = await admin
+          .from("inbound_email_events")
+          .select("routed_ticket_id, status, processing_locked_at")
+          .eq("id", eventId)
+          .maybeSingle();
+        if (refreshed?.routed_ticket_id) {
+          return json({ success: true, status: "already_created", ticket_id: refreshed.routed_ticket_id });
+        }
+        if (refreshed && TERMINAL.has(String(refreshed.status))) {
+          return json({ success: false, code: "event_terminal", message: "Evento já encerrado." }, 409);
+        }
+        return json({
+          success: false,
+          code: "event_locked",
+          message: "Este evento está a ser processado por outro agente. Tente novamente em instantes.",
+        }, 409);
+      }
+
+      // Helper: release lock without touching anything else.
+      const releaseLock = async (extraMeta?: Record<string, unknown>) => {
+        await admin
+          .from("inbound_email_events")
+          .update({
+            processing_locked_at: null,
+            processing_locked_by: null,
+            ...(extraMeta || {}),
+          })
+          .eq("id", eventId);
+      };
+
+      // Enrich body from pending_emails if available
       let description = ev.body_preview as string | null;
       let pe: any = null;
       if (ev.pending_email_id) {
@@ -162,6 +219,7 @@ Deno.serve(async (req) => {
         if (pe) description = pe.body_html || pe.body_text || description;
       }
       if (!description || !description.trim()) {
+        await releaseLock();
         return json({
           success: false,
           message: "Sem corpo de e-mail suficiente para criar ticket. Anexe ou reveja manualmente.",
@@ -185,12 +243,23 @@ Deno.serve(async (req) => {
         .select("id, ticket_number")
         .single();
       if (tErr || !newTicket) {
+        // Ticket creation failed — release lock, record error, NEVER delete.
+        await releaseLock({
+          error_message: `create_ticket falhou: ${tErr?.message || "erro desconhecido"}`,
+          action_metadata: {
+            ...mergedMeta,
+            last_error: {
+              at: new Date().toISOString(),
+              action: "create_ticket",
+              message: tErr?.message || "erro desconhecido",
+            },
+          },
+        });
         return json({ success: false, message: tErr?.message || "Erro ao criar ticket" }, 500);
       }
 
-      // Race-condition guard: attach the new ticket to the event ONLY if no
-      // other concurrent request has already populated routed_ticket_id.
-      const { data: claimedRows, error: claimErr } = await admin
+      // Attach the freshly created ticket to the event we already locked.
+      await admin
         .from("inbound_email_events")
         .update({
           status: "processed",
@@ -199,31 +268,10 @@ Deno.serve(async (req) => {
           routing_reason: "Criado manualmente a partir da Caixa de Entrada",
           processed_at: new Date().toISOString(),
           action_metadata: mergedMeta,
+          processing_locked_at: null,
+          processing_locked_by: null,
         })
-        .eq("id", eventId)
-        .is("routed_ticket_id", null)
-        .select("id");
-
-      if (claimErr) {
-        return json({ success: false, message: claimErr.message }, 500);
-      }
-
-      // Another concurrent call won the race — discard our just-created ticket
-      // and return the winner's ticket id so the UI stays consistent.
-      if (!claimedRows || claimedRows.length === 0) {
-        const { data: refreshed } = await admin
-          .from("inbound_email_events")
-          .select("routed_ticket_id")
-          .eq("id", eventId)
-          .maybeSingle();
-        // Best-effort cleanup of the duplicate ticket we created
-        await admin.from("tickets").delete().eq("id", newTicket.id);
-        return json({
-          success: true,
-          status: "already_created",
-          ticket_id: refreshed?.routed_ticket_id || null,
-        });
-      }
+        .eq("id", eventId);
 
       await admin.from("email_threads").insert({
         ticket_id: newTicket.id,
