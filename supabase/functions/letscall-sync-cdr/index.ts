@@ -205,7 +205,7 @@ Deno.serve(async (req) => {
         for (const cdr of items) {
           totalSeen++;
           try {
-            const r = await upsertCdr(cdr, month);
+            const r = await upsertCdr(cdr, month, fallbackCreator);
             if (r.inserted) { totalInserted++; pageInsertedCount++; }
           } catch (e) { errors.push(e instanceof Error ? e.message : JSON.stringify(e)); }
         }
