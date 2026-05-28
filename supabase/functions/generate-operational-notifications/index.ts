@@ -127,8 +127,60 @@ Deno.serve(async (req) => {
       }
     }
 
+    // --- Fase 6: SLA scans -----------------------------------------------
+    const WARN_MS = 2 * 60 * 60 * 1000; // 2h warning window
+    let slaBreached = 0, slaWarning = 0, frOverdue = 0, resolutionOverdue = 0, custUpdateOverdue = 0;
+
+    const { data: slaTickets } = await supabase
+      .from("tickets")
+      .select("id, ticket_number, subject, assigned_to, status, priority, sla_paused, sla_first_response_at, first_responded_at, sla_resolution_at, resolved_at, next_customer_update_due_at")
+      .in("status", openIds.length ? openIds : ["__none__"]);
+
+    for (const t of slaTickets || []) {
+      if (t.sla_paused) continue;
+      const recipients = t.assigned_to ? [t.assigned_to] : supervisors;
+      const queue: Array<{ type: string; title: string; due: string; priority: string; counter: () => void }> = [];
+
+      if (!t.first_responded_at && t.sla_first_response_at) {
+        const due = new Date(t.sla_first_response_at).getTime();
+        if (due < now.getTime()) queue.push({ type: "first_response_overdue", title: `Primeira resposta atrasada: #${t.ticket_number}`, due: t.sla_first_response_at, priority: "urgent", counter: () => { frOverdue++; slaBreached++; } });
+        else if (due - now.getTime() <= WARN_MS) queue.push({ type: "sla_warning", title: `SLA primeira resposta em risco: #${t.ticket_number}`, due: t.sla_first_response_at, priority: "high", counter: () => { slaWarning++; } });
+      }
+      if (!t.resolved_at && t.sla_resolution_at) {
+        const due = new Date(t.sla_resolution_at).getTime();
+        if (due < now.getTime()) queue.push({ type: "resolution_overdue", title: `Resolução atrasada: #${t.ticket_number}`, due: t.sla_resolution_at, priority: "urgent", counter: () => { resolutionOverdue++; slaBreached++; } });
+        else if (due - now.getTime() <= WARN_MS) queue.push({ type: "sla_warning", title: `SLA resolução em risco: #${t.ticket_number}`, due: t.sla_resolution_at, priority: "high", counter: () => { slaWarning++; } });
+      }
+      if (t.next_customer_update_due_at) {
+        const due = new Date(t.next_customer_update_due_at).getTime();
+        if (due < now.getTime()) queue.push({ type: "customer_update_overdue", title: `Cliente sem atualização: #${t.ticket_number}`, due: t.next_customer_update_due_at, priority: "high", counter: () => { custUpdateOverdue++; } });
+      }
+
+      if (queue.some((q) => q.type.endsWith("_overdue"))) {
+        await supabase.from("tickets")
+          .update({ sla_breached: true, sla_status: "breached" })
+          .eq("id", t.id).eq("sla_breached", false);
+      }
+
+      for (const item of queue) {
+        for (const userId of recipients) {
+          const { error: nErr } = await supabase.rpc("create_notification", {
+            _user_id: userId, _type: item.type, _title: item.title, _message: t.subject || "",
+            _ticket_id: t.id, _inbound_email_event_id: null,
+            _priority: item.priority, _due_at: item.due, _source: "edge-function",
+            _metadata: { assigned: !!t.assigned_to, sla: true },
+          });
+          if (!nErr) item.counter();
+        }
+      }
+    }
+
     return new Response(
-      JSON.stringify({ ok: true, scanned: tickets?.length ?? 0, dueTodayCreated, overdueCreated }),
+      JSON.stringify({
+        ok: true, scanned: tickets?.length ?? 0, dueTodayCreated, overdueCreated,
+        slaScanned: slaTickets?.length ?? 0,
+        slaBreached, slaWarning, frOverdue, resolutionOverdue, custUpdateOverdue,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
