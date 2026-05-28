@@ -899,16 +899,24 @@ export type Database = {
       phone_calls: {
         Row: {
           assigned_to: string | null
+          attended: boolean | null
           client_name: string
           client_phone: string
           closed_at: string | null
           closed_by: string | null
           created_at: string
           created_by: string
+          direction: string | null
+          duration_seconds: number | null
+          has_recording: boolean | null
           id: string
           invoice_number: string | null
+          letscall_linkedid: string | null
+          letscall_month: number | null
           notes: string | null
           priority: string
+          ringing_seconds: number | null
+          source: string
           status: string
           subject: string
           ticket_id: string | null
@@ -916,16 +924,24 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          attended?: boolean | null
           client_name: string
           client_phone: string
           closed_at?: string | null
           closed_by?: string | null
           created_at?: string
           created_by?: string
+          direction?: string | null
+          duration_seconds?: number | null
+          has_recording?: boolean | null
           id?: string
           invoice_number?: string | null
+          letscall_linkedid?: string | null
+          letscall_month?: number | null
           notes?: string | null
           priority?: string
+          ringing_seconds?: number | null
+          source?: string
           status?: string
           subject: string
           ticket_id?: string | null
@@ -933,16 +949,24 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          attended?: boolean | null
           client_name?: string
           client_phone?: string
           closed_at?: string | null
           closed_by?: string | null
           created_at?: string
           created_by?: string
+          direction?: string | null
+          duration_seconds?: number | null
+          has_recording?: boolean | null
           id?: string
           invoice_number?: string | null
+          letscall_linkedid?: string | null
+          letscall_month?: number | null
           notes?: string | null
           priority?: string
+          ringing_seconds?: number | null
+          source?: string
           status?: string
           subject?: string
           ticket_id?: string | null
@@ -1024,6 +1048,7 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean
+          letscall_extension: number | null
           updated_at: string
         }
         Insert: {
@@ -1034,6 +1059,7 @@ export type Database = {
           full_name?: string
           id: string
           is_active?: boolean
+          letscall_extension?: number | null
           updated_at?: string
         }
         Update: {
@@ -1044,6 +1070,7 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean
+          letscall_extension?: number | null
           updated_at?: string
         }
         Relationships: []
