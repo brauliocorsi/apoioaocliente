@@ -227,3 +227,61 @@ Proibido nesta fase: alterar o tipo de `tickets.status`, criar FK que rejeite da
 
 
 
+
+---
+
+## Fase 4 — Encomenda como contexto do ticket
+
+### Objetivo
+Tornar o ticket consciente da encomenda associada, sem alterar dados antigos nem criar dependências rígidas com o GestãoClick.
+
+### Campos aditivos
+- `tickets.order_lookup_status` text — `not_checked | found | not_found | multiple_matches | error | mismatch`.
+- `tickets.order_lookup_at` timestamptz — última consulta.
+- `tickets.order_lookup_error` text — erro técnico legível.
+- `tickets.order_snapshot` jsonb — resumo da encomenda no momento da consulta (cliente, produtos, datas, situação, etc.).
+- `inbound_email_events.extracted_order_number` text — número detetado no e-mail recebido.
+- Index parcial em `tickets(order_number)`.
+
+### Extração de número de encomenda
+- Helper: `src/lib/orderNumberExtractor.ts` (`extractOrderNumberFromText`, `extractOrderNumberFromSources`).
+- Regex conservador: aceita 3–10 dígitos precedidos de `encomenda|pedido|order|ordem de serviço|OS|nº encomenda`.
+- Remove telefones portugueses (`+351` ou começados em 2/9) antes de extrair, para evitar falsos positivos.
+- Se houver mais de um candidato, **nunca** preenche `order_number` automaticamente — marca `order_lookup_status = multiple_matches`.
+
+### Onde a extração é aplicada
+- `handle-inbound-email-event-action` (ação `create_ticket` na Caixa de Entrada): aplica a partir de `subject + body`; só preenche `order_number` se vazio; persiste `extracted_order_number` no evento.
+- Outros fluxos de criação (fetch-inbound-emails automático, portal, criação manual de agente) **não** foram tocados nesta fase para evitar regressões — agente pode usar o card no sidebar.
+
+### Lookup no GestãoClick
+- Reutiliza a edge function existente `gestaoclick-proxy` (action `search_vendas`, parâmetro `query=<código>`).
+- Auth: proxy já valida JWT do utilizador via `auth.getUser()`. Cliente do portal não tem `user_roles` válido → não consegue chamar.
+- Tokens `GESTAOCLICK_ACCESS_TOKEN` / `GESTAOCLICK_SECRET_ACCESS_TOKEN` permanecem só no servidor.
+
+### UI — card "Encomenda" no `TicketSidebar`
+- Componente: `src/components/ticket/OrderContextCard.tsx`.
+- Mostra: badge de estado (incl. "Possível divergência" quando `client_email` ≠ email do snapshot), input do número, botão "Procurar/Atualizar".
+- Snapshot renderizado com tolerância total a campos ausentes.
+- Cada consulta cria um `ticket_events` (`event_type=note`) com o resultado, alimentando a `TicketTimeline`.
+
+### Limitações conhecidas
+- A extração é deliberadamente conservadora — frases sem keyword (apenas "12345 ainda não chegou") não acionam auto-fill.
+- O snapshot é um *snapshot*: não é atualizado em background. O agente deve clicar para refrescar.
+- Divergência é detetada apenas para email; nome/telefone não bloqueiam.
+- Falha no GestãoClick não trava nada — fica registada em `order_lookup_error`.
+
+### Fora de âmbito desta fase
+- Dashboard agregado por encomenda (visão da Alessandra).
+- Resync automático / pg_cron.
+- Normalização cruzada de cliente (ticket vs encomenda vs `client_users`).
+- Extração avançada via IA (fatura, telefone, OS).
+- Mudança no `gestaoclick-proxy` além de reutilização.
+
+### Visão futura — operacional da Alessandra
+Com os novos campos passamos a poder construir, sem refactor, queries para:
+- Tickets por encomenda (`tickets.order_number`).
+- Encomendas com reclamação aberta (`order_lookup_status='found' AND status NOT IN (resolvidos)`).
+- Tickets sem encomenda identificada (`order_number IS NULL OR order_lookup_status IN ('not_checked','not_found','multiple_matches')`).
+- Divergências (`order_lookup_status='mismatch'`).
+- Cruzamento com `delayed_orders` via `order_number`.
+

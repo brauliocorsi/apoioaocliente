@@ -504,6 +504,7 @@ export type Database = {
           created_at: string
           email_fingerprint: string | null
           error_message: string | null
+          extracted_order_number: string | null
           from_address: string
           from_name: string | null
           id: string
@@ -529,6 +530,7 @@ export type Database = {
           created_at?: string
           email_fingerprint?: string | null
           error_message?: string | null
+          extracted_order_number?: string | null
           from_address: string
           from_name?: string | null
           id?: string
@@ -554,6 +556,7 @@ export type Database = {
           created_at?: string
           email_fingerprint?: string | null
           error_message?: string | null
+          extracted_order_number?: string | null
           from_address?: string
           from_name?: string | null
           id?: string
@@ -1372,7 +1375,11 @@ export type Database = {
           needs_tpa: boolean | null
           next_action: string | null
           next_action_due_at: string | null
+          order_lookup_at: string | null
+          order_lookup_error: string | null
+          order_lookup_status: string | null
           order_number: string | null
+          order_snapshot: Json | null
           parent_ticket_id: string | null
           payment_method: string | null
           pickup_date: string | null
@@ -1420,7 +1427,11 @@ export type Database = {
           needs_tpa?: boolean | null
           next_action?: string | null
           next_action_due_at?: string | null
+          order_lookup_at?: string | null
+          order_lookup_error?: string | null
+          order_lookup_status?: string | null
           order_number?: string | null
+          order_snapshot?: Json | null
           parent_ticket_id?: string | null
           payment_method?: string | null
           pickup_date?: string | null
@@ -1468,7 +1479,11 @@ export type Database = {
           needs_tpa?: boolean | null
           next_action?: string | null
           next_action_due_at?: string | null
+          order_lookup_at?: string | null
+          order_lookup_error?: string | null
+          order_lookup_status?: string | null
           order_number?: string | null
+          order_snapshot?: Json | null
           parent_ticket_id?: string | null
           payment_method?: string | null
           pickup_date?: string | null

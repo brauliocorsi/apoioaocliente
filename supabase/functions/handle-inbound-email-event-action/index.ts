@@ -226,6 +226,19 @@ Deno.serve(async (req) => {
         }, 422);
       }
 
+      // Phase 4 — conservative order-number extraction from subject + body.
+      const PHONE_RE = /\b(?:\+?351[\s.-]?)?[29]\d{2}[\s.-]?\d{3}[\s.-]?\d{3}\b/g;
+      const KW_RE = /\b(?:encomenda|pedido|order|ordem(?:\s+de\s+servi[cç]o)?|os|nº\s*encomenda|n[º°ºo]\s*encomenda)\b[\s.:#nºo°-]{0,8}(\d{3,10})\b/gi;
+      const scanText = `${ev.subject || ""}\n${description || ""}`.replace(PHONE_RE, " ");
+      const orderCandidates = new Set<string>();
+      let m: RegExpExecArray | null;
+      KW_RE.lastIndex = 0;
+      while ((m = KW_RE.exec(scanText)) !== null) orderCandidates.add(m[1]);
+      const orderStatus =
+        orderCandidates.size === 0 ? "not_checked" :
+        orderCandidates.size === 1 ? null /* will be lookup-ready */ : "multiple_matches";
+      const extractedOrder = orderCandidates.size === 1 ? [...orderCandidates][0] : null;
+
       const ticketInsert: Record<string, unknown> = {
         client_name: ev.from_name || ev.from_address,
         client_email: ev.from_address,
@@ -235,6 +248,8 @@ Deno.serve(async (req) => {
         status: "novo",
         created_by: userId,
         email_received_at: ev.received_at,
+        ...(extractedOrder ? { order_number: extractedOrder } : {}),
+        ...(orderStatus ? { order_lookup_status: orderStatus } : {}),
       };
 
       const { data: newTicket, error: tErr } = await admin
@@ -270,6 +285,9 @@ Deno.serve(async (req) => {
           action_metadata: mergedMeta,
           processing_locked_at: null,
           processing_locked_by: null,
+          ...(extractedOrder || orderCandidates.size > 0
+            ? { extracted_order_number: extractedOrder ?? [...orderCandidates].join(",") }
+            : {}),
         })
         .eq("id", eventId);
 
