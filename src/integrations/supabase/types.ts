@@ -55,6 +55,39 @@ export type Database = {
           },
         ]
       }
+      business_holidays: {
+        Row: {
+          country: string
+          created_at: string
+          holiday_date: string
+          id: string
+          is_active: boolean
+          name: string
+          region: string | null
+          updated_at: string
+        }
+        Insert: {
+          country?: string
+          created_at?: string
+          holiday_date: string
+          id?: string
+          is_active?: boolean
+          name: string
+          region?: string | null
+          updated_at?: string
+        }
+        Update: {
+          country?: string
+          created_at?: string
+          holiday_date?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          region?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           default_assign: string | null
@@ -1744,6 +1777,7 @@ export type Database = {
       }
       is_authenticated_agent: { Args: never; Returns: boolean }
       is_business_day_lx: { Args: { _d: string }; Returns: boolean }
+      is_pt_national_holiday: { Args: { _d: string }; Returns: boolean }
       next_business_window_start: { Args: { _ts: string }; Returns: string }
       notify_supervisors: {
         Args: {
