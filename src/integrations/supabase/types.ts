@@ -905,7 +905,7 @@ export type Database = {
           closed_at: string | null
           closed_by: string | null
           created_at: string
-          created_by: string
+          created_by: string | null
           direction: string | null
           duration_seconds: number | null
           has_recording: boolean | null
@@ -930,7 +930,7 @@ export type Database = {
           closed_at?: string | null
           closed_by?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           direction?: string | null
           duration_seconds?: number | null
           has_recording?: boolean | null
@@ -955,7 +955,7 @@ export type Database = {
           closed_at?: string | null
           closed_by?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           direction?: string | null
           duration_seconds?: number | null
           has_recording?: boolean | null
