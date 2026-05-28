@@ -511,6 +511,8 @@ export type Database = {
           parent_ticket_id: string | null
           pending_email_id: string | null
           processed_at: string | null
+          processing_locked_at: string | null
+          processing_locked_by: string | null
           received_at: string
           routed_ticket_id: string | null
           routing_action: string | null
@@ -534,6 +536,8 @@ export type Database = {
           parent_ticket_id?: string | null
           pending_email_id?: string | null
           processed_at?: string | null
+          processing_locked_at?: string | null
+          processing_locked_by?: string | null
           received_at?: string
           routed_ticket_id?: string | null
           routing_action?: string | null
@@ -557,6 +561,8 @@ export type Database = {
           parent_ticket_id?: string | null
           pending_email_id?: string | null
           processed_at?: string | null
+          processing_locked_at?: string | null
+          processing_locked_by?: string | null
           received_at?: string
           routed_ticket_id?: string | null
           routing_action?: string | null
