@@ -304,6 +304,77 @@ export default function InboundEmailEvents() {
             onMarkReviewed={() => runAction("mark_reviewed")}
           />
 
+          {/* ── Phase 9 — Open-ticket suggestion ─────────────────────── */}
+          {suggestionLoading && (
+            <div className="text-xs text-muted-foreground flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> A procurar tickets abertos deste cliente…
+            </div>
+          )}
+          {!suggestionLoading && suggestion && suggestion.candidates.length > 0 && (() => {
+            const openOnes = suggestion.candidates.filter((c) => !c.is_closed && !c.is_resolved);
+            const closedOnly = openOnes.length === 0;
+            return (
+              <div
+                className={`rounded-lg border p-3 space-y-2 ${
+                  closedOnly
+                    ? "border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/60"
+                    : "border-primary/30 bg-primary/5"
+                }`}
+              >
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  {closedOnly ? <AlertTriangle className="h-4 w-4 text-amber-600" /> : <Link2 className="h-4 w-4 text-primary" />}
+                  {closedOnly
+                    ? "Existe um ticket anterior, mas está fechado/resolvido"
+                    : suggestion.recommendation === "auto_append_safe"
+                      ? "Existe ticket aberto deste cliente"
+                      : `Vários tickets abertos deste cliente (${openOnes.length})`}
+                </div>
+                {closedOnly && (
+                  <p className="text-xs text-muted-foreground">
+                    Não é permitido anexar a um ticket fechado. Crie um novo ticket (continuação) em vez disso.
+                  </p>
+                )}
+                {!closedOnly && suggestion.recommendation === "manual_select" && (
+                  <p className="text-xs text-muted-foreground">
+                    Existem vários candidatos — escolha manualmente o ticket correto.
+                  </p>
+                )}
+                <div className="space-y-1.5">
+                  {(closedOnly ? suggestion.candidates : openOnes).slice(0, 5).map((c) => (
+                    <div key={c.ticket_id} className="flex items-center justify-between gap-3 rounded-md bg-background border px-3 py-2 text-sm">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">
+                          #{c.ticket_number} — {c.subject}
+                          {(c.is_closed || c.is_resolved) && (
+                            <Badge variant="outline" className="ml-2 text-[10px]">
+                              {c.is_resolved ? "Resolvido" : "Fechado"}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {c.status}{c.priority ? ` • ${c.priority}` : ""}{" • atualizado "}
+                          {formatDistanceToNow(new Date(c.updated_at), { addSuffix: true, locale: pt })}
+                          {c.next_action ? ` • próx.: ${c.next_action}` : ""}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Link to={`/tickets/${c.ticket_id}`} onClick={(e) => e.stopPropagation()} className="text-xs text-primary hover:underline inline-flex items-center gap-1">
+                          Abrir <ExternalLink className="h-3 w-3" />
+                        </Link>
+                        {!c.is_closed && !c.is_resolved && (
+                          <Button size="sm" onClick={() => runAction("append_to_ticket", { ticket_id: c.ticket_id })} disabled={acting}>
+                            <Link2 className="h-3.5 w-3.5" /> Anexar
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+
           <div className="grid grid-cols-2 gap-4 text-sm">
             <Field label="Remetente" value={`${selected.from_name || ""} <${selected.from_address}>`} />
             <Field label="Assunto" value={selected.subject || "—"} />
