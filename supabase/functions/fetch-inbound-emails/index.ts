@@ -1585,6 +1585,8 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             }
             await fetchAttachmentsParts(imap, adminClient, seqNum, child.id, createdBy!);
 
+            await fireTicketCreatedConfirmation(child.id, "email_closed_continuation");
+
             created++;
             await imap.markAsSeen(seqNum);
             newEmailProcessed = true;
@@ -1914,6 +1916,8 @@ Deno.serve(async (req) => {
             ticket_id: child.id,
             rejection_reason: `Novo ticket criado (continuação do #${closedParentId})`,
           }).eq("id", pendingId);
+
+          await fireTicketCreatedConfirmation(child.id, "email_closed_continuation");
 
           return new Response(JSON.stringify({
             success: true,
