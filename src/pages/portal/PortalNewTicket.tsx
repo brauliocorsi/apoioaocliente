@@ -90,7 +90,12 @@ export default function PortalNewTicket() {
       setUploading(false);
     }
 
-    toast({ title: "Ticket criado com sucesso" });
+    // Fire-and-forget confirmation email — never blocks navigation
+    supabase.functions.invoke("send-ticket-created-confirmation", {
+      body: { ticket_id: data.id, source: "portal" },
+    }).catch((err) => console.error("Confirmation email failed:", err));
+
+    toast({ title: "Ticket criado com sucesso", description: "Enviámos uma confirmação por e-mail." });
     navigate(`/portal/tickets/${data.id}`);
     setLoading(false);
   };

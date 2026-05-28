@@ -44,6 +44,7 @@ export default function TicketNew() {
     delivery_type: "",
     pickup_date: "",
     product_name: "",
+    notify_client: false,
   });
   const [attachments, setAttachments] = useState<any[]>([]);
 
