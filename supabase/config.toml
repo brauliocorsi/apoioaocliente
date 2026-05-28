@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.handle-inbound-email-event-action]
 verify_jwt = false
+
+[functions.send-client-notification]
+verify_jwt = false
