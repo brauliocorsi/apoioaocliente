@@ -188,6 +188,43 @@ Deno.serve(async (req) => {
         return json({ success: false, message: tErr?.message || "Erro ao criar ticket" }, 500);
       }
 
+      // Race-condition guard: attach the new ticket to the event ONLY if no
+      // other concurrent request has already populated routed_ticket_id.
+      const { data: claimedRows, error: claimErr } = await admin
+        .from("inbound_email_events")
+        .update({
+          status: "processed",
+          routing_action: "manual_created_ticket",
+          routed_ticket_id: newTicket.id,
+          routing_reason: "Criado manualmente a partir da Caixa de Entrada",
+          processed_at: new Date().toISOString(),
+          action_metadata: mergedMeta,
+        })
+        .eq("id", eventId)
+        .is("routed_ticket_id", null)
+        .select("id");
+
+      if (claimErr) {
+        return json({ success: false, message: claimErr.message }, 500);
+      }
+
+      // Another concurrent call won the race — discard our just-created ticket
+      // and return the winner's ticket id so the UI stays consistent.
+      if (!claimedRows || claimedRows.length === 0) {
+        const { data: refreshed } = await admin
+          .from("inbound_email_events")
+          .select("routed_ticket_id")
+          .eq("id", eventId)
+          .maybeSingle();
+        // Best-effort cleanup of the duplicate ticket we created
+        await admin.from("tickets").delete().eq("id", newTicket.id);
+        return json({
+          success: true,
+          status: "already_created",
+          ticket_id: refreshed?.routed_ticket_id || null,
+        });
+      }
+
       await admin.from("email_threads").insert({
         ticket_id: newTicket.id,
         email_address: ev.from_address,
@@ -203,14 +240,6 @@ Deno.serve(async (req) => {
           rejection_reason: "Aprovado manualmente via Caixa de Entrada",
         }).eq("id", pe.id);
       }
-
-      await updateEvent({
-        status: "processed",
-        routing_action: "manual_created_ticket",
-        routed_ticket_id: newTicket.id,
-        routing_reason: "Criado manualmente a partir da Caixa de Entrada",
-        processed_at: new Date().toISOString(),
-      });
 
       // Fire confirmation (non-blocking via fetch with service-role token)
       try {
