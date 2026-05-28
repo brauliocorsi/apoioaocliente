@@ -374,10 +374,25 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
                 <div className="space-y-1.5">
                   <div><span className="text-muted-foreground">Categoria:</span> <span className="ml-2">{categoryName(ticket.category_id)}</span></div>
                   <div><span className="text-muted-foreground">Subcategoria:</span> <span className="ml-2">{subcategoryName(ticket.subcategory_id)}</span></div>
-                  <div><span className="text-muted-foreground">Atribuído a:</span> <span className="ml-2">{agentName(ticket.assigned_to)}</span></div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Atribuído a:</span>
+                    {ticket.assigned_to ? (
+                      <span>{agentName(ticket.assigned_to)}</span>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300">
+                        Sem responsável
+                      </Badge>
+                    )}
+                  </div>
                   <div><span className="text-muted-foreground">Criado:</span> <span className="ml-2">{new Date(ticket.created_at).toLocaleString("pt-PT")}</span></div>
                 </div>
               </div>
+
+              <hr className="border-border" />
+
+              {/* === Próxima ação === */}
+              <NextActionEditor ticket={ticket} onUpdate={onUpdate} />
+
 
               <hr className="border-border" />
 
