@@ -93,6 +93,28 @@ export default function InboundEmailEvents() {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter]);
 
+  // Phase 9 — fetch open-ticket suggestion whenever a non-terminal event is selected.
+  useEffect(() => {
+    setSuggestion(null);
+    if (!selected) return;
+    const TERMINAL = new Set(["processed", "duplicate", "spam", "ignored", "reviewed"]);
+    if (TERMINAL.has(selected.status)) return;
+    let cancelled = false;
+    setSuggestionLoading(true);
+    supabase.functions
+      .invoke("suggest-open-ticket-for-inbound-email", { body: { event_id: selected.id } })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error || !data) {
+          setSuggestion(null);
+        } else {
+          setSuggestion(data as any);
+        }
+      })
+      .finally(() => { if (!cancelled) setSuggestionLoading(false); });
+    return () => { cancelled = true; };
+  }, [selected?.id, selected?.status]);
+
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
     if (!s) return rows;
