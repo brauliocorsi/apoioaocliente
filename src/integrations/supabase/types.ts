@@ -1293,6 +1293,7 @@ export type Database = {
           is_personalized: boolean | null
           needs_tpa: boolean | null
           order_number: string | null
+          parent_ticket_id: string | null
           payment_method: string | null
           pickup_date: string | null
           priority: Database["public"]["Enums"]["ticket_priority"]
@@ -1338,6 +1339,7 @@ export type Database = {
           is_personalized?: boolean | null
           needs_tpa?: boolean | null
           order_number?: string | null
+          parent_ticket_id?: string | null
           payment_method?: string | null
           pickup_date?: string | null
           priority?: Database["public"]["Enums"]["ticket_priority"]
@@ -1383,6 +1385,7 @@ export type Database = {
           is_personalized?: boolean | null
           needs_tpa?: boolean | null
           order_number?: string | null
+          parent_ticket_id?: string | null
           payment_method?: string | null
           pickup_date?: string | null
           priority?: Database["public"]["Enums"]["ticket_priority"]
