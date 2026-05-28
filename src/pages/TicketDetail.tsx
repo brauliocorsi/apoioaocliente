@@ -1139,6 +1139,9 @@ export default function TicketDetail() {
             </CardContent>
           </Card>
 
+          {/* Unified ticket timeline (additive, read-only) */}
+          <TicketTimeline ticketId={ticket.id} preloadedMessages={messages as any} preloadedEvents={events as any} />
+
           {/* Internal Timeline */}
           <Card>
             <CardHeader><CardTitle className="text-sm">Timeline (Notas Internas & Emails)</CardTitle></CardHeader>
