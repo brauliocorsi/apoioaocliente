@@ -643,6 +643,7 @@ export default function TicketDetail() {
             <PriorityFlag priority={ticket.priority} showLabel />
           </div>
           <p className="text-sm text-muted-foreground">{ticket.client_name}{ticket.order_number ? ` · Enc. ${ticket.order_number}` : ""}{ticket.service_number ? ` · OS ${ticket.service_number}` : ""}</p>
+          <TicketContinuationBadges ticketId={ticket.id} parentTicketId={(ticket as any).parent_ticket_id} />
         </div>
         <div className="flex items-center gap-2">
           <Select value={ticket.status} onValueChange={updateStatus}>
