@@ -66,6 +66,16 @@ export default function InboundEmailEvents() {
   const [attachQuery, setAttachQuery] = useState("");
   const [attachResults, setAttachResults] = useState<any[]>([]);
   const [attachSearching, setAttachSearching] = useState(false);
+  const [suggestion, setSuggestion] = useState<{
+    candidates: Array<{
+      ticket_id: string; ticket_number: number | string; subject: string; status: string;
+      is_closed: boolean; is_resolved: boolean; assigned_to: string | null;
+      priority: string | null; updated_at: string;
+      next_action?: string | null; next_action_due_at?: string | null;
+    }>;
+    recommendation: "auto_append_safe" | "manual_select" | "no_open_ticket" | "closed_ticket_only";
+  } | null>(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
