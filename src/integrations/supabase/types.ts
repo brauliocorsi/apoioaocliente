@@ -637,6 +637,60 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          created_at: string
+          due_at: string | null
+          id: string
+          inbound_email_event_id: string | null
+          is_read: boolean
+          message: string | null
+          metadata: Json
+          priority: string
+          read_at: string | null
+          source: string | null
+          ticket_id: string | null
+          title: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          due_at?: string | null
+          id?: string
+          inbound_email_event_id?: string | null
+          is_read?: boolean
+          message?: string | null
+          metadata?: Json
+          priority?: string
+          read_at?: string | null
+          source?: string | null
+          ticket_id?: string | null
+          title: string
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          due_at?: string | null
+          id?: string
+          inbound_email_event_id?: string | null
+          is_read?: boolean
+          message?: string | null
+          metadata?: Json
+          priority?: string
+          read_at?: string | null
+          source?: string | null
+          ticket_id?: string | null
+          title?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       pending_emails: {
         Row: {
           attachments_meta: Json | null
@@ -1566,6 +1620,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_notification: {
+        Args: {
+          _due_at?: string
+          _inbound_email_event_id?: string
+          _message?: string
+          _metadata?: Json
+          _priority?: string
+          _source?: string
+          _ticket_id?: string
+          _title: string
+          _type: string
+          _user_id: string
+        }
+        Returns: string
+      }
       get_agent_profiles: {
         Args: never
         Returns: {
@@ -1582,6 +1651,18 @@ export type Database = {
         Returns: boolean
       }
       is_authenticated_agent: { Args: never; Returns: boolean }
+      notify_supervisors: {
+        Args: {
+          _inbound_email_event_id?: string
+          _message?: string
+          _metadata?: Json
+          _priority?: string
+          _ticket_id?: string
+          _title: string
+          _type: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "agent" | "supervisor" | "client"

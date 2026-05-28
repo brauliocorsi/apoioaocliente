@@ -313,3 +313,42 @@ Com os novos campos passamos a poder construir, sem refactor, queries para:
 **Base para futuro:** estes indicadores serão fonte para notificações reais, menções, SLA por etapa e cobrança automatizada — não implementados nesta fase.
 
 **Sem alterações destrutivas:** sem migrations, sem DROP/TRUNCATE/DELETE. Apenas leitura de tabelas existentes (`tickets`, `ticket_messages`, `ticket_statuses`, `profiles`, `categories`, `inbound_email_events`, `email_logs`).
+
+---
+
+## Fase 5B — Notificações internas, menções e prazos operacionais
+
+**Migration aditiva:** cria `public.notifications` com índices, RLS (recipient + supervisor read; só recipient marca como lida; INSERT apenas via service_role/SECURITY DEFINER triggers).
+
+**Helpers (SECURITY DEFINER, EXECUTE revogado de anon):**
+- `create_notification(...)` — idempotente: se já existir não lida para (user, type, ticket/event) apenas atualiza `updated_at`.
+- `notify_supervisors(...)` — itera supervisores ativos.
+
+**Triggers automáticos:**
+| Trigger | Fonte | Tipo gerado |
+|---|---|---|
+| `trg_notify_ticket_assignment` | `tickets` INSERT/UPDATE de `assigned_to` | `ticket_assigned`, `ticket_without_owner`, `ticket_continuation_created` |
+| `trg_notify_client_message` | `ticket_messages` INSERT (sender_type=client) | `ticket_reply_received`, `ticket_customer_waiting` |
+| `trg_notify_inbound_event_status` | `inbound_email_events` status change | `pending_email_review`, `email_quarantined`, `email_failed` |
+| `trg_notify_internal_mentions` | `ticket_events` INSERT (event_type='note') | `ticket_internal_mention` |
+
+**Menções:** regex `@([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9_-]+)`; resolve por primeiro nome / nome completo / nome sem espaços, case-insensitive. Limitação: ambiguidade entre homónimos resolve para o primeiro match e não notifica o próprio autor.
+
+**Edge Function `generate-operational-notifications`** (manual ou agendável):
+- varre tickets abertos com `next_action_due_at <= fim do dia`;
+- gera `ticket_next_action_due_today` ou `ticket_next_action_overdue`;
+- destinatário: `assigned_to` ou supervisores em fallback;
+- idempotente via `create_notification`.
+- Para agendar futuramente: pg_cron `select cron.schedule('op-notifs', '*/15 * * * *', $$ select net.http_post(...) $$);`.
+
+**UI:** `NotificationBell` extendido com terceira secção "Operacional" — badge inclui contagem combinada; suporte realtime via channel; clique navega para ticket ou `/inbound-events`; "marcar todas como lidas" cobre ambas as tabelas.
+
+**Acesso clientes do portal:** RLS denies — nenhuma policy concede acesso a roles sem `is_authenticated_agent()` ou supervisor.
+
+**Fora do âmbito (preparar Fase 5C — Notificações ao cliente):**
+- e-mail automático ao cliente quando agente responde / ticket resolvido / equipa pede informação;
+- centro de notificações no portal;
+- push browser, SMS, WhatsApp;
+- SLA avançado por etapa.
+
+**Sem alterações destrutivas:** tabela `agent_notifications` intacta; sem DROP/TRUNCATE/DELETE; sem mudança de status/SLA.

@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Bell, MessageSquare } from "lucide-react";
+import { Bell, MessageSquare, AlertTriangle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNavigate } from "react-router-dom";
@@ -26,10 +26,26 @@ interface UnreadTicket {
   latest_at: string;
 }
 
+// Fase 5B: new operational notifications table
+interface OpNotification {
+  id: string;
+  user_id: string;
+  ticket_id: string | null;
+  inbound_email_event_id: string | null;
+  type: string;
+  title: string;
+  message: string | null;
+  priority: string;
+  is_read: boolean;
+  read_at: string | null;
+  created_at: string;
+}
+
 export default function NotificationBell() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [opNotifications, setOpNotifications] = useState<OpNotification[]>([]);
   const [open, setOpen] = useState(false);
   const [senderNames, setSenderNames] = useState<Record<string, string>>({});
   const [unreadTickets, setUnreadTickets] = useState<UnreadTicket[]>([]);
@@ -107,7 +123,23 @@ export default function NotificationBell() {
     setUnreadTickets(result);
   }, [user]);
 
-  useEffect(() => { fetchNotifications(); fetchUnreadMessages(); }, [fetchNotifications, fetchUnreadMessages]);
+  // Fase 5B: load operational notifications
+  const fetchOpNotifications = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("notifications" as any)
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(30);
+    setOpNotifications((data as unknown as OpNotification[]) || []);
+  }, [user]);
+
+  useEffect(() => {
+    fetchNotifications();
+    fetchUnreadMessages();
+    fetchOpNotifications();
+  }, [fetchNotifications, fetchUnreadMessages, fetchOpNotifications]);
 
   useEffect(() => {
     if (!user) return;
@@ -124,23 +156,46 @@ export default function NotificationBell() {
         schema: "public",
         table: "ticket_messages",
       }, () => { fetchUnreadMessages(); })
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "notifications",
+        filter: `user_id=eq.${user.id}`,
+      }, () => { fetchOpNotifications(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, fetchNotifications, fetchUnreadMessages]);
+  }, [user, fetchNotifications, fetchUnreadMessages, fetchOpNotifications]);
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const unreadOpCount = opNotifications.filter((n) => !n.is_read).length;
   const unreadMsgCount = unreadTickets.reduce((sum, t) => sum + t.count, 0);
-  const totalBadge = unreadCount + unreadMsgCount;
+  const totalBadge = unreadCount + unreadMsgCount + unreadOpCount;
 
   const markRead = async (id: string) => {
     await supabase.from("agent_notifications").update({ is_read: true }).eq("id", id);
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n));
   };
 
+  const markOpRead = async (id: string) => {
+    await supabase.from("notifications" as any).update({ is_read: true, read_at: new Date().toISOString() }).eq("id", id);
+    setOpNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n));
+  };
+
   const markAllRead = async () => {
     if (!user) return;
-    await supabase.from("agent_notifications").update({ is_read: true }).eq("recipient_id", user.id).eq("is_read", false);
+    await Promise.all([
+      supabase.from("agent_notifications").update({ is_read: true }).eq("recipient_id", user.id).eq("is_read", false),
+      supabase.from("notifications" as any).update({ is_read: true, read_at: new Date().toISOString() }).eq("user_id", user.id).eq("is_read", false),
+    ]);
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setOpNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+  };
+
+  const handleClickOpNotification = (n: OpNotification) => {
+    markOpRead(n.id);
+    if (n.ticket_id) navigate(`/tickets/${n.ticket_id}`);
+    else if (n.inbound_email_event_id) navigate("/inbound-events");
+    setOpen(false);
   };
 
   const handleClickNotification = (n: Notification) => {
@@ -158,7 +213,7 @@ export default function NotificationBell() {
     setOpen(false);
   };
 
-  const hasAny = notifications.length > 0 || unreadTickets.length > 0;
+  const hasAny = notifications.length > 0 || unreadTickets.length > 0 || opNotifications.length > 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -263,6 +318,47 @@ export default function NotificationBell() {
                         <p className="text-xs text-muted-foreground mt-1">
                           {new Date(n.created_at).toLocaleString("pt-PT")}
                         </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Section: Operational notifications (Fase 5B) */}
+              {opNotifications.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 px-4 py-2 bg-muted/40 border-b border-t">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                    <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+                      Operacional
+                    </span>
+                    {unreadOpCount > 0 && (
+                      <Badge variant="destructive" className="ml-auto h-4 min-w-4 rounded-full px-1 text-[10px]">
+                        {unreadOpCount}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="divide-y">
+                    {opNotifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className={`px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors ${!n.is_read ? "bg-amber-50 dark:bg-amber-950/20" : ""}`}
+                        onClick={() => handleClickOpNotification(n)}
+                      >
+                        <div className="flex items-start gap-2">
+                          {n.priority === "urgent" && (
+                            <span className="mt-1 h-2 w-2 rounded-full bg-destructive shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium leading-tight">{n.title}</p>
+                            {n.message && (
+                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
+                            )}
+                            <p className="text-[11px] text-muted-foreground/70 mt-1">
+                              {new Date(n.created_at).toLocaleString("pt-PT")}
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
