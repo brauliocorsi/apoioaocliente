@@ -304,7 +304,65 @@ export default function OperationalDashboard() {
         <KpiCard icon={Flame} label="Tickets críticos" value={loading ? null : criticalTickets.length} tone="danger" anchor="critical" />
         <KpiCard icon={PackageSearch} label="Encomenda não verificada" value={loading ? null : orderUnverified.length} tone="muted" anchor="orders" />
         <KpiCard icon={PackageX} label="Encomendas com atenção" value={loading ? null : orderAttention.length} tone="warn" anchor="orders" />
+        <KpiCard icon={ShieldAlert} label="SLA vencido" value={loading ? null : slaBreached.length} tone="danger" anchor="sla-breached" />
+        <KpiCard icon={Clock} label="SLA em risco" value={loading ? null : slaWarning.length} tone="warn" anchor="sla-warning" />
+        <KpiCard icon={Clock} label="Primeira resp. vencida" value={loading ? null : frOverdue.length} tone="danger" anchor="sla-breached" />
+        <KpiCard icon={Clock} label="Resolução vencida" value={loading ? null : resOverdue.length} tone="danger" anchor="sla-breached" />
+        <KpiCard icon={UserX} label="Cliente sem atualização" value={loading ? null : custUpdateOverdue.length} tone="warn" anchor="cust-update" />
+        <KpiCard icon={Clock} label="SLA pausado" value={loading ? null : slaPaused.length} tone="muted" />
+        <KpiCard icon={Clock} label="Sem SLA" value={loading ? null : slaNone.length} tone="muted" />
       </section>
+
+      <ListSection id="sla-breached" title="SLA vencido" description="Tickets com primeira resposta, resolução ou atualização ao cliente em atraso.">
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Ticket</TableHead><TableHead>Cliente</TableHead><TableHead>Responsável</TableHead>
+            <TableHead>Tipo</TableHead><TableHead>Prazo</TableHead><TableHead>Atraso</TableHead>
+            <TableHead>Prio.</TableHead><TableHead></TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {slaBreached.slice(0, 50).map(t => {
+              const b = slaBreachLabel(t);
+              return (
+                <TableRow key={t.id}>
+                  <TableCell className="font-mono text-xs">#{t.ticket_number}</TableCell>
+                  <TableCell className="text-sm">{t.client_name}</TableCell>
+                  <TableCell className="text-sm">{t.assigned_to ? profileMap[t.assigned_to] || "—" : <Badge variant="outline">Sem resp.</Badge>}</TableCell>
+                  <TableCell className="text-xs">{b.label}</TableCell>
+                  <TableCell className="text-xs">{format(new Date(b.due), "dd/MM HH:mm", { locale: pt })}</TableCell>
+                  <TableCell className="text-xs text-destructive">{formatDistanceToNow(new Date(b.due), { locale: pt })}</TableCell>
+                  <TableCell><PriorityBadge p={t.priority} /></TableCell>
+                  <TableCell><OpenLink to={`/tickets/${t.id}`} /></TableCell>
+                </TableRow>
+              );
+            })}
+            {slaBreached.length === 0 && <EmptyRow cols={8} text="Sem SLA vencido." />}
+          </TableBody>
+        </Table>
+      </ListSection>
+
+      <ListSection id="cust-update" title="Clientes sem atualização" description="Tickets cujo prazo de próxima atualização ao cliente venceu.">
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Ticket</TableHead><TableHead>Cliente</TableHead><TableHead>Responsável</TableHead>
+            <TableHead>Atualização desde</TableHead><TableHead>Prio.</TableHead><TableHead></TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {custUpdateOverdue.slice(0, 50).map(t => (
+              <TableRow key={t.id}>
+                <TableCell className="font-mono text-xs">#{t.ticket_number}</TableCell>
+                <TableCell className="text-sm">{t.client_name}</TableCell>
+                <TableCell className="text-sm">{t.assigned_to ? profileMap[t.assigned_to] || "—" : <Badge variant="outline">Sem resp.</Badge>}</TableCell>
+                <TableCell className="text-xs text-destructive">{formatDistanceToNow(new Date(t.next_customer_update_due_at!), { locale: pt })}</TableCell>
+                <TableCell><PriorityBadge p={t.priority} /></TableCell>
+                <TableCell><OpenLink to={`/tickets/${t.id}`} /></TableCell>
+              </TableRow>
+            ))}
+            {custUpdateOverdue.length === 0 && <EmptyRow cols={6} text="Todos os clientes em dia." />}
+          </TableBody>
+        </Table>
+      </ListSection>
+
 
       {/* LISTS */}
       <ListSection id="no-response" title="Clientes sem resposta" description="Última mensagem é do cliente e nenhum agente respondeu desde então.">
