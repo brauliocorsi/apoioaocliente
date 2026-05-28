@@ -213,7 +213,7 @@ export default function NotificationBell() {
     setOpen(false);
   };
 
-  const hasAny = notifications.length > 0 || unreadTickets.length > 0;
+  const hasAny = notifications.length > 0 || unreadTickets.length > 0 || opNotifications.length > 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
