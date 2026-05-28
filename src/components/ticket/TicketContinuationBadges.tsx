@@ -30,35 +30,23 @@ export function TicketContinuationBadges({ ticketId, parentTicketId, basePath = 
     let cancelled = false;
 
     const load = async () => {
-      const tasks: Promise<unknown>[] = [];
-
       if (parentTicketId) {
-        tasks.push(
-          supabase
-            .from("tickets")
-            .select("id, ticket_number, subject")
-            .eq("id", parentTicketId)
-            .maybeSingle()
-            .then(({ data }) => {
-              if (!cancelled) setParent((data as MiniTicket) || null);
-            }),
-        );
+        const { data } = await supabase
+          .from("tickets")
+          .select("id, ticket_number, subject")
+          .eq("id", parentTicketId)
+          .maybeSingle();
+        if (!cancelled) setParent((data as MiniTicket) || null);
       } else {
         setParent(null);
       }
 
-      tasks.push(
-        supabase
-          .from("tickets")
-          .select("id, ticket_number, subject")
-          .eq("parent_ticket_id" as never, ticketId as never)
-          .order("ticket_number", { ascending: true })
-          .then(({ data }) => {
-            if (!cancelled) setChildren((data as MiniTicket[]) || []);
-          }),
-      );
-
-      await Promise.all(tasks);
+      const { data: kids } = await supabase
+        .from("tickets")
+        .select("id, ticket_number, subject")
+        .eq("parent_ticket_id" as never, ticketId as never)
+        .order("ticket_number", { ascending: true });
+      if (!cancelled) setChildren((kids as MiniTicket[]) || []);
     };
 
     void load();
