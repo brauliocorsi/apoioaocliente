@@ -320,6 +320,20 @@ export default function EmailTickets() {
 
   return (
     <div className="space-y-6">
+      <div className="rounded-lg border border-amber-300/60 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/60 px-4 py-3 text-sm flex items-start gap-3">
+        <Mail className="h-4 w-4 mt-0.5 text-amber-700 dark:text-amber-300 shrink-0" />
+        <div className="flex-1">
+          <p className="font-medium text-amber-900 dark:text-amber-100">
+            Esta área foi substituída pela Caixa de Entrada.
+          </p>
+          <p className="text-amber-800/80 dark:text-amber-200/80 text-xs mt-0.5">
+            Mantida apenas para compatibilidade. Use a Caixa de Entrada para processar e-mails recebidos.
+          </p>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => navigate("/inbound-events")}>
+          Abrir Caixa de Entrada
+        </Button>
+      </div>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
