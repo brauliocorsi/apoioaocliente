@@ -226,11 +226,4 @@ Proibido nesta fase: alterar o tipo de `tickets.status`, criar FK que rejeite da
 - Backend `fetch-inbound-emails` **não foi tocado** desde a Fase 2.
 
 
----
-
-## Observações importantes
-- **Nada foi apagado nem renomeado.**
-- Adicionados nesta fase 2.1: edge function `handle-inbound-email-event-action`, coluna aditiva `inbound_email_events.action_metadata`, índices não-únicos em `status` / `received_at`, ações operacionais no UI da Caixa de Entrada.
-- Anteriormente adicionados: `src/pages/InboundEmailEvents.tsx`, rota `/inbound-events`, item de menu "Caixa de Entrada".
-- Backend `fetch-inbound-emails` **não foi tocado** nesta fase.
 
