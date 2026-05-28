@@ -65,6 +65,8 @@ type Ticket = {
   resolved_at: string | null;
   next_customer_update_due_at: string | null;
   sla_paused: boolean | null;
+  sla_paused_at: string | null;
+  sla_paused_reason: string | null;
   sla_breached: boolean | null;
   sla_status: string | null;
 };
