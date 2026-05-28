@@ -1401,6 +1401,7 @@ export type Database = {
           name: string
           pauses_sla: boolean | null
           sla_minutes: number | null
+          sla_pause_reason: string | null
           sort_order: number
         }
         Insert: {
@@ -1412,6 +1413,7 @@ export type Database = {
           name: string
           pauses_sla?: boolean | null
           sla_minutes?: number | null
+          sla_pause_reason?: string | null
           sort_order?: number
         }
         Update: {
@@ -1423,6 +1425,7 @@ export type Database = {
           name?: string
           pauses_sla?: boolean | null
           sla_minutes?: number | null
+          sla_pause_reason?: string | null
           sort_order?: number
         }
         Relationships: []
@@ -1689,6 +1692,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_business_hours: {
+        Args: { _hours: number; _start: string }
+        Returns: string
+      }
+      business_minutes_between: {
+        Args: { _end: string; _start: string }
+        Returns: number
+      }
       create_client_notification: {
         Args: {
           _client_user_id: string
@@ -1732,6 +1743,8 @@ export type Database = {
         Returns: boolean
       }
       is_authenticated_agent: { Args: never; Returns: boolean }
+      is_business_day_lx: { Args: { _d: string }; Returns: boolean }
+      next_business_window_start: { Args: { _ts: string }; Returns: string }
       notify_supervisors: {
         Args: {
           _inbound_email_event_id?: string
