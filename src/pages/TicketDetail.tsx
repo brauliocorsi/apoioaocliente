@@ -25,6 +25,7 @@ import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import MentionTextarea from "@/components/MentionTextarea";
 import ResolutionCard from "@/components/ticket/ResolutionCard";
 import MessageReactions from "@/components/chat/MessageReactions";
+import { TicketContinuationBadges } from "@/components/ticket/TicketContinuationBadges";
 
 // Detect HTML content
 function isHtmlContent(text: string): boolean {
