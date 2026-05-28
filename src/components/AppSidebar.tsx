@@ -21,6 +21,7 @@ const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Tickets", url: "/tickets", icon: Ticket },
   { title: "Email Tickets", url: "/email-tickets", icon: Mail },
+  { title: "Caixa de Entrada", url: "/inbound-events", icon: Inbox },
   { title: "Ligações", url: "/phone-calls", icon: Phone },
   { title: "Encomendas", url: "/delayed-orders", icon: AlertTriangle },
   { title: "Reg. Ligações", url: "/delivery-confirmations", icon: Truck },
