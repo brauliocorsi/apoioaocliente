@@ -1,8 +1,20 @@
 // Sends an automatic "ticket created" confirmation to the client.
-// Invoked from: fetch-inbound-emails (email + closed-continuation),
-// PortalNewTicket (portal), TicketNew (manual agent if "notify_client").
+// Invoked from: fetch-inbound-emails (email + closed-continuation) using service_role,
+// PortalNewTicket (authenticated client), TicketNew (authenticated agent).
 //
-// Never throws if email fails — caller's ticket creation must not roll back.
+// Security model:
+//   - verify_jwt = false in config.toml so internal service_role calls and
+//     authenticated invocations are both accepted, but ALL callers MUST present
+//     a valid Authorization: Bearer <JWT>. JWT role determines authorization:
+//       * service_role  -> trusted internal call (fetch-inbound-emails)
+//       * authenticated -> must own the ticket (client_user_id = sub)
+//                          OR be an agent/supervisor.
+//     Anonymous / missing / invalid JWT -> 401. No anon key calls allowed.
+//   - The recipient email is ALWAYS resolved from the ticket in DB.
+//     Payload fields like toEmail/clientName are ignored.
+//   - Idempotent: if a previous "sent" log exists for this ticket+source,
+//     returns { status: "already_sent" } without re-sending.
+//   - Never throws to caller on email failure — ticket creation must not roll back.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
@@ -12,10 +24,15 @@ const corsHeaders = {
 };
 
 type Source = "email" | "email_closed_continuation" | "portal" | "manual_agent";
+type CallerKind = "internal" | "portal" | "agent" | "email";
 
-// Helper: decide if a confirmation should be sent based on sender / subject / headers.
-// Exported semantics — applied to the *recipient* email (since the recipient
-// of the confirmation is the same address that originated the ticket).
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 function shouldSendTicketConfirmation(opts: {
   fromEmail?: string | null;
   subject?: string | null;
@@ -29,13 +46,9 @@ function shouldSendTicketConfirmation(opts: {
 
   const subject = (opts.subject || "").toLowerCase();
   const blockedSubjects = [
-    "auto-reply",
-    "automatic reply",
-    "out of office",
-    "fora do escritório",
-    "fora do escritorio",
-    "undeliverable",
-    "delivery status notification",
+    "auto-reply", "automatic reply", "out of office",
+    "fora do escritório", "fora do escritorio",
+    "undeliverable", "delivery status notification",
   ];
   if (blockedSubjects.some((s) => subject.includes(s))) return false;
 
@@ -67,6 +80,10 @@ async function getEmailConfig(adminClient: ReturnType<typeof createClient>) {
   return cfg;
 }
 
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+
 function buildEmail(ticketNumber: number | string, clientName: string | null | undefined, subject: string | null | undefined) {
   const greeting = clientName && clientName.trim() ? `Olá ${clientName.trim()},` : "Olá,";
   const resumo = (subject || "—").trim();
@@ -96,10 +113,6 @@ UP Móveis — Apoio ao Cliente`;
   return { text, html, subject: `Recebemos o seu pedido — Ticket #${ticketNumber}` };
 }
 
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-}
-
 async function sendViaResend(from: string, to: string, subject: string, text: string, html: string) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) throw new Error("RESEND_API_KEY não configurada");
@@ -126,36 +139,88 @@ async function sendViaSmtp(cfg: Record<string, string>, to: string, subject: str
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method !== "POST") return jsonResponse({ success: false, message: "Method not allowed" }, 405);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+  // ---- AUTH ----------------------------------------------------------------
+  const authHeader = req.headers.get("Authorization") || "";
+  if (!authHeader.toLowerCase().startsWith("bearer ")) {
+    return jsonResponse({ success: false, message: "Unauthorized" }, 401);
+  }
+  const token = authHeader.slice(7).trim();
+  if (!token) return jsonResponse({ success: false, message: "Unauthorized" }, 401);
+
+  // Reject anon-key calls outright (anon key would let the public hit this).
+  if (token === anonKey) {
+    return jsonResponse({ success: false, message: "Anonymous calls not allowed" }, 401);
+  }
+
+  let callerKind: CallerKind;
+  let callerSub: string | null = null;
+
+  if (token === serviceRoleKey) {
+    callerKind = "internal";
+  } else {
+    // Validate user JWT via auth.getClaims
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: claimsData, error: claimsErr } = await userClient.auth.getClaims(token);
+    if (claimsErr || !claimsData?.claims?.sub) {
+      return jsonResponse({ success: false, message: "Invalid token" }, 401);
+    }
+    callerSub = claimsData.claims.sub as string;
+    callerKind = "portal"; // resolved below based on ticket ownership / role
+  }
 
   try {
     const body = await req.json().catch(() => ({}));
     const ticketId: string | undefined = body.ticket_id;
     const source: Source = body.source || "manual_agent";
-    const headers = body.headers as Record<string, string> | null | undefined;
+    // Only trust client-provided "headers" hint for skipping when called internally.
+    const headers = callerKind === "internal"
+      ? (body.headers as Record<string, string> | null | undefined)
+      : null;
 
-    if (!ticketId) {
-      return new Response(JSON.stringify({ success: false, message: "ticket_id obrigatório" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!ticketId || typeof ticketId !== "string") {
+      return jsonResponse({ success: false, message: "ticket_id obrigatório" }, 400);
     }
 
+    // Fetch ticket (recipient and subject ALWAYS come from DB — never from payload)
     const { data: ticket } = await adminClient
       .from("tickets")
       .select("id, ticket_number, subject, client_name, client_email, client_user_id")
       .eq("id", ticketId)
       .single();
 
-    if (!ticket) {
-      return new Response(JSON.stringify({ success: false, message: "Ticket não encontrado" }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!ticket) return jsonResponse({ success: false, message: "Ticket não encontrado" }, 404);
+
+    // ---- AUTHORIZATION -----------------------------------------------------
+    if (callerKind !== "internal") {
+      // Check if caller is the ticket's client owner
+      const isOwner = ticket.client_user_id && callerSub && ticket.client_user_id === callerSub;
+
+      if (isOwner) {
+        callerKind = "portal";
+      } else {
+        // Otherwise must be agent/supervisor
+        const { data: roleRows } = await adminClient
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", callerSub!);
+        const roles = (roleRows || []).map((r: { role: string }) => r.role);
+        if (!roles.includes("agent") && !roles.includes("supervisor")) {
+          return jsonResponse({ success: false, message: "Forbidden" }, 403);
+        }
+        callerKind = "agent";
+      }
     }
 
-    // Resolve recipient: prefer linked client_users record, fallback to ticket.client_email
+    // Resolve recipient (prefer linked client_users record)
     let toEmail = ticket.client_email as string | null;
     let toName = ticket.client_name as string | null;
     if (ticket.client_user_id) {
@@ -168,9 +233,21 @@ Deno.serve(async (req) => {
     }
 
     if (!toEmail) {
-      return new Response(JSON.stringify({ success: false, message: "Sem e-mail do cliente" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ success: false, message: "Sem e-mail do cliente" }, 200);
+    }
+
+    // ---- IDEMPOTENCY: don't resend if a previous "sent" log exists ---------
+    const { data: existingSent } = await adminClient
+      .from("email_logs")
+      .select("id")
+      .eq("ticket_id", ticketId)
+      .eq("source", "ticket_created_confirmation")
+      .eq("status", "sent")
+      .limit(1)
+      .maybeSingle();
+
+    if (existingSent) {
+      return jsonResponse({ success: true, status: "already_sent" }, 200);
     }
 
     if (!shouldSendTicketConfirmation({ fromEmail: toEmail, subject: ticket.subject, headers })) {
@@ -178,11 +255,9 @@ Deno.serve(async (req) => {
         recipient: toEmail, subject: `Ticket #${ticket.ticket_number}`,
         status: "skipped", source: "ticket_created_confirmation",
         ticket_id: ticketId,
-        delivery_details: `skipped:${source}:auto-sender`,
+        delivery_details: `caller:${callerKind}:src:${source}:auto-sender`,
       });
-      return new Response(JSON.stringify({ success: true, skipped: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ success: true, skipped: true });
     }
 
     const cfg = await getEmailConfig(adminClient);
@@ -202,27 +277,21 @@ Deno.serve(async (req) => {
       await adminClient.from("email_logs").insert({
         recipient: toEmail, subject, status: "sent",
         source: "ticket_created_confirmation", ticket_id: ticketId,
-        delivery_details: `source:${source}:${useResend ? "resend" : "smtp"}`,
+        delivery_details: `caller:${callerKind}:src:${source}:${useResend ? "resend" : "smtp"}`,
       });
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ success: true, status: "sent" });
     } catch (sendErr) {
       const msg = (sendErr as Error).message;
       await adminClient.from("email_logs").insert({
         recipient: toEmail, subject, status: "failed",
         error_message: msg, source: "ticket_created_confirmation",
-        ticket_id: ticketId, delivery_details: `source:${source}`,
+        ticket_id: ticketId, delivery_details: `caller:${callerKind}:src:${source}`,
       });
-      // never throw to caller — ticket creation must not be affected
-      return new Response(JSON.stringify({ success: false, message: msg }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      // never throw — caller's ticket creation must not be affected
+      return jsonResponse({ success: false, status: "failed", message: msg });
     }
   } catch (err) {
     console.error("send-ticket-created-confirmation error:", (err as Error).message);
-    return new Response(JSON.stringify({ success: false, message: (err as Error).message }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ success: false, message: (err as Error).message });
   }
 });
