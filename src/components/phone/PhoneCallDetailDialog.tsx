@@ -234,10 +234,25 @@ export default function PhoneCallDetailDialog({ call, open, onClose, onUpdated }
           {/* Call info */}
           <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
             <div className="text-sm"><span className="text-muted-foreground font-medium">Assunto:</span> {call.subject}</div>
-            <div className="flex gap-4 text-sm">
+            <div className="flex gap-4 text-sm flex-wrap">
               <span><span className="text-muted-foreground font-medium">Nota:</span> {call.invoice_number || "—"}</span>
+              {call.direction && (
+                <span className="flex items-center gap-1 text-xs">
+                  {call.direction === "incoming" ? <PhoneIncoming className="h-3 w-3 text-success" /> : <PhoneOutgoing className="h-3 w-3 text-primary" />}
+                  {call.direction === "incoming" ? "Recebida" : call.direction === "outgoing" ? "Efetuada" : "Interna"}
+                  {typeof call.duration_seconds === "number" && ` · ${Math.floor(call.duration_seconds / 60)}m ${call.duration_seconds % 60}s`}
+                  {call.attended === false && " · Não atendida"}
+                </span>
+              )}
+              {call.source === "letscall" && (
+                <Badge variant="outline" className="text-[10px] gap-1 h-5"><Zap className="h-2.5 w-2.5" /> Auto</Badge>
+              )}
             </div>
           </div>
+
+          {/* Let's Call actions */}
+          <LetsCallActions call={call} />
+
 
           {/* Agent assignment */}
           <div className="space-y-2">
