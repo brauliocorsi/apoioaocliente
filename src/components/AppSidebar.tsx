@@ -50,8 +50,6 @@ const groups: Group[] = [
     label: "Gestão",
     items: [
       { title: "Macros", url: "/macros", icon: MessageSquareText },
-      { title: "Categorias", url: "/categories", icon: FolderTree },
-      { title: "Etiquetas", url: "/tags", icon: Tag },
     ],
   },
   {
