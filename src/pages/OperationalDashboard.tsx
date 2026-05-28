@@ -201,6 +201,40 @@ export default function OperationalDashboard() {
   const orderUnverified = openTickets.filter(t => t.order_number && (!t.order_lookup_status || t.order_lookup_status === "not_checked"));
   const orderAttention = openTickets.filter(t => ["not_found", "error", "multiple_matches", "mismatch"].includes(t.order_lookup_status || ""));
 
+  // --- Fase 6: SLA derived lists -----------------------------------------
+  const WARN_MS = 2 * 60 * 60 * 1000;
+  const slaBreached = openTickets.filter(t => !t.sla_paused && (
+    (!t.first_responded_at && t.sla_first_response_at && new Date(t.sla_first_response_at).getTime() < now) ||
+    (!t.resolved_at && t.sla_resolution_at && new Date(t.sla_resolution_at).getTime() < now) ||
+    (t.next_customer_update_due_at && new Date(t.next_customer_update_due_at).getTime() < now)
+  ));
+  const slaWarning = openTickets.filter(t => !t.sla_paused && !slaBreached.includes(t) && (
+    (!t.first_responded_at && t.sla_first_response_at && new Date(t.sla_first_response_at).getTime() - now <= WARN_MS && new Date(t.sla_first_response_at).getTime() > now) ||
+    (!t.resolved_at && t.sla_resolution_at && new Date(t.sla_resolution_at).getTime() - now <= WARN_MS && new Date(t.sla_resolution_at).getTime() > now)
+  ));
+  const frOverdue = openTickets.filter(t => !t.sla_paused && !t.first_responded_at && t.sla_first_response_at && new Date(t.sla_first_response_at).getTime() < now);
+  const resOverdue = openTickets.filter(t => !t.sla_paused && !t.resolved_at && t.sla_resolution_at && new Date(t.sla_resolution_at).getTime() < now);
+  const custUpdateOverdue = openTickets.filter(t => !t.sla_paused && t.next_customer_update_due_at && new Date(t.next_customer_update_due_at).getTime() < now);
+  const slaPaused = openTickets.filter(t => t.sla_paused);
+  const slaNone = openTickets.filter(t => !t.sla_first_response_at && !t.sla_resolution_at);
+  slaBreached.sort((a, b) => {
+    const da = Math.min(...[a.sla_first_response_at, a.sla_resolution_at, a.next_customer_update_due_at].filter(Boolean).map(s => new Date(s as string).getTime()));
+    const db = Math.min(...[b.sla_first_response_at, b.sla_resolution_at, b.next_customer_update_due_at].filter(Boolean).map(s => new Date(s as string).getTime()));
+    return da - db;
+  });
+
+  function slaBreachLabel(t: Ticket): { label: string; due: string } {
+    const now2 = Date.now();
+    const opts: Array<{ label: string; due: string }> = [];
+    if (!t.first_responded_at && t.sla_first_response_at && new Date(t.sla_first_response_at).getTime() < now2)
+      opts.push({ label: "Primeira resposta", due: t.sla_first_response_at });
+    if (!t.resolved_at && t.sla_resolution_at && new Date(t.sla_resolution_at).getTime() < now2)
+      opts.push({ label: "Resolução", due: t.sla_resolution_at });
+    if (t.next_customer_update_due_at && new Date(t.next_customer_update_due_at).getTime() < now2)
+      opts.push({ label: "Atualização ao cliente", due: t.next_customer_update_due_at });
+    return opts.sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())[0] || { label: "SLA", due: t.created_at };
+  }
+
   // By responsible
   const byResp = useMemo(() => {
     const groups: Record<string, { name: string; open: number; noResp: number; overdue: number; today: number; noAction: number; critical: number; continuation: number }> = {};
