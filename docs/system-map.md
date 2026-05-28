@@ -100,7 +100,91 @@ Administração
 
 ---
 
+## 7. Gerência operacional — Alessandra
+
+**Contexto humano (Maio 2026):**
+- Matheus deixou de ser gerente operacional.
+- Alessandra assumiu a coordenação operacional global.
+- Coordena: escritório de apoio ao cliente, armazém, fábrica, ligação com logística e ligação com loja física / vendas.
+- O sistema futuro deve dar-lhe **clareza operacional em tempo real**: o que está parado, o que falhou, onde existe risco, e quem é responsável.
+
+### Visão futura: Painel Operacional (não implementar ainda)
+
+**Atendimento**
+- tickets novos / sem responsável / sem resposta / vencidos / a vencer hoje
+- tickets reabertos / continuação (`parent_ticket_id`)
+- clientes a aguardar resposta
+
+**Armazém**
+- pedidos prontos / incompletos / com divergência
+- pendências de separação
+- pedidos não localizados
+
+**Fábrica**
+- pedidos em produção / atrasados / bloqueados por falta de material
+- produção prometida para 24/48h
+
+**Logística**
+- entregas agendadas / sem rota / atrasadas / reagendadas
+- clientes sem contacto confirmado
+
+**Loja**
+- promessas feitas ao cliente / vendas sem data clara
+- reclamações vindas da loja / encomendas sem atualização
+
+---
+
+## 8. Arquitetura futura de notificações, menções e prazos
+
+Não implementar agora. Documenta-se para servir de norte às próximas fases.
+
+O sistema futuro precisa de:
+- notificações internas para agentes/supervisores;
+- menções `@nome` em notas e mensagens internas;
+- notificações para o cliente (portal + e-mail);
+- prazo claro por ticket (próxima ação, responsável, data-limite);
+- SLA de **primeira resposta** e SLA de **resolução** distintos;
+- alertas proativos de vencimento e de tickets parados.
+
+### Tipos futuros de notificações
+
+```
+ticket_assigned
+ticket_reply_received
+ticket_customer_waiting
+ticket_internal_mention
+ticket_sla_warning
+ticket_sla_breached
+ticket_due_today
+ticket_overdue
+ticket_continuation_created
+ticket_status_changed
+email_failed
+email_quarantined
+pending_email_review
+client_portal_message
+```
+
+Não criar tabelas novas agora. `agent_notifications` já existe e cobre parte (`mention`, `client_message`) e deve evoluir para suportar esta taxonomia sem migrações destrutivas.
+
+---
+
+## 9. Atualização do plano faseado
+
+- **Fase 1 — Segurança e preservação de dados**: revisar `verify_jwt`, bloquear buckets públicos sensíveis, auditar RLS.
+- **Fase 2 — Caixa de Entrada operacional** ✅ entregue (ações manuais via `handle-inbound-email-event-action`).
+- **Fase 3 — Ticket como centro do sistema**: timeline única, normalizar `status` em FK.
+- **Fase 4 — Integração com encomendas/GestãoClick**.
+- **Fase 5 — SLA real** (horário comercial + alertas).
+- **Fase 6 — Painel Operacional (Alessandra)** + simplificação do menu.
+- **Fase 7 — Notificações estruturadas e menções** (secção 8).
+- **Fase 8 — IA e automações** (triagem, extração de encomenda, sugestões de macro).
+
+---
+
 ## Observações importantes
-- **Nada foi apagado nem renomeado** nesta tarefa.
-- Apenas foram adicionados: `src/pages/InboundEmailEvents.tsx`, rota `/inbound-events`, item de menu "Caixa de Entrada", este documento.
-- Backend (`fetch-inbound-emails`, migrations) **não foi alterado**.
+- **Nada foi apagado nem renomeado.**
+- Adicionados nesta fase 2.1: edge function `handle-inbound-email-event-action`, coluna aditiva `inbound_email_events.action_metadata`, índices não-únicos em `status` / `received_at`, ações operacionais no UI da Caixa de Entrada.
+- Anteriormente adicionados: `src/pages/InboundEmailEvents.tsx`, rota `/inbound-events`, item de menu "Caixa de Entrada".
+- Backend `fetch-inbound-emails` **não foi tocado** nesta fase.
+

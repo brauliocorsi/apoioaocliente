@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Mail, ExternalLink, RefreshCw } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { toast } from "@/hooks/use-toast";
+import { Loader2, Mail, ExternalLink, RefreshCw, CheckCircle, Ban, ShieldOff, Archive, Link2, Plus, AlertTriangle } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { pt } from "date-fns/locale";
 
@@ -27,6 +29,7 @@ type EventRow = {
   pending_email_id: string | null;
   error_message: string | null;
   body_preview: string | null;
+  action_metadata: any;
 };
 
 const FILTERS = [
@@ -36,6 +39,8 @@ const FILTERS = [
   { key: "quarantined", label: "Quarentena", statuses: ["quarantined"] },
   { key: "failed", label: "Falhas", statuses: ["failed"] },
   { key: "duplicate", label: "Duplicados", statuses: ["duplicate"] },
+  { key: "spam", label: "Spam", statuses: ["spam"] },
+  { key: "ignored", label: "Ignorados", statuses: ["ignored", "reviewed"] },
 ];
 
 const STATUS_BADGES: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -45,6 +50,9 @@ const STATUS_BADGES: Record<string, { label: string; variant: "default" | "secon
   failed: { label: "Falha", variant: "destructive" },
   duplicate: { label: "Duplicado", variant: "outline" },
   received: { label: "Recebido", variant: "outline" },
+  spam: { label: "Spam", variant: "destructive" },
+  ignored: { label: "Ignorado", variant: "outline" },
+  reviewed: { label: "Revisto", variant: "outline" },
 };
 
 export default function InboundEmailEvents() {
@@ -53,6 +61,11 @@ export default function InboundEmailEvents() {
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<EventRow | null>(null);
+  const [acting, setActing] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [attachQuery, setAttachQuery] = useState("");
+  const [attachResults, setAttachResults] = useState<any[]>([]);
+  const [attachSearching, setAttachSearching] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -61,19 +74,14 @@ export default function InboundEmailEvents() {
       .select("*")
       .order("received_at", { ascending: false })
       .limit(500);
-
     const f = FILTERS.find((x) => x.key === filter);
     if (f?.statuses) q = q.in("status", f.statuses);
-
     const { data, error } = await q;
     if (!error && data) setRows(data as any);
     setLoading(false);
   };
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter]);
 
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -85,6 +93,72 @@ export default function InboundEmailEvents() {
         r.routed_ticket_id?.toLowerCase().includes(s),
     );
   }, [rows, search]);
+
+  async function runAction(action: string, extra: Record<string, unknown> = {}) {
+    if (!selected) return;
+    setActing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("handle-inbound-email-event-action", {
+        body: { event_id: selected.id, action, ...extra },
+      });
+      if (error) throw error;
+      if (data && (data as any).success === false) {
+        toast({
+          title: (data as any).code === "ticket_closed" ? "Ticket fechado" : "Ação bloqueada",
+          description: (data as any).message || "Não foi possível concluir.",
+          variant: "destructive",
+        });
+        return null;
+      }
+      toast({ title: "Ação executada", description: actionLabel(action) });
+      await load();
+      // refresh selected
+      const updated = await supabase
+        .from("inbound_email_events")
+        .select("*")
+        .eq("id", selected.id)
+        .maybeSingle();
+      if (updated.data) setSelected(updated.data as any);
+      return data;
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message || String(err), variant: "destructive" });
+      return null;
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function searchTickets() {
+    const q = attachQuery.trim();
+    if (!q) return;
+    setAttachSearching(true);
+    let query = supabase
+      .from("tickets")
+      .select("id, ticket_number, subject, client_name, client_email, status")
+      .order("created_at", { ascending: false })
+      .limit(15);
+
+    const asNumber = Number(q.replace(/^#/, ""));
+    if (!isNaN(asNumber) && asNumber > 0 && /^#?\d+$/.test(q)) {
+      query = query.eq("ticket_number", asNumber);
+    } else {
+      query = query.or(
+        `subject.ilike.%${q}%,client_email.ilike.%${q}%,client_name.ilike.%${q}%`,
+      );
+    }
+    const { data } = await query;
+    setAttachResults(data || []);
+    setAttachSearching(false);
+  }
+
+  async function attachToTicket(ticketId: string) {
+    const res = await runAction("append_to_ticket", { ticket_id: ticketId });
+    if (res) {
+      setAttachOpen(false);
+      setAttachQuery("");
+      setAttachResults([]);
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -107,12 +181,7 @@ export default function InboundEmailEvents() {
       <Card className="p-4 space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           {FILTERS.map((f) => (
-            <Button
-              key={f.key}
-              size="sm"
-              variant={filter === f.key ? "default" : "outline"}
-              onClick={() => setFilter(f.key)}
-            >
+            <Button key={f.key} size="sm" variant={filter === f.key ? "default" : "outline"} onClick={() => setFilter(f.key)}>
               {f.label}
             </Button>
           ))}
@@ -130,9 +199,7 @@ export default function InboundEmailEvents() {
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="py-12 text-center text-sm text-muted-foreground">
-            Sem eventos para os filtros selecionados.
-          </div>
+          <div className="py-12 text-center text-sm text-muted-foreground">Sem eventos para os filtros selecionados.</div>
         ) : (
           <Table>
             <TableHeader>
@@ -144,7 +211,6 @@ export default function InboundEmailEvents() {
                 <TableHead>Spam</TableHead>
                 <TableHead>Ação</TableHead>
                 <TableHead>Ticket</TableHead>
-                <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -160,39 +226,20 @@ export default function InboundEmailEvents() {
                       {r.from_name && <div className="text-xs text-muted-foreground">{r.from_address}</div>}
                     </TableCell>
                     <TableCell className="text-sm max-w-[280px] truncate">{r.subject || "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={badge.variant}>{badge.label}</Badge>
-                    </TableCell>
+                    <TableCell><Badge variant={badge.variant}>{badge.label}</Badge></TableCell>
                     <TableCell className="text-xs">
-                      <span
-                        className={
-                          r.spam_score >= 80
-                            ? "text-destructive font-semibold"
-                            : r.spam_score >= 40
-                            ? "text-amber-600 font-medium"
-                            : "text-muted-foreground"
-                        }
-                      >
+                      <span className={r.spam_score >= 80 ? "text-destructive font-semibold" : r.spam_score >= 40 ? "text-amber-600 font-medium" : "text-muted-foreground"}>
                         {r.spam_score}
                       </span>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {r.routing_action || "—"}
-                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{r.routing_action || "—"}</TableCell>
                     <TableCell>
                       {r.routed_ticket_id ? (
-                        <Link
-                          to={`/tickets/${r.routed_ticket_id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-primary hover:underline text-xs inline-flex items-center gap-1"
-                        >
+                        <Link to={`/tickets/${r.routed_ticket_id}`} onClick={(e) => e.stopPropagation()} className="text-primary hover:underline text-xs inline-flex items-center gap-1">
                           Abrir <ExternalLink className="h-3 w-3" />
                         </Link>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
+                      ) : <span className="text-xs text-muted-foreground">—</span>}
                     </TableCell>
-                    <TableCell></TableCell>
                   </TableRow>
                 );
               })}
@@ -202,7 +249,7 @@ export default function InboundEmailEvents() {
       </Card>
 
       {selected && (
-        <Card className="p-5 space-y-3">
+        <Card className="p-5 space-y-4">
           <div className="flex items-start justify-between">
             <div>
               <h2 className="font-semibold">Detalhe do evento</h2>
@@ -210,75 +257,177 @@ export default function InboundEmailEvents() {
                 {format(new Date(selected.received_at), "dd/MM/yyyy HH:mm", { locale: pt })}
               </p>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>
-              Fechar
-            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSelected(null)}>Fechar</Button>
           </div>
+
+          {/* ── Actions toolbar ─────────────────────────────────────── */}
+          <ActionToolbar
+            event={selected}
+            acting={acting}
+            onCreate={() => runAction("create_ticket")}
+            onAttach={() => { setAttachOpen(true); setAttachQuery(selected.from_address || ""); }}
+            onSpam={() => runAction("mark_spam")}
+            onBlock={() => runAction("block_sender")}
+            onIgnore={() => runAction("ignore")}
+            onMarkReviewed={() => runAction("mark_reviewed")}
+          />
+
           <div className="grid grid-cols-2 gap-4 text-sm">
             <Field label="Remetente" value={`${selected.from_name || ""} <${selected.from_address}>`} />
             <Field label="Assunto" value={selected.subject || "—"} />
             <Field label="Status" value={STATUS_BADGES[selected.status]?.label || selected.status} />
             <Field label="Spam score" value={String(selected.spam_score)} />
             <Field label="Ação" value={selected.routing_action || "—"} />
-            <Field
-              label="Processado em"
-              value={selected.processed_at ? format(new Date(selected.processed_at), "dd/MM/yyyy HH:mm", { locale: pt }) : "—"}
-            />
+            <Field label="Processado em" value={selected.processed_at ? format(new Date(selected.processed_at), "dd/MM/yyyy HH:mm", { locale: pt }) : "—"} />
             {selected.routed_ticket_id && (
-              <Field
-                label="Ticket relacionado"
-                value={
-                  <Link to={`/tickets/${selected.routed_ticket_id}`} className="text-primary hover:underline">
-                    Abrir ticket
-                  </Link>
-                }
-              />
+              <Field label="Ticket relacionado" value={<Link to={`/tickets/${selected.routed_ticket_id}`} className="text-primary hover:underline">Abrir ticket</Link>} />
             )}
             {selected.parent_ticket_id && (
-              <Field
-                label="Ticket pai"
-                value={
-                  <Link to={`/tickets/${selected.parent_ticket_id}`} className="text-primary hover:underline">
-                    Abrir ticket pai
-                  </Link>
-                }
-              />
-            )}
-            {selected.pending_email_id && (
-              <Field label="Pending email ID" value={<code className="text-xs">{selected.pending_email_id}</code>} />
+              <Field label="Ticket pai" value={<Link to={`/tickets/${selected.parent_ticket_id}`} className="text-primary hover:underline">Abrir ticket pai</Link>} />
             )}
           </div>
-          {selected.routing_reason && (
-            <Field label="Motivo da decisão" value={selected.routing_reason} block />
-          )}
+
+          {selected.routing_reason && <Field label="Motivo da decisão" value={selected.routing_reason} block />}
           {Array.isArray(selected.spam_reasons) && selected.spam_reasons.length > 0 && (
             <Field
               label="Sinais de spam"
-              value={
-                <ul className="list-disc list-inside text-xs space-y-0.5">
-                  {selected.spam_reasons.map((r: any, i: number) => (
-                    <li key={i}>{typeof r === "string" ? r : JSON.stringify(r)}</li>
-                  ))}
-                </ul>
-              }
+              value={<ul className="list-disc list-inside text-xs space-y-0.5">{selected.spam_reasons.map((r: any, i: number) => (<li key={i}>{typeof r === "string" ? r : JSON.stringify(r)}</li>))}</ul>}
               block
             />
           )}
           {selected.error_message && (
-            <Field
-              label="Erro"
-              value={<pre className="text-xs whitespace-pre-wrap text-destructive">{selected.error_message}</pre>}
-              block
-            />
+            <Field label="Erro" value={<pre className="text-xs whitespace-pre-wrap text-destructive">{selected.error_message}</pre>} block />
           )}
           {selected.body_preview && (
+            <Field label="Pré-visualização" value={<pre className="text-xs whitespace-pre-wrap text-muted-foreground">{selected.body_preview}</pre>} block />
+          )}
+          {selected.action_metadata?.last && (
             <Field
-              label="Pré-visualização"
-              value={<pre className="text-xs whitespace-pre-wrap text-muted-foreground">{selected.body_preview}</pre>}
+              label="Última ação manual"
+              value={
+                <div className="text-xs text-muted-foreground space-y-0.5">
+                  <div>{actionLabel(selected.action_metadata.last.manual_action)} — {format(new Date(selected.action_metadata.last.action_at), "dd/MM/yyyy HH:mm", { locale: pt })}</div>
+                  <div className="font-mono">{selected.action_metadata.last.action_by}</div>
+                </div>
+              }
               block
             />
           )}
         </Card>
+      )}
+
+      {/* ── Attach to ticket dialog ───────────────────────────────── */}
+      <Dialog open={attachOpen} onOpenChange={(o) => { setAttachOpen(o); if (!o) { setAttachQuery(""); setAttachResults([]); } }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Anexar a ticket existente</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Nº do ticket (#123), e-mail do cliente ou assunto"
+                value={attachQuery}
+                onChange={(e) => setAttachQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") searchTickets(); }}
+              />
+              <Button onClick={searchTickets} disabled={attachSearching}>
+                {attachSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Procurar"}
+              </Button>
+            </div>
+            <div className="border rounded-md divide-y max-h-96 overflow-y-auto">
+              {attachResults.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">Procure um ticket.</div>
+              ) : attachResults.map((t) => (
+                <div key={t.id} className="flex items-center justify-between p-3 text-sm">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">#{t.ticket_number} — {t.subject}</div>
+                    <div className="text-xs text-muted-foreground truncate">{t.client_name} • {t.client_email} • {t.status}</div>
+                  </div>
+                  <Button size="sm" onClick={() => attachToTicket(t.id)} disabled={acting}>
+                    Anexar
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground flex items-start gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              Se o ticket estiver fechado/resolvido, será bloqueado — crie um novo ticket de continuação.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAttachOpen(false)}>Cancelar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function actionLabel(a?: string | null): string {
+  switch (a) {
+    case "create_ticket": return "Ticket criado manualmente";
+    case "append_to_ticket": return "Anexado a ticket existente";
+    case "mark_spam": return "Marcado como spam";
+    case "block_sender": return "Remetente bloqueado";
+    case "ignore": return "Ignorado";
+    case "mark_reviewed": return "Marcado como revisto";
+    default: return a || "—";
+  }
+}
+
+function ActionToolbar({
+  event, acting, onCreate, onAttach, onSpam, onBlock, onIgnore, onMarkReviewed,
+}: {
+  event: EventRow;
+  acting: boolean;
+  onCreate: () => void;
+  onAttach: () => void;
+  onSpam: () => void;
+  onBlock: () => void;
+  onIgnore: () => void;
+  onMarkReviewed: () => void;
+}) {
+  const s = event.status;
+  const isPending = s === "pending_review";
+  const isQuarantined = s === "quarantined";
+  const isFailed = s === "failed";
+  const isTerminal = s === "processed" || s === "duplicate" || s === "spam" || s === "ignored" || s === "reviewed";
+
+  if (isTerminal) {
+    return (
+      <div className="text-xs text-muted-foreground italic">
+        Sem ações destrutivas disponíveis. Veja o ticket relacionado ou o histórico abaixo.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {(isPending || isQuarantined) && (
+        <>
+          <Button size="sm" onClick={onCreate} disabled={acting}>
+            <Plus className="h-4 w-4" /> {isQuarantined ? "Aprovar e criar ticket" : "Criar ticket"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={onAttach} disabled={acting}>
+            <Link2 className="h-4 w-4" /> Anexar a ticket existente
+          </Button>
+          <Button size="sm" variant="outline" onClick={onSpam} disabled={acting}>
+            <ShieldOff className="h-4 w-4" /> {isQuarantined ? "Spam confirmado" : "Marcar como spam"}
+          </Button>
+          {isQuarantined && (
+            <Button size="sm" variant="outline" onClick={onBlock} disabled={acting}>
+              <Ban className="h-4 w-4" /> Bloquear remetente
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={onIgnore} disabled={acting}>
+            <Archive className="h-4 w-4" /> Ignorar
+          </Button>
+        </>
+      )}
+      {isFailed && (
+        <Button size="sm" variant="outline" onClick={onMarkReviewed} disabled={acting}>
+          <CheckCircle className="h-4 w-4" /> Marcar como revisto
+        </Button>
       )}
     </div>
   );

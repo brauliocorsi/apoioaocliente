@@ -499,6 +499,7 @@ export type Database = {
       }
       inbound_email_events: {
         Row: {
+          action_metadata: Json
           body_preview: string | null
           created_at: string
           email_fingerprint: string | null
@@ -521,6 +522,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          action_metadata?: Json
           body_preview?: string | null
           created_at?: string
           email_fingerprint?: string | null
@@ -543,6 +545,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          action_metadata?: Json
           body_preview?: string | null
           created_at?: string
           email_fingerprint?: string | null
