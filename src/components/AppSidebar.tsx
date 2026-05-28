@@ -1,4 +1,4 @@
-import { LayoutDashboard, Ticket, MessageSquareText, Settings, LogOut, Phone, Truck, ClipboardCheck, Mail, AlertTriangle } from "lucide-react";
+import { LayoutDashboard, Ticket, MessageSquareText, Settings, LogOut, Phone, Truck, ClipboardCheck, Mail, AlertTriangle, Inbox } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import ProfileDialog from "@/components/ProfileDialog";
@@ -21,6 +21,7 @@ const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Tickets", url: "/tickets", icon: Ticket },
   { title: "Email Tickets", url: "/email-tickets", icon: Mail },
+  { title: "Caixa de Entrada", url: "/inbound-events", icon: Inbox },
   { title: "Ligações", url: "/phone-calls", icon: Phone },
   { title: "Encomendas", url: "/delayed-orders", icon: AlertTriangle },
   { title: "Reg. Ligações", url: "/delivery-confirmations", icon: Truck },
