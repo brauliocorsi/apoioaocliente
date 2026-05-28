@@ -127,6 +127,57 @@ export type Database = {
         }
         Relationships: []
       }
+      client_notifications: {
+        Row: {
+          client_user_id: string | null
+          created_at: string
+          email_error: string | null
+          email_sent: boolean
+          email_sent_at: string | null
+          id: string
+          is_read: boolean
+          message: string | null
+          metadata: Json
+          read_at: string | null
+          ticket_id: string | null
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          client_user_id?: string | null
+          created_at?: string
+          email_error?: string | null
+          email_sent?: boolean
+          email_sent_at?: string | null
+          id?: string
+          is_read?: boolean
+          message?: string | null
+          metadata?: Json
+          read_at?: string | null
+          ticket_id?: string | null
+          title: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          client_user_id?: string | null
+          created_at?: string
+          email_error?: string | null
+          email_sent?: boolean
+          email_sent_at?: string | null
+          id?: string
+          is_read?: boolean
+          message?: string | null
+          metadata?: Json
+          read_at?: string | null
+          ticket_id?: string | null
+          title?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       client_users: {
         Row: {
           avatar_url: string | null
@@ -1620,6 +1671,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_client_notification: {
+        Args: {
+          _client_user_id: string
+          _dedupe_key?: string
+          _message: string
+          _metadata?: Json
+          _ticket_id: string
+          _title: string
+          _type: string
+        }
+        Returns: string
+      }
       create_notification: {
         Args: {
           _due_at?: string
