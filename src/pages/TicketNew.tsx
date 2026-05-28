@@ -138,6 +138,11 @@ export default function TicketNew() {
         );
       }
       toast({ title: "Ticket criado com sucesso" });
+      if (form.notify_client && form.client_email) {
+        supabase.functions.invoke("send-ticket-created-confirmation", {
+          body: { ticket_id: data.id, source: "manual_agent" },
+        }).catch((err) => console.error("Confirmation email failed:", err));
+      }
       navigate(`/tickets/${data.id}`);
     }
     setSubmitting(false);
