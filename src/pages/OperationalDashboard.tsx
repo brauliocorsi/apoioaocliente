@@ -122,7 +122,7 @@ export default function OperationalDashboard() {
   async function load() {
     setLoading(true);
     const [tk, st, pr, cat, msgs, ib, fl] = await Promise.all([
-      supabase.from("tickets").select("id, ticket_number, client_name, subject, category_id, priority, status, assigned_to, created_at, next_action, next_action_due_at, parent_ticket_id, order_number, order_lookup_status, order_lookup_error, sla_first_response_at, first_responded_at, sla_resolution_at, resolved_at, next_customer_update_due_at, sla_paused, sla_breached, sla_status").order("created_at", { ascending: false }).limit(1000),
+      supabase.from("tickets").select("id, ticket_number, client_name, subject, category_id, priority, status, assigned_to, created_at, next_action, next_action_due_at, parent_ticket_id, order_number, order_lookup_status, order_lookup_error, sla_first_response_at, first_responded_at, sla_resolution_at, resolved_at, next_customer_update_due_at, sla_paused, sla_paused_at, sla_paused_reason, sla_breached, sla_status").order("created_at", { ascending: false }).limit(1000),
       supabase.from("ticket_statuses").select("id, name, is_closed, is_resolved"),
       supabase.from("profiles").select("id, full_name").eq("is_active", true),
       supabase.from("categories").select("id, name"),
