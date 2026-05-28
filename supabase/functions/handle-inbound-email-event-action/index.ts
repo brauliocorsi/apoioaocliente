@@ -285,6 +285,9 @@ Deno.serve(async (req) => {
           action_metadata: mergedMeta,
           processing_locked_at: null,
           processing_locked_by: null,
+          ...(extractedOrder || orderCandidates.size > 0
+            ? { extracted_order_number: extractedOrder ?? [...orderCandidates].join(",") }
+            : {}),
         })
         .eq("id", eventId);
 
