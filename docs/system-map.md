@@ -173,7 +173,7 @@ Não criar tabelas novas agora. `agent_notifications` já existe e cobre parte (
 
 - **Fase 1 — Segurança e preservação de dados**: revisar `verify_jwt`, bloquear buckets públicos sensíveis, auditar RLS.
 - **Fase 2 — Caixa de Entrada operacional** ✅ entregue (ações manuais via `handle-inbound-email-event-action`).
-- **Fase 3 — Ticket como centro do sistema**: timeline única, normalizar `status` em FK.
+- **Fase 3 — Ticket como centro do sistema** ✅ entregue (timeline unificada, próxima ação, hardening da edge function).
 - **Fase 4 — Integração com encomendas/GestãoClick**.
 - **Fase 5 — SLA real** (horário comercial + alertas).
 - **Fase 6 — Painel Operacional (Alessandra)** + simplificação do menu.
@@ -182,9 +182,48 @@ Não criar tabelas novas agora. `agent_notifications` já existe e cobre parte (
 
 ---
 
+## 10. Fase 3 — Ticket como centro (entregue)
+
+### O que foi adicionado
+- Componente `src/components/ticket/TicketTimeline.tsx`: timeline unificada read-only sobre `ticket_messages`, `ticket_events`, `email_logs`, `inbound_email_events`, `ticket_attachments` e filhos por `parent_ticket_id`. Apenas usado em páginas de agente — clientes do portal **não** consomem este componente.
+- Colunas aditivas em `tickets`: `next_action text NULL`, `next_action_due_at timestamptz NULL` + índice parcial. Editor inline na sidebar do ticket com badge "Atrasada" quando o prazo passou.
+- Badge "Sem responsável" quando `assigned_to IS NULL`.
+- Hardening de `handle-inbound-email-event-action`:
+  - guarda server-side de estado terminal (`processed`, `duplicate`, `spam`, `ignored`, `reviewed`) para `append_to_ticket`, `mark_spam`, `ignore`, `mark_reviewed` → retorna `409 event_terminal`;
+  - `create_ticket` agora usa update condicional `WHERE routed_ticket_id IS NULL` para reivindicar o evento — se outra chamada concorrente venceu a corrida, o ticket recém-criado é descartado e devolve `already_created` com o id vencedor.
+
+### Onde os novos campos serão usados nas próximas fases
+`next_action` e `next_action_due_at` são a base para:
+- notificações de prazo (Fase 7);
+- alertas de "vence hoje" / "atrasado" no painel da Alessandra (Fase 6);
+- métricas operacionais por responsável;
+- SLA operacional além do SLA por categoria/prioridade já existente (Fase 5).
+
+---
+
+## 11. Status e SLA — riscos atuais e plano de normalização futura
+
+Estado atual:
+- `tickets.status` é uma coluna `text` livre. Coexiste com `public.ticket_statuses` (tabela com `is_closed`, `is_resolved`, `pauses_sla`), mas **não há FK**.
+- Existem partes do código que ainda comparam `status` por string fixa (ex.: `"novo"`, `"aguarda_cliente"`). Outras partes já fazem lookup em `ticket_statuses` (ex.: a edge function `handle-inbound-email-event-action` consulta `is_closed/is_resolved`).
+- O risco principal de uma migração destrutiva é tickets antigos com valores de `status` que **já não existem** em `ticket_statuses` — adicionar uma FK agora rejeitaria esses registos.
+
+Plano de normalização (não fazer agora):
+1. Auditar tickets cujo `status` não está em `ticket_statuses` (`SELECT DISTINCT status FROM tickets WHERE status NOT IN (SELECT id FROM ticket_statuses)`).
+2. Inserir os ids em falta em `ticket_statuses` para alinhar o histórico.
+3. Substituir comparações de string fixa por lookup via hook `useTicketStatuses`.
+4. Só então avaliar adicionar uma FK opcional (`ON DELETE SET NULL` / `ON DELETE RESTRICT`).
+5. Nunca renomear ou apagar status existentes — apenas marcar como inativos.
+
+Proibido nesta fase: alterar o tipo de `tickets.status`, criar FK que rejeite dados antigos, fazer UPDATE em massa em `status`.
+
+---
+
 ## Observações importantes
-- **Nada foi apagado nem renomeado.**
-- Adicionados nesta fase 2.1: edge function `handle-inbound-email-event-action`, coluna aditiva `inbound_email_events.action_metadata`, índices não-únicos em `status` / `received_at`, ações operacionais no UI da Caixa de Entrada.
-- Anteriormente adicionados: `src/pages/InboundEmailEvents.tsx`, rota `/inbound-events`, item de menu "Caixa de Entrada".
-- Backend `fetch-inbound-emails` **não foi tocado** nesta fase.
+- **Nada foi apagado nem renomeado** em nenhuma fase.
+- Fase 3 adicionou: `tickets.next_action`, `tickets.next_action_due_at`, componente `TicketTimeline`, editor de próxima ação na sidebar, hardening da edge function da Caixa de Entrada.
+- Fase 2.1 adicionou: edge function `handle-inbound-email-event-action`, `inbound_email_events.action_metadata`, índices em `status`/`received_at`, ações operacionais no UI.
+- Backend `fetch-inbound-emails` **não foi tocado** desde a Fase 2.
+
+
 

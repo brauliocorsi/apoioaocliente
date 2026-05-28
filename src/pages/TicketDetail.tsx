@@ -26,6 +26,7 @@ import MentionTextarea from "@/components/MentionTextarea";
 import ResolutionCard from "@/components/ticket/ResolutionCard";
 import MessageReactions from "@/components/chat/MessageReactions";
 import { TicketContinuationBadges } from "@/components/ticket/TicketContinuationBadges";
+import TicketTimeline from "@/components/ticket/TicketTimeline";
 
 // Detect HTML content
 function isHtmlContent(text: string): boolean {
@@ -1137,6 +1138,9 @@ export default function TicketDetail() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Unified ticket timeline (additive, read-only) */}
+          <TicketTimeline ticketId={ticket.id} preloadedMessages={messages as any} preloadedEvents={events as any} />
 
           {/* Internal Timeline */}
           <Card>
