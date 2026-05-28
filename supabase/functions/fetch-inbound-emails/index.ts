@@ -2131,6 +2131,9 @@ Deno.serve(async (req) => {
         ticket_id: newTicket.id,
       });
 
+      await fireTicketCreatedConfirmation(newTicket.id, "email");
+
+
       return new Response(JSON.stringify({ success: true, message: "Ticket criado com sucesso", ticket_id: newTicket.id }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
