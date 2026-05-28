@@ -1207,6 +1207,29 @@ async function createChildTicketFromClosed(
   return created as { id: string; ticket_number: number };
 }
 
+// Fire-and-forget invocation of the ticket-created confirmation edge function.
+// Never throws — confirmation failure must not block ticket creation.
+async function fireTicketCreatedConfirmation(
+  ticketId: string,
+  source: "email" | "email_closed_continuation" | "portal" | "manual_agent",
+  headers?: Record<string, string> | null,
+): Promise<void> {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    await fetch(`${supabaseUrl}/functions/v1/send-ticket-created-confirmation`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({ ticket_id: ticketId, source, headers: headers || null }),
+    });
+  } catch (err) {
+    console.error(`Confirmation invoke failed for ticket ${ticketId}: ${(err as Error).message}`);
+  }
+}
+
 async function processEmails(params: { fetchRecent: boolean; maxEmails: number; agentId?: string; offset?: number; searchDays?: number }) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
