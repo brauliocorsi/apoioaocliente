@@ -352,3 +352,56 @@ Com os novos campos passamos a poder construir, sem refactor, queries para:
 - SLA avançado por etapa.
 
 **Sem alterações destrutivas:** tabela `agent_notifications` intacta; sem DROP/TRUNCATE/DELETE; sem mudança de status/SLA.
+
+---
+
+## Fase 5C — Notificações ao cliente
+
+**Princípio:** separação rígida entre notificações internas (agentes/supervisores) e notificações ao cliente (apenas eventos externos relevantes).
+
+**Tabela `client_notifications`:** `client_user_id`, `ticket_id`, `type`, `title`, `message`, `is_read`, `email_sent`, `email_error`, `metadata`, timestamps.
+
+**Tipos implementados:**
+- `ticket_agent_replied` — agente envia mensagem pública (`ticket_messages.sender_type='agent'`).
+- `ticket_resolved` — status muda para `ticket_statuses.is_resolved=true`.
+- `ticket_closed` — status muda para `ticket_statuses.is_closed=true`.
+
+**Tipos previstos mas não automatizados (futuro):** `ticket_needs_customer_info` (depende de status específico de "aguarda cliente" — deixar como ação manual), `ticket_created_confirmation` (já coberto por `send-ticket-created-confirmation` por e-mail).
+
+**Triggers SQL (SECURITY DEFINER):**
+- `trg_notify_client_on_agent_message` em `ticket_messages` AFTER INSERT.
+- `trg_notify_client_on_status_change` em `tickets` AFTER UPDATE OF status.
+- `trg_dispatch_client_notification_email` em `client_notifications` AFTER INSERT — chama `send-client-notification` via `pg_net.http_post`.
+
+**Idempotência:** helper `create_client_notification` aceita `dedupe_key`. Usado: `msg:<message_id>` para respostas, `status:<ticket_id>:<type>` para mudanças de estado. Reaplicar o mesmo evento não duplica.
+
+**Notas internas NÃO geram notificação ao cliente:** notas vivem em `ticket_events` (event_type='note'), não em `ticket_messages` — trigger nunca dispara para elas. Mesma proteção para menções (`@nome` é detectado em ticket_events, não em ticket_messages).
+
+**Edge Function `send-client-notification`** (verify_jwt=false, chamada por trigger):
+- carrega notificação pelo `notification_id`;
+- resolve e-mail via `metadata.client_email` → `client_users.email` → `tickets.client_email`;
+- bloqueia endereços automáticos (`noreply|no-reply|mailer-daemon|postmaster|donotreply`);
+- envia via Resend (se `system_settings.resend_enabled='true'`) ou SMTP;
+- regista em `email_logs` (source `client_notification`);
+- atualiza `client_notifications.email_sent` / `email_error`;
+- falha de envio NÃO afeta a notificação no portal nem a ação principal.
+
+**Portal cliente — `ClientNotificationBell`:** ícone no `PortalLayout` com badge de não-lidas, popover com lista, marcar como lida (individual e em massa), navegação para `/portal/tickets/:id`, realtime via `postgres_changes` filtrado por `client_user_id=auth.uid()`.
+
+**RLS:**
+- `client_notifications_select_own` — cliente lê só as suas (`client_user_id = auth.uid()`).
+- `client_notifications_update_own` — cliente só altera as suas (usado para marcar lida).
+- `client_notifications_select_agents` — agentes podem consultar para apoio.
+- Sem policy de INSERT/DELETE — só `service_role` (triggers) escreve.
+
+**Tickets fechados antigos:** quando cliente responde a um ticket fechado, o fluxo de continuação (Fase 1) cria novo ticket via `parent_ticket_id`. Notificações ao cliente referenciam o novo ticket via trigger de mensagem; o ticket antigo não recebe nova notificação porque o trigger de status só dispara em transições, não em estados já fechados.
+
+**Limitações conhecidas:**
+- Sem unsubscribe (cliente não tem opção de desligar e-mails).
+- Sem preferências por canal.
+- Sem detecção automática de "pedido de informação" — só status-change resolvido/fechado.
+- Trigger pg_net é fire-and-forget: se a edge function falhar repetidamente, retry manual via re-update da row (futura melhoria).
+
+**Fora de âmbito:** push browser, SMS, WhatsApp, preferências avançadas, IA, unsubscribe.
+
+**Sem alterações destrutivas:** nenhuma tabela existente foi modificada; nenhum dado apagado; triggers anteriores intactos.

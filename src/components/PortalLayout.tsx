@@ -5,6 +5,7 @@ import { Loader2, LogOut, Ticket, HelpCircle } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ProfileDialog from "@/components/ProfileDialog";
+import ClientNotificationBell from "@/components/portal/ClientNotificationBell";
 
 export default function PortalLayout() {
   const { user, profile, loading, signOut } = useClientAuth();
@@ -64,6 +65,7 @@ export default function PortalLayout() {
             </nav>
           </div>
           <div className="flex items-center gap-3">
+            <ClientNotificationBell />
             <ProfileDialog
               userId={user.id}
               fullName={profile?.full_name || ""}
