@@ -1468,6 +1468,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
       if (headersChecked >= MAX_HEADER_CHECKS) break;
       headersChecked++;
 
+      let eventId: string | null = null;
       try {
         // Lightweight: fetch only headers (no body download)
         const headers = await imap.fetchHeaders(seqNum);
@@ -1482,7 +1483,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         const emailFingerprint = headers.messageId?.trim() || await generateFingerprint(clientEmail, headers.subject, "");
 
         // ── Phase 2: record inbound event upfront (every received email) ──
-        const eventId = await recordInboundEvent(adminClient, {
+        eventId = await recordInboundEvent(adminClient, {
           message_id: headers.messageId || null,
           email_fingerprint: emailFingerprint,
           from_address: clientEmail.toLowerCase(),
