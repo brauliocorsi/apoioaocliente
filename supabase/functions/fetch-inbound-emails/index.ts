@@ -1627,7 +1627,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         // Check blocklist
         const blockCheck = await isBlocked(adminClient, clientEmail, msg.subject);
         if (blockCheck.blocked) {
-          await adminClient.from("pending_emails").insert({
+          const { data: pe } = await adminClient.from("pending_emails").insert({
             from_address: clientEmail.toLowerCase(),
             from_name: clientName,
             subject: msg.subject.substring(0, 500),
@@ -1636,12 +1636,85 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             message_id: msg.messageId,
             status: "blocked",
             rejection_reason: blockCheck.reason,
+          }).select("id").single();
+          await updateInboundEvent(adminClient, eventId, {
+            status: "quarantined",
+            routing_action: "blocklist",
+            routing_reason: blockCheck.reason,
+            pending_email_id: pe?.id ?? null,
+            processed_at: new Date().toISOString(),
           });
           blocked++;
           await imap.markAsSeen(seqNum);
           newEmailProcessed = true;
           break;
         }
+
+        // ── Phase 2: Anti-spam scoring ──
+        const spamSignals = await gatherSpamSignals(adminClient, clientEmail, msg.subject, msg.bodyText || "");
+        const spamResult = calculateInboundSpamScore({
+          fromAddress: clientEmail,
+          subject: msg.subject,
+          bodyText: msg.bodyText,
+          bodyHtml: msg.bodyHtml,
+          attachmentNames: msg.attachments.map((a: { filename: string }) => a.filename || ""),
+          ...spamSignals,
+        });
+        await updateInboundEvent(adminClient, eventId, {
+          spam_score: spamResult.score,
+          spam_reasons: spamResult.reasons,
+          body_preview: ((msg.bodyText || "").replace(/\s+/g, " ").trim()).substring(0, 300),
+        });
+
+        // Quarantine — score >= 80: do not create ticket, do not send confirmation
+        if (spamResult.score >= 80) {
+          const { data: pe } = await adminClient.from("pending_emails").insert({
+            from_address: clientEmail.toLowerCase(),
+            from_name: clientName,
+            subject: msg.subject.substring(0, 500),
+            body_text: (msg.bodyText || "").substring(0, 5000),
+            body_html: (msg.bodyHtml ? sanitizeHtml(msg.bodyHtml) : "").substring(0, 10000),
+            message_id: msg.messageId,
+            status: "blocked",
+            rejection_reason: `spam-score=${spamResult.score}: ${spamResult.reasons.join(", ")}`,
+          }).select("id").single();
+          await updateInboundEvent(adminClient, eventId, {
+            status: "quarantined",
+            routing_action: "spam_quarantine",
+            routing_reason: `score=${spamResult.score}`,
+            pending_email_id: pe?.id ?? null,
+            processed_at: new Date().toISOString(),
+          });
+          blocked++;
+          await imap.markAsSeen(seqNum);
+          newEmailProcessed = true;
+          break;
+        }
+
+        // Mid-score (40-79) — force pending review (no ticket, no auto confirmation yet)
+        if (spamResult.score >= 40) {
+          const { data: pe } = await adminClient.from("pending_emails").insert({
+            from_address: clientEmail.toLowerCase(),
+            from_name: clientName,
+            subject: msg.subject.substring(0, 500),
+            body_text: (msg.bodyText || "").substring(0, 5000),
+            body_html: (msg.bodyHtml ? sanitizeHtml(msg.bodyHtml) : "").substring(0, 10000),
+            message_id: msg.messageId || emailFingerprint,
+            status: "pending",
+          }).select("id").single();
+          await updateInboundEvent(adminClient, eventId, {
+            status: "pending_review",
+            routing_action: "pending_review",
+            routing_reason: `score=${spamResult.score} (mid)`,
+            pending_email_id: pe?.id ?? null,
+            processed_at: new Date().toISOString(),
+          });
+          pending++;
+          await imap.markAsSeen(seqNum);
+          newEmailProcessed = true;
+          break;
+        }
+
 
         // Check if we have an existing open thread OR ticket by client_email
         const { data: existingThread } = await adminClient
