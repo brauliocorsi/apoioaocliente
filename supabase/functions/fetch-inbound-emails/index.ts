@@ -1581,6 +1581,12 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
               console.error(`Attachment backfill error: ${(err as Error).message}`);
             }
           }
+          await updateInboundEvent(adminClient, eventId, {
+            status: "duplicate",
+            routing_action: "duplicate_ignored",
+            routing_reason: "in-memory fingerprint match",
+            processed_at: new Date().toISOString(),
+          });
           skipped++;
           continue;
         }
@@ -1589,7 +1595,7 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         // Fallback: import as pending with header metadata so the inbox doesn't block.
         if (headers.size && headers.size > MAX_INLINE_EMAIL_SIZE) {
           const clientName = extractName(headers.from);
-          await adminClient.from("pending_emails").insert({
+          const { data: pe } = await adminClient.from("pending_emails").insert({
             from_address: clientEmail.toLowerCase(),
             from_name: clientName,
             subject: headers.subject.substring(0, 500),
@@ -1597,6 +1603,13 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             body_html: "",
             message_id: emailFingerprint,
             status: "pending",
+          }).select("id").single();
+          await updateInboundEvent(adminClient, eventId, {
+            status: "pending_review",
+            routing_action: "large_email_pending",
+            routing_reason: `size=${headers.size}`,
+            pending_email_id: pe?.id ?? null,
+            processed_at: new Date().toISOString(),
           });
           pending++;
           await imap.markAsSeen(seqNum);
