@@ -44,7 +44,7 @@ export function TicketContinuationBadges({ ticketId, parentTicketId, basePath = 
       const { data: kids } = await supabase
         .from("tickets")
         .select("id, ticket_number, subject")
-        .eq("parent_ticket_id" as never, ticketId as never)
+        .eq("parent_ticket_id", ticketId)
         .order("ticket_number", { ascending: true });
       if (!cancelled) setChildren((kids as MiniTicket[]) || []);
     };
