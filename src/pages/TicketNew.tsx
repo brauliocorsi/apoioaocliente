@@ -304,6 +304,19 @@ export default function TicketNew() {
                 onAttachmentsChange={setAttachments}
               />
             </div>
+            <div className="pt-2 border-t">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.notify_client}
+                  onChange={(e) => update("notify_client", e.target.checked)}
+                  disabled={!form.client_email}
+                  className="rounded"
+                />
+                Notificar cliente por e-mail (confirmação de abertura)
+                {!form.client_email && <span className="text-xs text-muted-foreground">— requer e-mail do cliente</span>}
+              </label>
+            </div>
           </CardContent>
         </Card>
 
