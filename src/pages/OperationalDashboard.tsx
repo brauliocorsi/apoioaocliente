@@ -365,8 +365,31 @@ export default function OperationalDashboard() {
         </Table>
       </ListSection>
 
+      <ListSection id="sla-paused" title="Tickets pausados" description="Tickets a aguardar cliente ou fornecedor — SLA pausado.">
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Ticket</TableHead><TableHead>Cliente</TableHead><TableHead>Responsável</TableHead>
+            <TableHead>Motivo</TableHead><TableHead>Pausado desde</TableHead><TableHead>Tempo pausado</TableHead>
+            <TableHead></TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {slaPaused.slice(0, 50).map(t => (
+              <TableRow key={t.id}>
+                <TableCell className="font-mono text-xs">#{t.ticket_number}</TableCell>
+                <TableCell className="text-sm">{t.client_name}</TableCell>
+                <TableCell className="text-sm">{t.assigned_to ? profileMap[t.assigned_to] || "—" : <Badge variant="outline">Sem resp.</Badge>}</TableCell>
+                <TableCell className="text-xs">{t.sla_paused_reason || "—"}</TableCell>
+                <TableCell className="text-xs">{t.sla_paused_at ? format(new Date(t.sla_paused_at), "dd/MM HH:mm", { locale: pt }) : "—"}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{t.sla_paused_at ? formatDistanceToNow(new Date(t.sla_paused_at), { locale: pt }) : "—"}</TableCell>
+                <TableCell><OpenLink to={`/tickets/${t.id}`} /></TableCell>
+              </TableRow>
+            ))}
+            {slaPaused.length === 0 && <EmptyRow cols={7} text="Sem tickets pausados." />}
+          </TableBody>
+        </Table>
+      </ListSection>
 
-      {/* LISTS */}
+
       <ListSection id="no-response" title="Clientes sem resposta" description="Última mensagem é do cliente e nenhum agente respondeu desde então.">
         <Table>
           <TableHeader><TableRow>
