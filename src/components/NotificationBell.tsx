@@ -26,10 +26,26 @@ interface UnreadTicket {
   latest_at: string;
 }
 
+// Fase 5B: new operational notifications table
+interface OpNotification {
+  id: string;
+  user_id: string;
+  ticket_id: string | null;
+  inbound_email_event_id: string | null;
+  type: string;
+  title: string;
+  message: string | null;
+  priority: string;
+  is_read: boolean;
+  read_at: string | null;
+  created_at: string;
+}
+
 export default function NotificationBell() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [opNotifications, setOpNotifications] = useState<OpNotification[]>([]);
   const [open, setOpen] = useState(false);
   const [senderNames, setSenderNames] = useState<Record<string, string>>({});
   const [unreadTickets, setUnreadTickets] = useState<UnreadTicket[]>([]);
