@@ -13,7 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import ReminderForm from "./ReminderForm";
 import ReminderList from "./ReminderList";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
-import { Link, X, ExternalLink, Save, Phone, Bell, Ticket, UserPlus, Trash2, CheckCircle2, RotateCcw } from "lucide-react";
+import { Link, X, ExternalLink, Save, Phone, Bell, Ticket, UserPlus, Trash2, CheckCircle2, RotateCcw, PhoneOutgoing, PhoneIncoming, PlayCircle, Zap } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useNavigate } from "react-router-dom";
 
@@ -31,6 +31,13 @@ interface PhoneCall {
   assigned_to?: string | null;
   closed_at?: string | null;
   closed_by?: string | null;
+  // Let's Call integration
+  source?: string;
+  direction?: string | null;
+  duration_seconds?: number | null;
+  attended?: boolean | null;
+  has_recording?: boolean | null;
+  letscall_linkedid?: string | null;
 }
 
 interface AgentProfile {
