@@ -33,7 +33,6 @@ const groups: Group[] = [
     label: "Atendimento",
     items: [
       { title: "Tickets", url: "/tickets", icon: Ticket },
-      { title: "Email Tickets", url: "/email-tickets", icon: Mail },
       { title: "Caixa de Entrada", url: "/inbound-events", icon: Inbox },
     ],
   },
