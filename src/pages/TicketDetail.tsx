@@ -1214,7 +1214,7 @@ export default function TicketDetail() {
           })()}
               <div className="pt-2 border-t space-y-2">
                 <div className="flex items-center gap-2">
-                  <MacroSelector ticket={ticket} onSelect={(content) => setNote(content)} />
+                  <MacroSelector ticket={ticket} tags={tags} onSelect={(content) => setNote(content)} />
                 </div>
                 {noteFiles.length > 0 && (
                   <div className="flex flex-wrap gap-2 p-2 rounded-md bg-muted/50 border">
