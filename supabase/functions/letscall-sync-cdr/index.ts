@@ -156,7 +156,7 @@ async function upsertCdr(cdr: any, month: number) {
   if (error) {
     // unique-violation = race condition; ignore
     if ((error as any).code === "23505") return { existing: true };
-    throw error;
+    throw new Error(`upsert(${linkedid}): ${error.message} | code=${error.code} | details=${error.details}`);
   }
   return { inserted: true };
 }
@@ -194,7 +194,7 @@ Deno.serve(async (req) => {
           try {
             const r = await upsertCdr(cdr, month);
             if (r.inserted) { totalInserted++; pageInsertedCount++; }
-          } catch (e) { errors.push(String(e)); }
+          } catch (e) { errors.push(e instanceof Error ? e.message : JSON.stringify(e)); }
         }
         // Optimization: if no new inserts on this page AND we are past page 1, we have caught up
         if (pageInsertedCount === 0 && page > 1) break;
