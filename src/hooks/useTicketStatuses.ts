@@ -7,6 +7,7 @@ export type TicketStatus = {
   color: string;
   sort_order: number;
   pauses_sla: boolean;
+  sla_pause_reason: string | null;
   is_resolved: boolean;
   is_closed: boolean;
   default_assign: string | null;

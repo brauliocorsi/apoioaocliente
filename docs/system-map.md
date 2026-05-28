@@ -476,3 +476,26 @@ Com os novos campos passamos a poder construir, sem refactor, queries para:
 - Feriados portugueses fora de escopo.
 - Sem calendário por loja/equipa.
 - Tickets antigos mantêm prazos calculados em horas corridas até nova atualização.
+
+## Fase 8 — Feriados portugueses e configuração de pausas SLA
+
+### Tabela `business_holidays`
+- Colunas: `holiday_date`, `name`, `country` (default `PT`), `region` (null = nacional), `is_active`.
+- Índice único funcional por `(holiday_date, country, COALESCE(region,''))`.
+- RLS: leitura para agentes; insert/update/delete apenas para supervisores.
+- Trigger `updated_at` automático.
+
+### Funções de calendário (atualizadas)
+- `is_pt_national_holiday(date)` — STABLE; verifica feriado ativo PT sem região.
+- `is_business_day_lx(date)` — passa a STABLE; falso se domingo OU feriado nacional ativo.
+- `next_business_window_start`, `add_business_hours`, `business_minutes_between` — agora STABLE (dependem de tabela). Lógica inalterada além do filtro de feriados.
+
+### Configuração
+- **Configurações → Calendário SLA**: listar/adicionar/desativar/remover feriados. Recomenda-se desativar em vez de remover para preservar histórico. Remoção exige confirmação individual.
+- **Configurações → Estados**: cada status pausador mostra campo `Motivo da pausa` (texto livre). Motivos com palavra "cliente" disparam retoma automática quando o cliente responde.
+- **Candidatos a pausar SLA** (badge visual, sem ativação automática): `aguarda_logistica`, `aguarda_tecnico`, `aguardando_financeiro`. Supervisor decide manualmente.
+
+### Limitações
+- Sem feriados municipais/regionais aplicados automaticamente (campo `region` reservado para fase futura).
+- Sem auto-pausa por inatividade.
+- Sem seed automático — equipa cadastra os feriados aplicáveis a cada ano.

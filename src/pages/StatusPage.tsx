@@ -28,6 +28,10 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
+// IDs de status candidatos a pausar SLA — só destacam visualmente;
+// a configuração real fica sempre a cargo do supervisor (pauses_sla).
+const PAUSE_CANDIDATE_IDS = new Set(["aguarda_logistica", "aguarda_tecnico", "aguardando_financeiro"]);
+
 function SortableStatusRow({
   s,
   agents,
@@ -47,57 +51,80 @@ function SortableStatusRow({
     opacity: isDragging ? 0.4 : 1,
   };
 
+  const isCandidate = PAUSE_CANDIDATE_IDS.has(s.id) && !s.pauses_sla && !s.is_resolved && !s.is_closed;
+
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
-      <button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing touch-none">
+    <div ref={setNodeRef} style={style} className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
+      <button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing touch-none mt-1">
         <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
       </button>
-      <span className="h-4 w-4 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-      <div className="flex-1 grid gap-2 md:grid-cols-4 items-center">
-        <div>
-          <Input
-            className="h-7 text-sm font-medium px-1.5"
-            value={s.name}
-            onChange={(e) => updateField(s.id, "name", e.target.value)}
-          />
-          <p className="text-xs text-muted-foreground font-mono mt-0.5">{s.id}</p>
+      <span className="h-4 w-4 rounded-full shrink-0 mt-1" style={{ backgroundColor: s.color }} />
+      <div className="flex-1 space-y-2">
+        <div className="grid gap-2 md:grid-cols-4 items-center">
+          <div>
+            <Input
+              className="h-7 text-sm font-medium px-1.5"
+              value={s.name}
+              onChange={(e) => updateField(s.id, "name", e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground font-mono mt-0.5">{s.id}</p>
+            {isCandidate && (
+              <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded border border-warning/30 bg-warning/10 text-warning">
+                Candidato a pausar SLA
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <Switch checked={!!s.pauses_sla} onCheckedChange={(v) => updateField(s.id, "pauses_sla", v)} className="scale-75" />
+              <span className="text-muted-foreground">Pausa SLA</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <Switch checked={!!s.is_resolved} onCheckedChange={(v) => updateField(s.id, "is_resolved", v)} className="scale-75" />
+              <span className="text-muted-foreground">Resolvido</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <Switch checked={!!s.is_closed} onCheckedChange={(v) => updateField(s.id, "is_closed", v)} className="scale-75" />
+              <span className="text-muted-foreground">Encerrado</span>
+            </label>
+          </div>
+          <div className="flex gap-2 items-center">
+            <Input
+              className="h-7 text-xs w-20 px-1.5"
+              type="number"
+              placeholder="SLA min"
+              value={s.sla_minutes ?? ""}
+              onChange={(e) => updateField(s.id, "sla_minutes", e.target.value ? parseInt(e.target.value) : null)}
+            />
+            <Select value={s.default_assign || "__none__"} onValueChange={(v) => updateField(s.id, "default_assign", v === "__none__" ? null : v)}>
+              <SelectTrigger className="h-7 text-xs flex-1"><SelectValue placeholder="Agente" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Nenhum</SelectItem>
+                {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex gap-1 justify-end">
+            <input type="color" value={s.color} onChange={(e) => updateField(s.id, "color", e.target.value)} className="h-7 w-8 rounded border cursor-pointer" />
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteStatus(s.id)}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2 text-xs">
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <Switch checked={!!s.pauses_sla} onCheckedChange={(v) => updateField(s.id, "pauses_sla", v)} className="scale-75" />
-            <span className="text-muted-foreground">Pausa SLA</span>
-          </label>
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <Switch checked={!!s.is_resolved} onCheckedChange={(v) => updateField(s.id, "is_resolved", v)} className="scale-75" />
-            <span className="text-muted-foreground">Resolvido</span>
-          </label>
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <Switch checked={!!s.is_closed} onCheckedChange={(v) => updateField(s.id, "is_closed", v)} className="scale-75" />
-            <span className="text-muted-foreground">Encerrado</span>
-          </label>
-        </div>
-        <div className="flex gap-2 items-center">
-          <Input
-            className="h-7 text-xs w-20 px-1.5"
-            type="number"
-            placeholder="SLA min"
-            value={s.sla_minutes ?? ""}
-            onChange={(e) => updateField(s.id, "sla_minutes", e.target.value ? parseInt(e.target.value) : null)}
-          />
-          <Select value={s.default_assign || "__none__"} onValueChange={(v) => updateField(s.id, "default_assign", v === "__none__" ? null : v)}>
-            <SelectTrigger className="h-7 text-xs flex-1"><SelectValue placeholder="Agente" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">Nenhum</SelectItem>
-              {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.full_name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex gap-1 justify-end">
-          <input type="color" value={s.color} onChange={(e) => updateField(s.id, "color", e.target.value)} className="h-7 w-8 rounded border cursor-pointer" />
-          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteStatus(s.id)}>
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+        {s.pauses_sla && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground shrink-0">Motivo da pausa:</span>
+            <Input
+              className="h-7 text-xs"
+              placeholder="ex: aguarda cliente, aguarda fornecedor… (usado para retoma automática)"
+              defaultValue={s.sla_pause_reason || ""}
+              onBlur={(e) => {
+                const v = e.target.value.trim();
+                if (v !== (s.sla_pause_reason || "")) updateField(s.id, "sla_pause_reason", v || null);
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

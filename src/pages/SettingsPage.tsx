@@ -12,6 +12,7 @@ import SmtpSettingsTab from "@/components/settings/SmtpSettingsTab";
 import EmailLogsTab from "@/components/settings/EmailLogsTab";
 import ClientsTab from "@/components/settings/ClientsTab";
 import SlaConfigTab from "@/components/settings/SlaConfigTab";
+import HolidaysTab from "@/components/settings/HolidaysTab";
 import DecisionRulesTab from "@/components/settings/DecisionRulesTab";
 
 export default function SettingsPage() {
@@ -32,6 +33,7 @@ export default function SettingsPage() {
           <TabsTrigger value="categories">Categorias</TabsTrigger>
           <TabsTrigger value="tags">Etiquetas</TabsTrigger>
           <TabsTrigger value="sla">SLA</TabsTrigger>
+          <TabsTrigger value="holidays">Calendário SLA</TabsTrigger>
           <TabsTrigger value="rules">Motor de Regras</TabsTrigger>
           <TabsTrigger value="templates">Templates Email</TabsTrigger>
           <TabsTrigger value="faq">FAQs</TabsTrigger>
@@ -88,6 +90,11 @@ export default function SettingsPage() {
         <TabsContent value="sla">
           <SlaConfigTab />
         </TabsContent>
+
+        <TabsContent value="holidays">
+          <HolidaysTab />
+        </TabsContent>
+
 
         <TabsContent value="rules">
           <DecisionRulesTab />
