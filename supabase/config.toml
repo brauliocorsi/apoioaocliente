@@ -44,3 +44,12 @@ verify_jwt = false
 
 [functions.send-client-notification]
 verify_jwt = false
+
+[functions.letscall-sync-cdr]
+verify_jwt = false
+
+[functions.letscall-recording]
+verify_jwt = false
+
+[functions.letscall-originate-call]
+verify_jwt = false
