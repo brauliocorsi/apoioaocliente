@@ -2,7 +2,8 @@
 // Idempotent: relies on create_notification() helper which skips duplicates
 // of (user_id, type, ticket_id) when unread.
 //
-// Can be invoked manually or wired to pg_cron / external scheduler later.
+// Fase 5B.1: hardened authorization — only service-role calls (cron) or
+// authenticated supervisors can trigger this function.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -15,16 +16,58 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    // --- Authorization gate ---
+    // Allow if caller presents the service-role key (scheduled cron / internal),
+    // otherwise require authenticated supervisor JWT.
+    const authHeader = req.headers.get("Authorization") || "";
+    const bearer = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const isServiceRole = bearer && bearer === SERVICE_KEY;
+
+    if (!isServiceRole) {
+      if (!bearer) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const userClient = createClient(SUPABASE_URL, ANON_KEY, {
+        global: { headers: { Authorization: `Bearer ${bearer}` } },
+      });
+      const { data: claims, error: claimsErr } = await userClient.auth.getClaims(bearer);
+      if (claimsErr || !claims?.claims?.sub) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const userId = claims.claims.sub;
+      // Verify supervisor role via service-role client (bypasses RLS safely)
+      const admin = createClient(SUPABASE_URL, SERVICE_KEY);
+      const { data: roleRow } = await admin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("role", "supervisor")
+        .maybeSingle();
+      if (!roleRow) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
     const now = new Date();
     const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(now); endOfDay.setHours(23, 59, 59, 999);
 
-    // Get open statuses (not closed, not resolved)
+    // Get open statuses (not closed, not resolved) — use ticket_statuses flags, not text
     const { data: statuses } = await supabase
       .from("ticket_statuses")
       .select("id, is_closed, is_resolved");
