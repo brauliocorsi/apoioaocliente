@@ -132,7 +132,7 @@ export default function NotificationBell() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(30);
-    setOpNotifications((data as OpNotification[]) || []);
+    setOpNotifications((data as unknown as OpNotification[]) || []);
   }, [user]);
 
   useEffect(() => {
