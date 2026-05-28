@@ -1787,6 +1787,7 @@ Deno.serve(async (req) => {
 
       // ── Check if there's already an OPEN ticket with an email thread for this sender ──
       let ticketId: string | null = null;
+      let closedParentId: string | null = null;
       const { data: existingThread } = await adminClient
         .from("email_threads")
         .select("ticket_id")
@@ -1805,37 +1806,97 @@ Deno.serve(async (req) => {
         if (existingTicket) {
           const { data: statusData } = await adminClient
             .from("ticket_statuses")
-            .select("is_closed")
+            .select("is_closed, is_resolved")
             .eq("id", existingTicket.status)
             .single();
 
-          if (!statusData?.is_closed) {
+          if (!statusData?.is_closed && !statusData?.is_resolved) {
             ticketId = existingTicket.id;
+          } else {
+            closedParentId = existingTicket.id;
           }
         }
       }
 
       // Fallback: check tickets table directly by client_email
       if (!ticketId) {
-        const { data: openTickets } = await adminClient
+        const { data: candidateTickets } = await adminClient
           .from("tickets")
           .select("id, status")
           .eq("client_email", pe.from_address.toLowerCase())
           .order("created_at", { ascending: false })
           .limit(5);
 
-        if (openTickets) {
-          for (const t of openTickets) {
+        if (candidateTickets) {
+          for (const t of candidateTickets) {
             const { data: sd } = await adminClient
               .from("ticket_statuses")
-              .select("is_closed")
+              .select("is_closed, is_resolved")
               .eq("id", t.status)
               .single();
-            if (!sd?.is_closed) {
+            if (!sd?.is_closed && !sd?.is_resolved) {
               ticketId = t.id;
               break;
+            } else if (!closedParentId) {
+              closedParentId = t.id;
             }
           }
+        }
+      }
+
+      // No open ticket but a closed/resolved one exists for this sender →
+      // create a NEW ticket linked to the closed parent instead of merging into it.
+      if (!ticketId && closedParentId) {
+        const child = await createChildTicketFromClosed(
+          adminClient,
+          closedParentId,
+          {
+            subject: pe.subject || "Sem assunto",
+            description: description,
+            clientName: pe.from_name || pe.from_address,
+            clientEmail: pe.from_address,
+            receivedAt: pe.created_at || undefined,
+          },
+          agentId,
+        );
+
+        if (child) {
+          await adminClient.from("email_threads").insert({
+            ticket_id: child.id,
+            email_address: pe.from_address.toLowerCase(),
+            last_message_id: pe.message_id,
+          });
+
+          // Move attachments from pending to the new child ticket
+          const attMetaChild = (pe.attachments_meta as any[]) || [];
+          for (const att of attMetaChild) {
+            try {
+              const { data: fileData } = await adminClient.storage.from("email-assets").download(att.path);
+              if (fileData) {
+                const bytes = new Uint8Array(await fileData.arrayBuffer());
+                await uploadAttachment(adminClient, child.id, {
+                  filename: att.filename, contentType: att.contentType, data: bytes,
+                }, agentId);
+              }
+              await adminClient.storage.from("email-assets").remove([att.path]);
+            } catch (err) {
+              console.error(`Move attachment error: ${(err as Error).message}`);
+            }
+          }
+
+          await adminClient.from("pending_emails").update({
+            status: "approved",
+            reviewed_by: agentId,
+            reviewed_at: new Date().toISOString(),
+            ticket_id: child.id,
+            rejection_reason: `Novo ticket criado (continuação do #${closedParentId})`,
+          }).eq("id", pendingId);
+
+          return new Response(JSON.stringify({
+            success: true,
+            message: `Novo ticket #${child.ticket_number} criado como continuação de ticket fechado`,
+            ticket_id: child.id,
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
       }
 
