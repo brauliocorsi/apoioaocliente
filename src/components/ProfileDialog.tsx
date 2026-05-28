@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, Loader2, Lock, Save } from "lucide-react";
+import { Camera, Loader2, Lock, Save, PhoneCall } from "lucide-react";
 
 interface ProfileDialogProps {
   userId: string;
@@ -37,7 +37,31 @@ export default function ProfileDialog({
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [extension, setExtension] = useState<string>("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Load Let's Call extension for agents
+  useEffect(() => {
+    if (!open || table !== "profiles") return;
+    (async () => {
+      const { data } = await supabase.from("profiles").select("letscall_extension").eq("id", userId).maybeSingle();
+      setExtension(((data as any)?.letscall_extension ?? "")?.toString() || "");
+    })();
+  }, [open, table, userId]);
+
+  const handleSaveExtension = async () => {
+    const trimmed = extension.trim();
+    const value = trimmed === "" ? null : parseInt(trimmed, 10);
+    if (trimmed !== "" && (isNaN(value as number) || (value as number) <= 0)) {
+      toast({ title: "Ramal inválido", description: "Digite apenas números (ex: 200)", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from("profiles").update({ letscall_extension: value } as any).eq("id", userId);
+    setSaving(false);
+    if (error) toast({ title: "Erro ao guardar ramal", description: error.message, variant: "destructive" });
+    else toast({ title: "Ramal guardado" });
+  };
 
   const initials = (fullName || "U")
     .split(" ")
