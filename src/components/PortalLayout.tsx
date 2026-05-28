@@ -65,6 +65,7 @@ export default function PortalLayout() {
             </nav>
           </div>
           <div className="flex items-center gap-3">
+            <ClientNotificationBell />
             <ProfileDialog
               userId={user.id}
               fullName={profile?.full_name || ""}
