@@ -59,6 +59,14 @@ type Ticket = {
   order_number: string | null;
   order_lookup_status: string | null;
   order_lookup_error: string | null;
+  sla_first_response_at: string | null;
+  first_responded_at: string | null;
+  sla_resolution_at: string | null;
+  resolved_at: string | null;
+  next_customer_update_due_at: string | null;
+  sla_paused: boolean | null;
+  sla_breached: boolean | null;
+  sla_status: string | null;
 };
 
 type StatusRow = { id: string; name: string; is_closed: boolean | null; is_resolved: boolean | null };
@@ -112,7 +120,7 @@ export default function OperationalDashboard() {
   async function load() {
     setLoading(true);
     const [tk, st, pr, cat, msgs, ib, fl] = await Promise.all([
-      supabase.from("tickets").select("id, ticket_number, client_name, subject, category_id, priority, status, assigned_to, created_at, next_action, next_action_due_at, parent_ticket_id, order_number, order_lookup_status, order_lookup_error").order("created_at", { ascending: false }).limit(1000),
+      supabase.from("tickets").select("id, ticket_number, client_name, subject, category_id, priority, status, assigned_to, created_at, next_action, next_action_due_at, parent_ticket_id, order_number, order_lookup_status, order_lookup_error, sla_first_response_at, first_responded_at, sla_resolution_at, resolved_at, next_customer_update_due_at, sla_paused, sla_breached, sla_status").order("created_at", { ascending: false }).limit(1000),
       supabase.from("ticket_statuses").select("id, name, is_closed, is_resolved"),
       supabase.from("profiles").select("id, full_name").eq("is_active", true),
       supabase.from("categories").select("id, name"),
@@ -193,6 +201,40 @@ export default function OperationalDashboard() {
   const orderUnverified = openTickets.filter(t => t.order_number && (!t.order_lookup_status || t.order_lookup_status === "not_checked"));
   const orderAttention = openTickets.filter(t => ["not_found", "error", "multiple_matches", "mismatch"].includes(t.order_lookup_status || ""));
 
+  // --- Fase 6: SLA derived lists -----------------------------------------
+  const WARN_MS = 2 * 60 * 60 * 1000;
+  const slaBreached = openTickets.filter(t => !t.sla_paused && (
+    (!t.first_responded_at && t.sla_first_response_at && new Date(t.sla_first_response_at).getTime() < now) ||
+    (!t.resolved_at && t.sla_resolution_at && new Date(t.sla_resolution_at).getTime() < now) ||
+    (t.next_customer_update_due_at && new Date(t.next_customer_update_due_at).getTime() < now)
+  ));
+  const slaWarning = openTickets.filter(t => !t.sla_paused && !slaBreached.includes(t) && (
+    (!t.first_responded_at && t.sla_first_response_at && new Date(t.sla_first_response_at).getTime() - now <= WARN_MS && new Date(t.sla_first_response_at).getTime() > now) ||
+    (!t.resolved_at && t.sla_resolution_at && new Date(t.sla_resolution_at).getTime() - now <= WARN_MS && new Date(t.sla_resolution_at).getTime() > now)
+  ));
+  const frOverdue = openTickets.filter(t => !t.sla_paused && !t.first_responded_at && t.sla_first_response_at && new Date(t.sla_first_response_at).getTime() < now);
+  const resOverdue = openTickets.filter(t => !t.sla_paused && !t.resolved_at && t.sla_resolution_at && new Date(t.sla_resolution_at).getTime() < now);
+  const custUpdateOverdue = openTickets.filter(t => !t.sla_paused && t.next_customer_update_due_at && new Date(t.next_customer_update_due_at).getTime() < now);
+  const slaPaused = openTickets.filter(t => t.sla_paused);
+  const slaNone = openTickets.filter(t => !t.sla_first_response_at && !t.sla_resolution_at);
+  slaBreached.sort((a, b) => {
+    const da = Math.min(...[a.sla_first_response_at, a.sla_resolution_at, a.next_customer_update_due_at].filter(Boolean).map(s => new Date(s as string).getTime()));
+    const db = Math.min(...[b.sla_first_response_at, b.sla_resolution_at, b.next_customer_update_due_at].filter(Boolean).map(s => new Date(s as string).getTime()));
+    return da - db;
+  });
+
+  function slaBreachLabel(t: Ticket): { label: string; due: string } {
+    const now2 = Date.now();
+    const opts: Array<{ label: string; due: string }> = [];
+    if (!t.first_responded_at && t.sla_first_response_at && new Date(t.sla_first_response_at).getTime() < now2)
+      opts.push({ label: "Primeira resposta", due: t.sla_first_response_at });
+    if (!t.resolved_at && t.sla_resolution_at && new Date(t.sla_resolution_at).getTime() < now2)
+      opts.push({ label: "Resolução", due: t.sla_resolution_at });
+    if (t.next_customer_update_due_at && new Date(t.next_customer_update_due_at).getTime() < now2)
+      opts.push({ label: "Atualização ao cliente", due: t.next_customer_update_due_at });
+    return opts.sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())[0] || { label: "SLA", due: t.created_at };
+  }
+
   // By responsible
   const byResp = useMemo(() => {
     const groups: Record<string, { name: string; open: number; noResp: number; overdue: number; today: number; noAction: number; critical: number; continuation: number }> = {};
@@ -262,7 +304,65 @@ export default function OperationalDashboard() {
         <KpiCard icon={Flame} label="Tickets críticos" value={loading ? null : criticalTickets.length} tone="danger" anchor="critical" />
         <KpiCard icon={PackageSearch} label="Encomenda não verificada" value={loading ? null : orderUnverified.length} tone="muted" anchor="orders" />
         <KpiCard icon={PackageX} label="Encomendas com atenção" value={loading ? null : orderAttention.length} tone="warn" anchor="orders" />
+        <KpiCard icon={ShieldAlert} label="SLA vencido" value={loading ? null : slaBreached.length} tone="danger" anchor="sla-breached" />
+        <KpiCard icon={Clock} label="SLA em risco" value={loading ? null : slaWarning.length} tone="warn" anchor="sla-warning" />
+        <KpiCard icon={Clock} label="Primeira resp. vencida" value={loading ? null : frOverdue.length} tone="danger" anchor="sla-breached" />
+        <KpiCard icon={Clock} label="Resolução vencida" value={loading ? null : resOverdue.length} tone="danger" anchor="sla-breached" />
+        <KpiCard icon={UserX} label="Cliente sem atualização" value={loading ? null : custUpdateOverdue.length} tone="warn" anchor="cust-update" />
+        <KpiCard icon={Clock} label="SLA pausado" value={loading ? null : slaPaused.length} tone="muted" />
+        <KpiCard icon={Clock} label="Sem SLA" value={loading ? null : slaNone.length} tone="muted" />
       </section>
+
+      <ListSection id="sla-breached" title="SLA vencido" description="Tickets com primeira resposta, resolução ou atualização ao cliente em atraso.">
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Ticket</TableHead><TableHead>Cliente</TableHead><TableHead>Responsável</TableHead>
+            <TableHead>Tipo</TableHead><TableHead>Prazo</TableHead><TableHead>Atraso</TableHead>
+            <TableHead>Prio.</TableHead><TableHead></TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {slaBreached.slice(0, 50).map(t => {
+              const b = slaBreachLabel(t);
+              return (
+                <TableRow key={t.id}>
+                  <TableCell className="font-mono text-xs">#{t.ticket_number}</TableCell>
+                  <TableCell className="text-sm">{t.client_name}</TableCell>
+                  <TableCell className="text-sm">{t.assigned_to ? profileMap[t.assigned_to] || "—" : <Badge variant="outline">Sem resp.</Badge>}</TableCell>
+                  <TableCell className="text-xs">{b.label}</TableCell>
+                  <TableCell className="text-xs">{format(new Date(b.due), "dd/MM HH:mm", { locale: pt })}</TableCell>
+                  <TableCell className="text-xs text-destructive">{formatDistanceToNow(new Date(b.due), { locale: pt })}</TableCell>
+                  <TableCell><PriorityBadge p={t.priority} /></TableCell>
+                  <TableCell><OpenLink to={`/tickets/${t.id}`} /></TableCell>
+                </TableRow>
+              );
+            })}
+            {slaBreached.length === 0 && <EmptyRow cols={8} text="Sem SLA vencido." />}
+          </TableBody>
+        </Table>
+      </ListSection>
+
+      <ListSection id="cust-update" title="Clientes sem atualização" description="Tickets cujo prazo de próxima atualização ao cliente venceu.">
+        <Table>
+          <TableHeader><TableRow>
+            <TableHead>Ticket</TableHead><TableHead>Cliente</TableHead><TableHead>Responsável</TableHead>
+            <TableHead>Atualização desde</TableHead><TableHead>Prio.</TableHead><TableHead></TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {custUpdateOverdue.slice(0, 50).map(t => (
+              <TableRow key={t.id}>
+                <TableCell className="font-mono text-xs">#{t.ticket_number}</TableCell>
+                <TableCell className="text-sm">{t.client_name}</TableCell>
+                <TableCell className="text-sm">{t.assigned_to ? profileMap[t.assigned_to] || "—" : <Badge variant="outline">Sem resp.</Badge>}</TableCell>
+                <TableCell className="text-xs text-destructive">{formatDistanceToNow(new Date(t.next_customer_update_due_at!), { locale: pt })}</TableCell>
+                <TableCell><PriorityBadge p={t.priority} /></TableCell>
+                <TableCell><OpenLink to={`/tickets/${t.id}`} /></TableCell>
+              </TableRow>
+            ))}
+            {custUpdateOverdue.length === 0 && <EmptyRow cols={6} text="Todos os clientes em dia." />}
+          </TableBody>
+        </Table>
+      </ListSection>
+
 
       {/* LISTS */}
       <ListSection id="no-response" title="Clientes sem resposta" description="Última mensagem é do cliente e nenhum agente respondeu desde então.">

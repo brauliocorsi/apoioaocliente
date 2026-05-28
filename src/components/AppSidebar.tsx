@@ -1,4 +1,4 @@
-import { LayoutDashboard, Ticket, MessageSquareText, Settings, LogOut, Phone, Truck, ClipboardCheck, Mail, AlertTriangle, Inbox, Activity } from "lucide-react";
+import { LayoutDashboard, Ticket, MessageSquareText, Settings, LogOut, Phone, Truck, ClipboardCheck, Mail, AlertTriangle, Inbox, Activity, Users, Tag, Timer, FolderTree } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import ProfileDialog from "@/components/ProfileDialog";
@@ -8,6 +8,7 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -17,18 +18,46 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-const navItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Painel Operacional", url: "/operational-dashboard", icon: Activity },
-  { title: "Tickets", url: "/tickets", icon: Ticket },
-  { title: "Email Tickets", url: "/email-tickets", icon: Mail },
-  { title: "Caixa de Entrada", url: "/inbound-events", icon: Inbox },
-  { title: "Ligações", url: "/phone-calls", icon: Phone },
-  { title: "Encomendas", url: "/delayed-orders", icon: AlertTriangle },
-  { title: "Reg. Ligações", url: "/delivery-confirmations", icon: Truck },
-  { title: "Pós-Entrega", url: "/post-delivery", icon: ClipboardCheck },
-  { title: "Macros", url: "/macros", icon: MessageSquareText },
-  { title: "Configurações", url: "/settings", icon: Settings },
+type Item = { title: string; url: string; icon: any };
+type Group = { label: string; items: Item[] };
+
+const groups: Group[] = [
+  {
+    label: "Visão Geral",
+    items: [
+      { title: "Painel Operacional", url: "/operational-dashboard", icon: Activity },
+      { title: "Dashboard", url: "/", icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: "Atendimento",
+    items: [
+      { title: "Tickets", url: "/tickets", icon: Ticket },
+      { title: "Email Tickets", url: "/email-tickets", icon: Mail },
+      { title: "Caixa de Entrada", url: "/inbound-events", icon: Inbox },
+    ],
+  },
+  {
+    label: "Operação",
+    items: [
+      { title: "Encomendas Atrasadas", url: "/delayed-orders", icon: AlertTriangle },
+      { title: "Pós-Entrega", url: "/post-delivery", icon: ClipboardCheck },
+      { title: "Ligações", url: "/phone-calls", icon: Phone },
+      { title: "Reg. Ligações", url: "/delivery-confirmations", icon: Truck },
+    ],
+  },
+  {
+    label: "Gestão",
+    items: [
+      { title: "Macros", url: "/macros", icon: MessageSquareText },
+    ],
+  },
+  {
+    label: "Administração",
+    items: [
+      { title: "Configurações", url: "/settings", icon: Settings },
+    ],
+  },
 ];
 
 export function AppSidebar() {
@@ -58,39 +87,42 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="px-3 overflow-y-auto">
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu className="space-y-0.5">
-              {navItems.map((item) => {
-                const active = isActive(item.url);
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild>
-                      <NavLink
-                        to={item.url}
-                        end={item.url === "/"}
-                        className={`
-                          group relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors duration-150
-                          ${active
-                            ? "bg-sidebar-accent text-sidebar-primary"
-                            : "text-sidebar-foreground/55 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground/90"
-                          }
-                        `}
-                        activeClassName=""
-                      >
-                        {active && (
-                          <div className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-sidebar-primary" />
-                        )}
-                        <item.icon className="h-4 w-4 shrink-0" />
-                        <span>{item.title}</span>
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {groups.map((group) => (
+          <SidebarGroup key={group.label}>
+            <SidebarGroupLabel className="text-[10px] font-medium uppercase tracking-[0.12em] text-sidebar-foreground/35 px-3">
+              {group.label}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu className="space-y-0.5">
+                {group.items.map((item) => {
+                  const active = isActive(item.url);
+                  return (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild>
+                        <NavLink
+                          to={item.url}
+                          end={item.url === "/"}
+                          className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors duration-150 ${
+                            active
+                              ? "bg-sidebar-accent text-sidebar-primary"
+                              : "text-sidebar-foreground/55 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground/90"
+                          }`}
+                          activeClassName=""
+                        >
+                          {active && (
+                            <div className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-sidebar-primary" />
+                          )}
+                          <item.icon className="h-4 w-4 shrink-0" />
+                          <span>{item.title}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
 
       <SidebarFooter className="p-4">

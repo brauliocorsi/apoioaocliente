@@ -405,3 +405,33 @@ Com os novos campos passamos a poder construir, sem refactor, queries para:
 **Fora de âmbito:** push browser, SMS, WhatsApp, preferências avançadas, IA, unsubscribe.
 
 **Sem alterações destrutivas:** nenhuma tabela existente foi modificada; nenhum dado apagado; triggers anteriores intactos.
+
+
+## Fase 6 — SLA operacional real + repaginação funcional
+
+### SLA operacional
+- Novas colunas aditivas em `tickets`: `next_customer_update_due_at`, `sla_status`, `sla_breached`, `sla_breach_reason`, `sla_paused`, `sla_paused_reason`.
+- Defaults por prioridade (horas corridas — limitação assumida nesta fase): primeira resposta 2/4/24/48h, resolução 24/48/120/240h. Atualização ao cliente a cada 48h.
+- Triggers aditivos:
+  - `trg_tickets_init_sla` (BEFORE INSERT) preenche prazos iniciais.
+  - `trg_ticket_messages_sla_marks` (AFTER INSERT em `ticket_messages`) regista `first_responded_at` e empurra `next_customer_update_due_at` quando o agente responde.
+  - `trg_tickets_sla_on_status` (BEFORE UPDATE) marca `resolved_at` e atualiza `sla_status` para resolvido/fechado.
+- Estados derivados na UI: `on_track`, `warning`, `breached`, `paused`, `resolved`, `closed`, `no_sla`.
+
+### Onde aparece
+- `src/components/ticket/SlaStatusCard.tsx` — card no TicketSidebar com badge de estado, primeira resposta, resolução, próxima atualização e próxima ação.
+- `OperationalDashboard`: 8 KPIs novos (SLA vencido, em risco, primeira resp. vencida, resolução vencida, cliente sem atualização, SLA pausado, sem SLA) + listas `sla-breached` e `cust-update`.
+
+### Notificações SLA (internas)
+- `generate-operational-notifications` estendida com tipos: `first_response_overdue`, `resolution_overdue`, `customer_update_overdue`, `sla_warning` (janela 2h). Idempotência via `create_notification`. Marca `tickets.sla_breached=true` na primeira ocorrência. Não notifica cliente.
+
+### Layout / menu
+- `AppSidebar` reorganizado em grupos: Visão Geral, Atendimento, Operação, Gestão, Administração. Sem rotas removidas. Categorias/Etiquetas continuam acessíveis via Configurações (rotas próprias não estão registadas em `App.tsx`).
+
+### Limitações conhecidas
+- Cálculo de SLA em horas corridas; calendário laboral não implementado.
+- Tickets antigos não recebem atualização em massa; apenas novos eventos preenchem os campos.
+- `sla_paused` é manual (sem trigger automático por estado “Aguarda cliente”).
+
+### Próxima fase recomendada
+- Calendário laboral Mon–Sat 08–20 e pausa automática por status “Aguarda cliente”.
