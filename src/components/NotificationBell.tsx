@@ -123,7 +123,23 @@ export default function NotificationBell() {
     setUnreadTickets(result);
   }, [user]);
 
-  useEffect(() => { fetchNotifications(); fetchUnreadMessages(); }, [fetchNotifications, fetchUnreadMessages]);
+  // Fase 5B: load operational notifications
+  const fetchOpNotifications = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("notifications" as any)
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(30);
+    setOpNotifications((data as OpNotification[]) || []);
+  }, [user]);
+
+  useEffect(() => {
+    fetchNotifications();
+    fetchUnreadMessages();
+    fetchOpNotifications();
+  }, [fetchNotifications, fetchUnreadMessages, fetchOpNotifications]);
 
   useEffect(() => {
     if (!user) return;
@@ -140,23 +156,46 @@ export default function NotificationBell() {
         schema: "public",
         table: "ticket_messages",
       }, () => { fetchUnreadMessages(); })
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "notifications",
+        filter: `user_id=eq.${user.id}`,
+      }, () => { fetchOpNotifications(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, fetchNotifications, fetchUnreadMessages]);
+  }, [user, fetchNotifications, fetchUnreadMessages, fetchOpNotifications]);
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const unreadOpCount = opNotifications.filter((n) => !n.is_read).length;
   const unreadMsgCount = unreadTickets.reduce((sum, t) => sum + t.count, 0);
-  const totalBadge = unreadCount + unreadMsgCount;
+  const totalBadge = unreadCount + unreadMsgCount + unreadOpCount;
 
   const markRead = async (id: string) => {
     await supabase.from("agent_notifications").update({ is_read: true }).eq("id", id);
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n));
   };
 
+  const markOpRead = async (id: string) => {
+    await supabase.from("notifications" as any).update({ is_read: true, read_at: new Date().toISOString() }).eq("id", id);
+    setOpNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n));
+  };
+
   const markAllRead = async () => {
     if (!user) return;
-    await supabase.from("agent_notifications").update({ is_read: true }).eq("recipient_id", user.id).eq("is_read", false);
+    await Promise.all([
+      supabase.from("agent_notifications").update({ is_read: true }).eq("recipient_id", user.id).eq("is_read", false),
+      supabase.from("notifications" as any).update({ is_read: true, read_at: new Date().toISOString() }).eq("user_id", user.id).eq("is_read", false),
+    ]);
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setOpNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+  };
+
+  const handleClickOpNotification = (n: OpNotification) => {
+    markOpRead(n.id);
+    if (n.ticket_id) navigate(`/tickets/${n.ticket_id}`);
+    else if (n.inbound_email_event_id) navigate("/inbound-events");
+    setOpen(false);
   };
 
   const handleClickNotification = (n: Notification) => {
