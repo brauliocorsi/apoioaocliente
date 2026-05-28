@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.sync-delayed-orders]
 verify_jwt = false
+
+[functions.send-ticket-created-confirmation]
+verify_jwt = false

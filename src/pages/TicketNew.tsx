@@ -44,6 +44,7 @@ export default function TicketNew() {
     delivery_type: "",
     pickup_date: "",
     product_name: "",
+    notify_client: false,
   });
   const [attachments, setAttachments] = useState<any[]>([]);
 
@@ -137,6 +138,11 @@ export default function TicketNew() {
         );
       }
       toast({ title: "Ticket criado com sucesso" });
+      if (form.notify_client && form.client_email) {
+        supabase.functions.invoke("send-ticket-created-confirmation", {
+          body: { ticket_id: data.id, source: "manual_agent" },
+        }).catch((err) => console.error("Confirmation email failed:", err));
+      }
       navigate(`/tickets/${data.id}`);
     }
     setSubmitting(false);
@@ -297,6 +303,19 @@ export default function TicketNew() {
                 attachments={attachments}
                 onAttachmentsChange={setAttachments}
               />
+            </div>
+            <div className="pt-2 border-t">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.notify_client}
+                  onChange={(e) => update("notify_client", e.target.checked)}
+                  disabled={!form.client_email}
+                  className="rounded"
+                />
+                Notificar cliente por e-mail (confirmação de abertura)
+                {!form.client_email && <span className="text-xs text-muted-foreground">— requer e-mail do cliente</span>}
+              </label>
             </div>
           </CardContent>
         </Card>
