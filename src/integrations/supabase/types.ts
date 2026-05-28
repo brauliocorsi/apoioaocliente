@@ -497,6 +497,75 @@ export type Database = {
         }
         Relationships: []
       }
+      inbound_email_events: {
+        Row: {
+          body_preview: string | null
+          created_at: string
+          email_fingerprint: string | null
+          error_message: string | null
+          from_address: string
+          from_name: string | null
+          id: string
+          message_id: string | null
+          parent_ticket_id: string | null
+          pending_email_id: string | null
+          processed_at: string | null
+          received_at: string
+          routed_ticket_id: string | null
+          routing_action: string | null
+          routing_reason: string | null
+          spam_reasons: Json
+          spam_score: number
+          status: string
+          subject: string | null
+          updated_at: string
+        }
+        Insert: {
+          body_preview?: string | null
+          created_at?: string
+          email_fingerprint?: string | null
+          error_message?: string | null
+          from_address: string
+          from_name?: string | null
+          id?: string
+          message_id?: string | null
+          parent_ticket_id?: string | null
+          pending_email_id?: string | null
+          processed_at?: string | null
+          received_at?: string
+          routed_ticket_id?: string | null
+          routing_action?: string | null
+          routing_reason?: string | null
+          spam_reasons?: Json
+          spam_score?: number
+          status?: string
+          subject?: string | null
+          updated_at?: string
+        }
+        Update: {
+          body_preview?: string | null
+          created_at?: string
+          email_fingerprint?: string | null
+          error_message?: string | null
+          from_address?: string
+          from_name?: string | null
+          id?: string
+          message_id?: string | null
+          parent_ticket_id?: string | null
+          pending_email_id?: string | null
+          processed_at?: string | null
+          received_at?: string
+          routed_ticket_id?: string | null
+          routing_action?: string | null
+          routing_reason?: string | null
+          spam_reasons?: Json
+          spam_score?: number
+          status?: string
+          subject?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       macros: {
         Row: {
           content: string
