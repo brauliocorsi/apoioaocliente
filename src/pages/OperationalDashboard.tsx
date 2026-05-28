@@ -311,7 +311,7 @@ export default function OperationalDashboard() {
         <KpiCard icon={Clock} label="Primeira resp. vencida" value={loading ? null : frOverdue.length} tone="danger" anchor="sla-breached" />
         <KpiCard icon={Clock} label="Resolução vencida" value={loading ? null : resOverdue.length} tone="danger" anchor="sla-breached" />
         <KpiCard icon={UserX} label="Cliente sem atualização" value={loading ? null : custUpdateOverdue.length} tone="warn" anchor="cust-update" />
-        <KpiCard icon={Clock} label="SLA pausado" value={loading ? null : slaPaused.length} tone="muted" />
+        <KpiCard icon={Clock} label="SLA pausado" value={loading ? null : slaPaused.length} tone="muted" anchor="sla-paused" />
         <KpiCard icon={Clock} label="Sem SLA" value={loading ? null : slaNone.length} tone="muted" />
       </section>
 
