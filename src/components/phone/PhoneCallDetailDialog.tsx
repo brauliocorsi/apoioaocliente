@@ -248,6 +248,10 @@ export default function PhoneCallDetailDialog({ call, open, onClose, onUpdated }
               {call.source === "letscall" && (
                 <Badge variant="outline" className="text-[10px] gap-1 h-5"><Zap className="h-2.5 w-2.5" /> Auto</Badge>
               )}
+              {call.extension && (
+                <Badge variant="outline" className="text-[10px] h-5 font-mono">Ramal {call.extension}</Badge>
+              )}
+              <ReconciliationBadge callId={call.id} />
             </div>
           </div>
 
