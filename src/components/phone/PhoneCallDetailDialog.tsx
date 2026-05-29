@@ -38,6 +38,7 @@ interface PhoneCall {
   attended?: boolean | null;
   has_recording?: boolean | null;
   letscall_linkedid?: string | null;
+  extension?: string | null;
 }
 
 interface AgentProfile {
