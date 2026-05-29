@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   MessageSquare, User, Bot, Mail, MailX, Paperclip, Activity,
-  GitBranch, AlertTriangle, Inbox, Loader2,
+  GitBranch, AlertTriangle, Inbox, Loader2, Phone, PhoneMissed,
 } from "lucide-react";
 
 /**
