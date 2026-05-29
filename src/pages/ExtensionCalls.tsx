@@ -268,7 +268,12 @@ export default function ExtensionCalls() {
                       <div>{format(new Date(c.created_at), "dd/MM HH:mm")}</div>
                       <div className="text-muted-foreground">{formatDistanceToNow(new Date(c.created_at), { locale: pt, addSuffix: true })}</div>
                     </TableCell>
-                    <TableCell className="text-xs font-mono">{c.extension || "—"}</TableCell>
+                    <TableCell className="text-xs font-mono">
+                      {displayExt(c.extension) || "—"}
+                      {c.extension && displayExt(c.extension) !== c.extension && (
+                        <span className="text-[10px] text-muted-foreground ml-1">({c.extension})</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-xs">
                       <Badge variant="outline" className="gap-1 text-[10px]">
                         {isIn ? <PhoneIncoming className="h-3 w-3" /> : <PhoneOutgoing className="h-3 w-3" />}
