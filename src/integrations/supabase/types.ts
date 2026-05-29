@@ -335,6 +335,13 @@ export type Database = {
             referencedRelation: "phone_calls"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "delayed_order_contacts_phone_call_id_fkey"
+            columns: ["phone_call_id"]
+            isOneToOne: false
+            referencedRelation: "phone_calls_reconciliation"
+            referencedColumns: ["phone_call_id"]
+          },
         ]
       }
       delayed_orders: {
@@ -721,6 +728,60 @@ export type Database = {
           },
         ]
       }
+      microsip_extension_status: {
+        Row: {
+          extension: number
+          last_attended: boolean | null
+          last_call_at: string | null
+          last_direction: string | null
+          last_seen_source: string | null
+          updated_at: string
+        }
+        Insert: {
+          extension: number
+          last_attended?: boolean | null
+          last_call_at?: string | null
+          last_direction?: string | null
+          last_seen_source?: string | null
+          updated_at?: string
+        }
+        Update: {
+          extension?: number
+          last_attended?: boolean | null
+          last_call_at?: string | null
+          last_direction?: string | null
+          last_seen_source?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      monitored_extensions: {
+        Row: {
+          assigned_profile_id: string | null
+          created_at: string
+          extension: number
+          is_active: boolean
+          label: string | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_profile_id?: string | null
+          created_at?: string
+          extension: number
+          is_active?: boolean
+          label?: string | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_profile_id?: string | null
+          created_at?: string
+          extension?: number
+          is_active?: boolean
+          label?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -870,6 +931,13 @@ export type Database = {
             referencedRelation: "phone_calls"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "phone_call_reminders_phone_call_id_fkey"
+            columns: ["phone_call_id"]
+            isOneToOne: false
+            referencedRelation: "phone_calls_reconciliation"
+            referencedColumns: ["phone_call_id"]
+          },
         ]
       }
       phone_call_statuses: {
@@ -908,6 +976,7 @@ export type Database = {
           created_by: string | null
           direction: string | null
           duration_seconds: number | null
+          extension: string | null
           has_recording: boolean | null
           id: string
           invoice_number: string | null
@@ -933,6 +1002,7 @@ export type Database = {
           created_by?: string | null
           direction?: string | null
           duration_seconds?: number | null
+          extension?: string | null
           has_recording?: boolean | null
           id?: string
           invoice_number?: string | null
@@ -958,6 +1028,7 @@ export type Database = {
           created_by?: string | null
           direction?: string | null
           duration_seconds?: number | null
+          extension?: string | null
           has_recording?: boolean | null
           id?: string
           invoice_number?: string | null
@@ -1749,7 +1820,28 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      phone_calls_reconciliation: {
+        Row: {
+          attended: boolean | null
+          client_phone: string | null
+          created_at: string | null
+          direction: string | null
+          extension: string | null
+          phone_call_id: string | null
+          reconciliation_status: string | null
+          source: string | null
+          ticket_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phone_calls_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       add_business_hours: {

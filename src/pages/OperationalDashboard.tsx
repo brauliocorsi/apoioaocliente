@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow, format, isToday } from "date-fns";
 import { pt } from "date-fns/locale";
+import CallsPanel from "@/components/dashboard/CallsPanel";
 
 /**
  * Fase 5A — Painel Operacional da Alessandra
@@ -612,6 +613,8 @@ export default function OperationalDashboard() {
           </Table>
         </CardContent>
       </Card>
+      <CallsPanel />
+
 
       <Card className="bg-muted/30">
         <CardContent className="pt-6 text-xs text-muted-foreground space-y-1">

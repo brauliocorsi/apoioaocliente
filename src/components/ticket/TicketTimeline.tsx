@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   MessageSquare, User, Bot, Mail, MailX, Paperclip, Activity,
-  GitBranch, AlertTriangle, Inbox, Loader2,
+  GitBranch, AlertTriangle, Inbox, Loader2, Phone, PhoneMissed,
 } from "lucide-react";
 
 /**
@@ -33,7 +33,8 @@ type TimelineKind =
   | "email_received"
   | "attachment_added"
   | "ticket_continuation_created"
-  | "inbound_event";
+  | "inbound_event"
+  | "phone_call";
 
 interface TimelineItem {
   id: string;
@@ -63,6 +64,7 @@ const KIND_META: Record<TimelineKind, { label: string; icon: React.ComponentType
   attachment_added: { label: "Anexo", icon: Paperclip, tone: "border-muted-foreground/30 text-muted-foreground" },
   ticket_continuation_created: { label: "Continuação", icon: GitBranch, tone: "border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300" },
   inbound_event: { label: "Caixa de Entrada", icon: AlertTriangle, tone: "border-muted-foreground/30 text-muted-foreground" },
+  phone_call: { label: "Chamada", icon: Phone, tone: "border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300" },
 };
 
 function stripHtml(s: string | null | undefined, limit = 200): string {
@@ -81,7 +83,7 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
     const load = async () => {
       setLoading(true);
 
-      const [msgsRes, evRes, logsRes, inboundRes, attRes, childrenRes] = await Promise.all([
+      const [msgsRes, evRes, logsRes, inboundRes, attRes, childrenRes, callsRes] = await Promise.all([
         preloadedMessages
           ? Promise.resolve({ data: preloadedMessages })
           : supabase.from("ticket_messages")
@@ -110,6 +112,10 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
           .select("id, ticket_number, subject, created_at, status")
           .eq("parent_ticket_id", ticketId)
           .order("created_at", { ascending: true }),
+        supabase.from("phone_calls")
+          .select("id, created_at, direction, attended, extension, duration_seconds, source, client_name")
+          .eq("ticket_id", ticketId)
+          .order("created_at", { ascending: true }),
       ]);
 
       const msgs = (msgsRes.data as any[]) || [];
@@ -118,6 +124,7 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
       const inbound = (inboundRes.data as any[]) || [];
       const atts = (attRes.data as any[]) || [];
       const children = (childrenRes.data as any[]) || [];
+      const phoneCalls = (callsRes.data as any[]) || [];
 
       // Collect author ids
       const ids = new Set<string>();
@@ -199,6 +206,22 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
           author: null,
           summary: `Continuação criada: #${c.ticket_number} — ${c.subject}`,
           meta: { child_ticket_id: c.id },
+        });
+      });
+
+      phoneCalls.forEach((c) => {
+        const dir = c.direction === "incoming" || c.direction === "inbound" ? "Recebida" : c.direction === "outgoing" || c.direction === "outbound" ? "Efetuada" : "Chamada";
+        const attended = c.attended === false ? " (não atendida)" : c.attended ? " (atendida)" : "";
+        const ext = c.extension ? ` · ramal ${c.extension}` : "";
+        const dur = c.duration_seconds ? ` · ${c.duration_seconds}s` : "";
+        const src = c.source === "letscall" ? " · MicroSIP" : c.source === "manual" ? " · manual" : "";
+        built.push({
+          id: `call-${c.id}`,
+          at: c.created_at,
+          kind: "phone_call",
+          author: c.client_name || null,
+          summary: `${dir}${attended}${ext}${dur}${src}`,
+          meta: { phone_call_id: c.id },
         });
       });
 

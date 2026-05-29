@@ -93,19 +93,42 @@ async function upsertCdr(cdr: any, month: number, fallbackCreator: string) {
   const linkedid = String(cdr.linkedid || cdr.id);
   if (!linkedid) return { skipped: true };
 
+  const direction = String(cdr.direction || "").toLowerCase();
+  const isIncoming = direction === "incoming";
+  const clientPhone = isIncoming ? (cdr.callerid || "") : (cdr.destination || "");
+  const clientName = isIncoming ? (cdr.src_name || cdr.callerid || "Desconhecido")
+                                  : (cdr.dst_name || cdr.destination || "Desconhecido");
+
+  // Extract extension (preference: queueAgent → dst for outbound → src for inbound attended)
+  const extRaw = cdr.queueAgent || cdr.queue_agent || cdr.agent_extension
+    || (isIncoming ? cdr.dst_extension : cdr.src_extension)
+    || (isIncoming ? cdr.destination : cdr.callerid);
+  const extMatch = String(extRaw || "").match(/\b(\d{3,4})\b/);
+  const extension = extMatch ? extMatch[1] : null;
+
   // Check if already exists
   const { data: existing } = await admin
     .from("phone_calls")
     .select("id")
     .eq("letscall_linkedid", linkedid)
     .maybeSingle();
-  if (existing) return { existing: true };
 
-  const direction = String(cdr.direction || "").toLowerCase();
-  const isIncoming = direction === "incoming";
-  const clientPhone = isIncoming ? (cdr.callerid || "") : (cdr.destination || "");
-  const clientName = isIncoming ? (cdr.src_name || cdr.callerid || "Desconhecido")
-                                  : (cdr.dst_name || cdr.destination || "Desconhecido");
+  const calldate = cdr.calldate ? new Date(cdr.calldate).toISOString() : new Date().toISOString();
+  const attended = !!cdr.attended;
+
+  // Update extension status (most recent wins)
+  if (extension) {
+    await admin.from("microsip_extension_status").upsert({
+      extension: parseInt(extension, 10),
+      last_call_at: calldate,
+      last_direction: direction,
+      last_attended: attended,
+      last_seen_source: "cdr",
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "extension" });
+  }
+
+  if (existing) return { existing: true };
 
   // Try to link to an open ticket by normalized phone match against any existing client
   const normalized = normalizePhone(clientPhone);
@@ -122,14 +145,10 @@ async function upsertCdr(cdr: any, month: number, fallbackCreator: string) {
     ticketId = (match as any)?.ticket_id || null;
   }
 
-  const calldate = cdr.calldate ? new Date(cdr.calldate).toISOString() : new Date().toISOString();
   const duration = Number(cdr.duration || 0);
   const ringing = Number(cdr.ringing || 0);
-  const attended = !!cdr.attended;
   const hasRec = !!cdr.record_file;
 
-  // Default status: closed if call already finished (encerradas), otherwise active
-  // We'll insert as a closed call since CDRs are historical
   const subject = `Chamada ${isIncoming ? "recebida" : "efetuada"}${attended ? "" : " (não atendida)"} — ${duration}s`;
 
   const insert: any = {
@@ -151,16 +170,17 @@ async function upsertCdr(cdr: any, month: number, fallbackCreator: string) {
     closed_at: calldate, // historical — auto-close
     ticket_id: ticketId,
     created_by: fallbackCreator,
+    extension,
   };
 
   const { error } = await admin.from("phone_calls").insert(insert);
   if (error) {
-    // unique-violation = race condition; ignore
     if ((error as any).code === "23505") return { existing: true };
     throw new Error(`upsert(${linkedid}): ${error.message} | code=${error.code} | details=${error.details}`);
   }
   return { inserted: true };
 }
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
