@@ -185,6 +185,29 @@ async function upsertCdr(cdr: any, month: number, fallbackCreator: string) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  // Require x-cron-secret header to prevent unauthenticated invocations.
+  try {
+    const provided = req.headers.get("x-cron-secret") || "";
+    const { data: secretRow } = await admin
+      .from("system_settings")
+      .select("value")
+      .eq("key", "letscall_sync_cron_secret")
+      .maybeSingle();
+    const expected = (secretRow as any)?.value || "";
+    if (!expected || provided !== expected) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+  } catch {
+    return new Response(
+      JSON.stringify({ ok: false, error: "Unauthorized" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+
   try {
     const jwt = await getJwt();
 
