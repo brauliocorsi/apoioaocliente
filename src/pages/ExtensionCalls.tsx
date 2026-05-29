@@ -36,6 +36,10 @@ type Status = { extension: number; last_call_at: string | null; last_direction: 
 
 const WINDOWS: Record<string, number> = { "24": 24, "168": 24 * 7, "720": 24 * 30 };
 
+// Mapa de ramais brutos do CDR (MicroSIP/Let's Call) para os ramais reais visíveis.
+const EXT_DISPLAY_MAP: Record<string, string> = { "200": "400", "201": "401", "202": "402" };
+const displayExt = (raw: string | null | undefined) => (raw ? EXT_DISPLAY_MAP[raw] ?? raw : null);
+
 function fmtDur(sec: number | null) {
   if (!sec || sec <= 0) return "—";
   const m = Math.floor(sec / 60);
@@ -86,7 +90,7 @@ export default function ExtensionCalls() {
     const m: Record<string, { total: number; attended: number; missed: number; inbound: number; outbound: number; last: string | null }> = {};
     calls.forEach((c) => {
       if (c.source !== "letscall" || !c.extension) return;
-      const k = c.extension;
+      const k = displayExt(c.extension)!;
       m[k] ||= { total: 0, attended: 0, missed: 0, inbound: 0, outbound: 0, last: null };
       m[k].total++;
       if (c.attended) m[k].attended++;
@@ -101,7 +105,7 @@ export default function ExtensionCalls() {
   const filtered = useMemo(() => {
     return calls.filter((c) => {
       if (c.source !== "letscall") return false;
-      if (selectedExt !== "all" && c.extension !== selectedExt) return false;
+      if (selectedExt !== "all" && displayExt(c.extension) !== selectedExt) return false;
       if (filter === "attended" && !c.attended) return false;
       if (filter === "missed" && c.attended !== false) return false;
       if (filter === "inbound" && !(c.direction === "incoming" || c.direction === "inbound")) return false;
@@ -159,7 +163,8 @@ export default function ExtensionCalls() {
 
         {monitored.map((m) => {
           const s = statsByExt[String(m.extension)];
-          const st = status.find((x) => x.extension === m.extension);
+          const rawExt = Object.entries(EXT_DISPLAY_MAP).find(([, v]) => v === String(m.extension))?.[0];
+          const st = status.find((x) => x.extension === m.extension || (rawExt && x.extension === Number(rawExt)));
           const lastTs = st?.last_call_at ? new Date(st.last_call_at).getTime() : (s?.last ? new Date(s.last).getTime() : 0);
           const minutesAgo = lastTs ? (now - lastTs) / 60000 : Infinity;
           const active = minutesAgo <= 5;
@@ -263,7 +268,12 @@ export default function ExtensionCalls() {
                       <div>{format(new Date(c.created_at), "dd/MM HH:mm")}</div>
                       <div className="text-muted-foreground">{formatDistanceToNow(new Date(c.created_at), { locale: pt, addSuffix: true })}</div>
                     </TableCell>
-                    <TableCell className="text-xs font-mono">{c.extension || "—"}</TableCell>
+                    <TableCell className="text-xs font-mono">
+                      {displayExt(c.extension) || "—"}
+                      {c.extension && displayExt(c.extension) !== c.extension && (
+                        <span className="text-[10px] text-muted-foreground ml-1">({c.extension})</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-xs">
                       <Badge variant="outline" className="gap-1 text-[10px]">
                         {isIn ? <PhoneIncoming className="h-3 w-3" /> : <PhoneOutgoing className="h-3 w-3" />}
