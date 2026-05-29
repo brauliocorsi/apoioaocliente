@@ -172,8 +172,9 @@ export default function CallsPanel() {
                   <TableRow><TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-6">Sem ramais configurados.</TableCell></TableRow>
                 )}
                 {!loading && monitored.map(m => {
-                  const stats = byExt[String(m.extension)];
-                  const st = status.find(s => s.extension === m.extension);
+                  const rawExt = DISPLAY_TO_RAW[m.extension] ?? String(m.extension);
+                  const stats = byExt[rawExt];
+                  const st = status.find(s => s.extension === m.extension || String(s.extension) === rawExt);
                   const lastTs = st?.last_call_at ? new Date(st.last_call_at).getTime() : (stats?.last ? new Date(stats.last).getTime() : 0);
                   const minutesAgo = lastTs ? (now - lastTs) / 60000 : Infinity;
                   const active = minutesAgo <= 5;
