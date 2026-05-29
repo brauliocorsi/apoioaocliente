@@ -37,6 +37,11 @@ type Status = { extension: number; last_call_at: string | null; last_direction: 
 type Recon = { phone_call_id: string; reconciliation_status: string; source: string; created_at: string };
 type Profile = { id: string; full_name: string };
 
+// Mapeamento de ramal bruto (CDR Let's Call) → ramal exibido
+const RAW_TO_DISPLAY: Record<string, number> = { "200": 400, "201": 401, "202": 402 };
+const DISPLAY_TO_RAW: Record<number, string> = { 400: "200", 401: "201", 402: "202" };
+const displayExt = (raw: string | null | undefined): string => (raw && RAW_TO_DISPLAY[raw] ? String(RAW_TO_DISPLAY[raw]) : (raw || "—"));
+
 export default function CallsPanel() {
   const [windowH, setWindowH] = useState<"24" | "168">("24");
   const [loading, setLoading] = useState(true);
@@ -167,8 +172,9 @@ export default function CallsPanel() {
                   <TableRow><TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-6">Sem ramais configurados.</TableCell></TableRow>
                 )}
                 {!loading && monitored.map(m => {
-                  const stats = byExt[String(m.extension)];
-                  const st = status.find(s => s.extension === m.extension);
+                  const rawExt = DISPLAY_TO_RAW[m.extension] ?? String(m.extension);
+                  const stats = byExt[rawExt];
+                  const st = status.find(s => s.extension === m.extension || String(s.extension) === rawExt);
                   const lastTs = st?.last_call_at ? new Date(st.last_call_at).getTime() : (stats?.last ? new Date(stats.last).getTime() : 0);
                   const minutesAgo = lastTs ? (now - lastTs) / 60000 : Infinity;
                   const active = minutesAgo <= 5;
@@ -266,7 +272,7 @@ function ReconList({ title, description, items }: { title: string; description: 
                       <TableCell className="text-xs">{c.direction || "—"}</TableCell>
                       <TableCell className="text-xs">{c.client_name}</TableCell>
                       <TableCell className="text-xs font-mono">{c.client_phone}</TableCell>
-                      <TableCell className="text-xs font-mono">{c.extension || "—"}</TableCell>
+                      <TableCell className="text-xs font-mono">{displayExt(c.extension)}</TableCell>
                       <TableCell className="text-xs">
                         {c.ticket_id ? <Link to={`/tickets/${c.ticket_id}`} className="text-primary hover:underline">Abrir</Link> : "—"}
                       </TableCell>
