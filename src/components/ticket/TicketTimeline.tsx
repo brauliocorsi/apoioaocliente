@@ -124,6 +124,7 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
       const inbound = (inboundRes.data as any[]) || [];
       const atts = (attRes.data as any[]) || [];
       const children = (childrenRes.data as any[]) || [];
+      const phoneCalls = (callsRes.data as any[]) || [];
 
       // Collect author ids
       const ids = new Set<string>();
