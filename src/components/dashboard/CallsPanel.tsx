@@ -272,7 +272,7 @@ function ReconList({ title, description, items }: { title: string; description: 
                       <TableCell className="text-xs">{c.direction || "—"}</TableCell>
                       <TableCell className="text-xs">{c.client_name}</TableCell>
                       <TableCell className="text-xs font-mono">{c.client_phone}</TableCell>
-                      <TableCell className="text-xs font-mono">{c.extension || "—"}</TableCell>
+                      <TableCell className="text-xs font-mono">{displayExt(c.extension)}</TableCell>
                       <TableCell className="text-xs">
                         {c.ticket_id ? <Link to={`/tickets/${c.ticket_id}`} className="text-primary hover:underline">Abrir</Link> : "—"}
                       </TableCell>
