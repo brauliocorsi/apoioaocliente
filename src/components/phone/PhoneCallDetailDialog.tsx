@@ -531,3 +531,25 @@ function LetsCallActions({ call }: { call: PhoneCall }) {
   );
 }
 
+function ReconciliationBadge({ callId }: { callId: string }) {
+  const [st, setSt] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("phone_calls_reconciliation")
+        .select("reconciliation_status")
+        .eq("phone_call_id", callId)
+        .maybeSingle();
+      if (!cancelled) setSt((data as any)?.reconciliation_status || null);
+    })();
+    return () => { cancelled = true; };
+  }, [callId]);
+  if (!st) return null;
+  if (st === "confirmed") return <Badge variant="outline" className="text-[10px] h-5 border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300">MicroSIP confirmado</Badge>;
+  if (st === "not_found_in_microsip") return <Badge variant="outline" className="text-[10px] h-5 border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300">Sem CDR</Badge>;
+  if (st === "not_registered_in_system") return <Badge variant="outline" className="text-[10px] h-5 border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300">Sem registo manual</Badge>;
+  return null;
+}
+
+
