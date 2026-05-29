@@ -612,6 +612,8 @@ export default function OperationalDashboard() {
           </Table>
         </CardContent>
       </Card>
+      <CallsPanel />
+
 
       <Card className="bg-muted/30">
         <CardContent className="pt-6 text-xs text-muted-foreground space-y-1">
