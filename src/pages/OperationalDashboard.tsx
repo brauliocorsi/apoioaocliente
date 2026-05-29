@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow, format, isToday } from "date-fns";
 import { pt } from "date-fns/locale";
+import CallsPanel from "@/components/dashboard/CallsPanel";
 
 /**
  * Fase 5A — Painel Operacional da Alessandra
