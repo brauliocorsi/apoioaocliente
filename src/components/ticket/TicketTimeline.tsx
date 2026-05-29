@@ -83,7 +83,7 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
     const load = async () => {
       setLoading(true);
 
-      const [msgsRes, evRes, logsRes, inboundRes, attRes, childrenRes] = await Promise.all([
+      const [msgsRes, evRes, logsRes, inboundRes, attRes, childrenRes, callsRes] = await Promise.all([
         preloadedMessages
           ? Promise.resolve({ data: preloadedMessages })
           : supabase.from("ticket_messages")
@@ -111,6 +111,10 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
         supabase.from("tickets")
           .select("id, ticket_number, subject, created_at, status")
           .eq("parent_ticket_id", ticketId)
+          .order("created_at", { ascending: true }),
+        supabase.from("phone_calls")
+          .select("id, created_at, direction, attended, extension, duration_seconds, source, client_name")
+          .eq("ticket_id", ticketId)
           .order("created_at", { ascending: true }),
       ]);
 
