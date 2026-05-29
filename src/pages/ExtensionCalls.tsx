@@ -90,7 +90,7 @@ export default function ExtensionCalls() {
     const m: Record<string, { total: number; attended: number; missed: number; inbound: number; outbound: number; last: string | null }> = {};
     calls.forEach((c) => {
       if (c.source !== "letscall" || !c.extension) return;
-      const k = c.extension;
+      const k = displayExt(c.extension)!;
       m[k] ||= { total: 0, attended: 0, missed: 0, inbound: 0, outbound: 0, last: null };
       m[k].total++;
       if (c.attended) m[k].attended++;
@@ -105,7 +105,7 @@ export default function ExtensionCalls() {
   const filtered = useMemo(() => {
     return calls.filter((c) => {
       if (c.source !== "letscall") return false;
-      if (selectedExt !== "all" && c.extension !== selectedExt) return false;
+      if (selectedExt !== "all" && displayExt(c.extension) !== selectedExt) return false;
       if (filter === "attended" && !c.attended) return false;
       if (filter === "missed" && c.attended !== false) return false;
       if (filter === "inbound" && !(c.direction === "incoming" || c.direction === "inbound")) return false;
