@@ -33,7 +33,8 @@ type TimelineKind =
   | "email_received"
   | "attachment_added"
   | "ticket_continuation_created"
-  | "inbound_event";
+  | "inbound_event"
+  | "phone_call";
 
 interface TimelineItem {
   id: string;
