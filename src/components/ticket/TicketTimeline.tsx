@@ -64,6 +64,7 @@ const KIND_META: Record<TimelineKind, { label: string; icon: React.ComponentType
   attachment_added: { label: "Anexo", icon: Paperclip, tone: "border-muted-foreground/30 text-muted-foreground" },
   ticket_continuation_created: { label: "Continuação", icon: GitBranch, tone: "border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300" },
   inbound_event: { label: "Caixa de Entrada", icon: AlertTriangle, tone: "border-muted-foreground/30 text-muted-foreground" },
+  phone_call: { label: "Chamada", icon: Phone, tone: "border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300" },
 };
 
 function stripHtml(s: string | null | undefined, limit = 200): string {
