@@ -163,7 +163,8 @@ export default function ExtensionCalls() {
 
         {monitored.map((m) => {
           const s = statsByExt[String(m.extension)];
-          const st = status.find((x) => x.extension === m.extension);
+          const rawExt = Object.entries(EXT_DISPLAY_MAP).find(([, v]) => v === String(m.extension))?.[0];
+          const st = status.find((x) => x.extension === m.extension || (rawExt && x.extension === Number(rawExt)));
           const lastTs = st?.last_call_at ? new Date(st.last_call_at).getTime() : (s?.last ? new Date(s.last).getTime() : 0);
           const minutesAgo = lastTs ? (now - lastTs) / 60000 : Infinity;
           const active = minutesAgo <= 5;
