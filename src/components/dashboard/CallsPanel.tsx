@@ -37,6 +37,11 @@ type Status = { extension: number; last_call_at: string | null; last_direction: 
 type Recon = { phone_call_id: string; reconciliation_status: string; source: string; created_at: string };
 type Profile = { id: string; full_name: string };
 
+// Mapeamento de ramal bruto (CDR Let's Call) → ramal exibido
+const RAW_TO_DISPLAY: Record<string, number> = { "200": 400, "201": 401, "202": 402 };
+const DISPLAY_TO_RAW: Record<number, string> = { 400: "200", 401: "201", 402: "202" };
+const displayExt = (raw: string | null | undefined): string => (raw && RAW_TO_DISPLAY[raw] ? String(RAW_TO_DISPLAY[raw]) : (raw || "—"));
+
 export default function CallsPanel() {
   const [windowH, setWindowH] = useState<"24" | "168">("24");
   const [loading, setLoading] = useState(true);
