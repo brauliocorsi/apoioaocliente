@@ -42,6 +42,7 @@ const groups: Group[] = [
       { title: "Encomendas Atrasadas", url: "/delayed-orders", icon: AlertTriangle },
       { title: "Pós-Entrega", url: "/post-delivery", icon: ClipboardCheck },
       { title: "Ligações", url: "/phone-calls", icon: Phone },
+      { title: "Ligações por Ramal", url: "/extension-calls", icon: Activity },
       { title: "Reg. Ligações", url: "/delivery-confirmations", icon: Truck },
     ],
   },
