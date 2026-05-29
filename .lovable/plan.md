@@ -1,88 +1,80 @@
-## Objetivo
+# Fase 10 — Painel de ligações MicroSIP/Let's Call
 
-Quando um cliente responde por e-mail a um ticket **fechado/resolvido**, `fetch-inbound-emails` atualmente anexa a mensagem ao ticket antigo. Vamos passar a **criar um novo ticket** e ligá-lo ao anterior como referência.
+Indicadores operacionais por ramal, reconciliação CDR ↔ sistema, e integração na timeline do ticket. Tudo aditivo, sem perda de dados.
 
-## Definição de "fechado"
+## 1. Base de dados (migração aditiva)
 
-Um ticket está fechado/resolvido quando o seu `status` aponta para um `ticket_statuses` com `is_closed = true` **ou** `is_resolved = true`.
+- `phone_calls`: adicionar coluna `extension TEXT` (derivada de `queueAgent`/`dst`/`src` no sync).
+- Nova tabela `monitored_extensions`:
+  - `extension INT PRIMARY KEY`, `label TEXT`, `assigned_profile_id UUID NULL`, `is_active BOOLEAN DEFAULT true`.
+  - Seed: 200, 201, 202.
+  - RLS: `SELECT` para agentes, `INSERT/UPDATE/DELETE` apenas supervisor.
+- Nova tabela `microsip_extension_status`:
+  - `extension INT PK`, `last_call_at TIMESTAMPTZ`, `last_direction TEXT`, `last_attended BOOLEAN`, `last_seen_source TEXT`, `updated_at`.
+  - Atualizada pelo `letscall-sync-cdr` (upsert).
+  - RLS: `SELECT` agentes; escrita só via service-role.
+- Nova VIEW `phone_calls_reconciliation`:
+  - Compara `phone_calls` (sistema) com chamadas vindas do CDR (`source = 'letscall'`) através de telefone normalizado + janela ±15 min.
+  - Estados: `confirmed`, `not_found_in_microsip`, `not_registered_in_system`.
+  - Acessível a agentes (security_invoker).
 
-## Fluxo correto
+GRANTs explícitos em todas as tabelas novas (anon nunca, authenticated/service_role conforme política).
+
+## 2. Edge function `letscall-sync-cdr` (reuso)
+
+- Estender o parser de CDR para extrair `extension` (preferência: `queueAgent` → `dst` quando outbound interno → `src` quando inbound atendido por ramal).
+- Após inserir/atualizar `phone_calls`, fazer `upsert` em `microsip_extension_status` com a chamada mais recente por ramal.
+- Sem alterar o agendamento existente.
+
+## 3. UI — Painel operacional (Alessandra)
+
+Em `src/components/OperationalDashboard.tsx`, adicionar nova secção **"Ligações / Ramais"** (lazy, abaixo das secções atuais):
+
+- KPIs (últimas 24h e 7 dias, com seletor):
+  - Total de chamadas, Atendidas, Não atendidas, Outbound, Inbound.
+- Tabela por ramal (200, 201, 202):
+  - Ramal | Agente associado | Última chamada | Atendidas/Não atendidas | Atividade (badge "Ativo <5min" / "Inativo").
+  - Nota: status DND/Online real não existe na API Let's Call → derivado por atividade recente (documentado na UI com tooltip).
+- Listas acionáveis (collapsibles):
+  - **Chamadas sem registo no sistema** (CDR sem `phone_calls` correspondente).
+  - **Registos sem chamada confirmada** (`phone_calls` manuais sem CDR no intervalo).
+
+## 4. Módulo Ligações
+
+Em `src/components/phone/PhoneCalls.tsx` + `PhoneCallDetailDialog.tsx`:
+
+- Badge "MicroSIP confirmado" / "Sem CDR" usando a view de reconciliação.
+- Mostrar `extension` na linha/detalhe quando existir.
+
+## 5. Timeline do ticket
+
+Em `TicketDetail` (timeline existente), adicionar entradas para chamadas associadas (`phone_calls.ticket_id = ticket.id`) com: direção, ramal, duração, atendida/não atendida, link para o detalhe da chamada. Sem mexer no resto da timeline.
+
+## 6. Segurança e privacidade
+
+- Sem expor credenciais Let's Call no cliente (mantém-se em secrets).
+- RLS restringe tudo a agentes/supervisores.
+- Nenhum DROP/DELETE em migrações — apenas `ADD COLUMN`, `CREATE TABLE`, `CREATE VIEW`.
+
+## Critérios de aceitação
+
+- Painel mostra ramais 200/201/202 com atendidas/não atendidas.
+- Atividade por ramal visível (proxy de online/DND, documentado).
+- Reconciliação lista os dois lados (sistema vs MicroSIP).
+- Módulo Ligações mostra badge de confirmação.
+- Timeline do ticket mostra chamadas relacionadas.
+- Nenhum dado existente perdido.
+
+## Detalhes técnicos
 
 ```text
-e-mail recebido
-   │
-   ├─ match (In-Reply-To / References / email_threads / mesmo cliente)?
-   │     ├─ sim, ticket ABERTO   → anexar mensagem (igual a hoje)
-   │     ├─ sim, ticket FECHADO  → criar NOVO ticket
-   │     │                          parent_ticket_id = ticket antigo
-   │     │                          evento em ambos os tickets
-   │     │                          email_threads aponta para o NOVO
-   │     │                          confirmação automática ao cliente
-   │     └─ não                   → fluxo atual (pending_emails / novo ticket)
+CDR (letscall-sync-cdr) ──► phone_calls (+ extension)
+                       └──► microsip_extension_status (upsert)
+
+phone_calls_reconciliation (VIEW):
+  confirmed                 ← match telefone + |Δt| ≤ 15min
+  not_registered_in_system  ← CDR sem phone_calls
+  not_found_in_microsip     ← phone_calls (manual) sem CDR
 ```
 
-## Mudanças
-
-### 1. Base de dados (1 migração)
-
-Adicionar à tabela `tickets`:
-
-- `parent_ticket_id uuid NULL`
-- índice em `parent_ticket_id`
-
-Sem novas tabelas, sem alterações de RLS, sem foreign keys destrutivas.
-
-### 2. `supabase/functions/fetch-inbound-emails/index.ts`
-
-Ajuste cirúrgico no ponto onde decide anexar a um ticket encontrado:
-
-- Carregar `ticket_statuses` (`is_closed`, `is_resolved`) do status do ticket candidato.
-- Se **aberto**: comportamento atual (anexar mensagem + anexos + atualizar `email_received_at`).
-- Se **fechado**:
-  1. Criar novo ticket com:
-     - `client_name`, `client_email`, `client_phone`, `order_number` herdados do ticket antigo;
-     - `subject` = `[Continuação #N] <assunto original>`;
-     - `description` = corpo do e-mail recebido;
-     - `priority` herdada do ticket antigo (ou P2);
-     - `category_id` / `subcategory_id` herdados;
-     - `parent_ticket_id` = id do ticket antigo;
-     - `created_by` = fallback de agente já em uso na função;
-     - `email_received_at` = data do e-mail.
-  2. Mover anexos do e-mail para o **novo** ticket.
-  3. Inserir `ticket_events`:
-     - no novo: `"Novo ticket criado por resposta de e-mail ao ticket #N (fechado)"`;
-     - no antigo: `"Cliente respondeu por e-mail — novo ticket #M aberto"`.
-  4. Atualizar / criar `email_threads` (mesmo `message_id` / endereço) a apontar para o **novo** ticket, para futuras respostas seguirem a nova thread.
-  5. Disparar a confirmação automática ao cliente existente, referindo o novo número.
-
-### 3. UI — indicação visual mínima
-
-- `TicketDetail` e `EmailTicketDetail`: se `parent_ticket_id` existe → badge discreto **"Continuação do ticket #N"** com link.
-- No ticket antigo: query simples por `parent_ticket_id = id` → badge **"Tem continuação no ticket #M"**.
-
-Sem mudanças em Kanban, filtros, ou outras páginas.
-
-## Fora de âmbito
-
-- Sistema de spam / quarentena / `inbound_email_events`
-- Extractores adicionais (n.º encomenda, fatura, telefone) do corpo
-- Refactor do `decisionEngine`
-- Alterações ao webhook `inbound-email` (não está em uso, IMAP é o fluxo real)
-- Alterações ao `pending_emails`
-
-## Validação
-
-1. Resposta a ticket **aberto** → mensagem anexada como hoje.
-2. Resposta a ticket **fechado** → novo ticket criado, ligado ao anterior, ambos com evento, confirmação enviada.
-3. E-mail sem thread → fluxo atual inalterado (pending ou novo).
-4. Segunda resposta do cliente → vai para o **novo** ticket (email_threads atualizado).
-
-## Ficheiros tocados
-
-- `supabase/migrations/<novo>.sql`
-- `supabase/functions/fetch-inbound-emails/index.ts`
-- `src/pages/TicketDetail.tsx`
-- `src/pages/EmailTicketDetail.tsx`
-- `src/integrations/supabase/types.ts` (regenerado)
-
-Mudança pequena, retrocompatível, sem risco para os fluxos atuais.
+Posso avançar para build mode e implementar?
