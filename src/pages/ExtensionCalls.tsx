@@ -53,6 +53,8 @@ function fmtDur(sec: number | null) {
 }
 
 export default function ExtensionCalls() {
+  const { role } = useAuth();
+  const isSupervisor = role === "supervisor";
   const [windowH, setWindowH] = useState<string>("168");
   const [loading, setLoading] = useState(true);
   const [calls, setCalls] = useState<Call[]>([]);
@@ -62,6 +64,27 @@ export default function ExtensionCalls() {
   const [selectedExt, setSelectedExt] = useState<string>("all");
   const [filter, setFilter] = useState<"all" | "attended" | "missed" | "inbound" | "outbound">("all");
   const [search, setSearch] = useState("");
+  const [editingExt, setEditingExt] = useState<number | null>(null);
+  const [editingLabel, setEditingLabel] = useState("");
+  const [savingLabel, setSavingLabel] = useState(false);
+
+  const saveLabel = async (ext: number) => {
+    setSavingLabel(true);
+    const trimmed = editingLabel.trim();
+    const { error } = await supabase
+      .from("monitored_extensions")
+      .update({ label: trimmed || null })
+      .eq("extension", ext);
+    setSavingLabel(false);
+    if (error) {
+      toast({ title: "Não foi possível renomear", description: error.message, variant: "destructive" });
+      return;
+    }
+    setMonitored((prev) => prev.map((m) => (m.extension === ext ? { ...m, label: trimmed || null } : m)));
+    setEditingExt(null);
+    toast({ title: "Ramal renomeado", description: `Ramal ${ext}${trimmed ? ` → ${trimmed}` : ""}` });
+  };
+
 
   useEffect(() => {
     let cancelled = false;
