@@ -199,14 +199,60 @@ export default function ExtensionCalls() {
           const idle = minutesAgo <= 60;
           const sel = selectedExt === String(m.extension);
           return (
-            <button
+            <div
               key={m.extension}
               onClick={() => setSelectedExt(String(m.extension))}
-              className={`text-left rounded-lg border p-4 transition hover:bg-muted/30 ${sel ? "border-primary ring-1 ring-primary" : ""}`}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === "Enter") setSelectedExt(String(m.extension)); }}
+              className={`text-left rounded-lg border p-4 transition hover:bg-muted/30 cursor-pointer ${sel ? "border-primary ring-1 ring-primary" : ""}`}
             >
-              <div className="flex items-center justify-between">
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">Ramal {m.extension}</span>
-                <Badge variant="outline" className="text-[10px] gap-1">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Ramal {m.extension}</div>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <span className="text-sm font-medium truncate">
+                      {m.label || <span className="text-muted-foreground italic font-normal">Sem nome</span>}
+                    </span>
+                    {isSupervisor && (
+                      <Popover open={editingExt === m.extension} onOpenChange={(o) => { if (!o) setEditingExt(null); }}>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setEditingExt(m.extension); setEditingLabel(m.label || ""); }}
+                            className="opacity-40 hover:opacity-100 transition"
+                            aria-label="Renomear ramal"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 p-3" align="start" onClick={(e) => e.stopPropagation()}>
+                          <p className="text-xs font-medium mb-2">Renomear ramal {m.extension}</p>
+                          <Input
+                            value={editingLabel}
+                            onChange={(e) => setEditingLabel(e.target.value)}
+                            placeholder="Ex.: Apoio ao Cliente"
+                            className="h-8 text-sm"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") { e.preventDefault(); void saveLabel(m.extension); }
+                              if (e.key === "Escape") setEditingExt(null);
+                            }}
+                          />
+                          <div className="flex justify-end gap-1 mt-2">
+                            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEditingExt(null)}>
+                              <X className="h-3 w-3" />
+                            </Button>
+                            <Button size="sm" className="h-7 px-2" disabled={savingLabel} onClick={() => void saveLabel(m.extension)}>
+                              <Check className="h-3 w-3 mr-1" /> Guardar
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    )}
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[10px] gap-1 shrink-0">
                   <CircleDot className={`h-2.5 w-2.5 ${active ? "text-green-600" : idle ? "text-amber-600" : "text-muted-foreground"}`} />
                   {active ? "Ativo" : idle ? "Recente" : "Inativo"}
                 </Badge>
@@ -219,7 +265,7 @@ export default function ExtensionCalls() {
               {m.assigned_profile_id && (
                 <div className="text-[11px] text-muted-foreground mt-1 truncate">{profiles[m.assigned_profile_id]}</div>
               )}
-            </button>
+            </div>
           );
         })}
       </div>
