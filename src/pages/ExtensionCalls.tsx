@@ -36,6 +36,10 @@ type Status = { extension: number; last_call_at: string | null; last_direction: 
 
 const WINDOWS: Record<string, number> = { "24": 24, "168": 24 * 7, "720": 24 * 30 };
 
+// Mapa de ramais brutos do CDR (MicroSIP/Let's Call) para os ramais reais visíveis.
+const EXT_DISPLAY_MAP: Record<string, string> = { "200": "400", "201": "401", "202": "402" };
+const displayExt = (raw: string | null | undefined) => (raw ? EXT_DISPLAY_MAP[raw] ?? raw : null);
+
 function fmtDur(sec: number | null) {
   if (!sec || sec <= 0) return "—";
   const m = Math.floor(sec / 60);
