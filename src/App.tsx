@@ -58,6 +58,7 @@ const App = () => (
               <Route path="/email-tickets/:id" element={<EmailTicketDetail />} />
               <Route path="/inbound-events" element={<InboundEmailEvents />} />
               <Route path="/operational-dashboard" element={<OperationalDashboard />} />
+              <Route path="/extension-calls" element={<ExtensionCalls />} />
             </Route>
 
             {/* Portal (client) routes */}
