@@ -29,6 +29,7 @@ import EmailTickets from "./pages/EmailTickets";
 import EmailTicketDetail from "./pages/EmailTicketDetail";
 import InboundEmailEvents from "./pages/InboundEmailEvents";
 import OperationalDashboard from "./pages/OperationalDashboard";
+import ExtensionCalls from "./pages/ExtensionCalls";
 
 const queryClient = new QueryClient();
 
@@ -57,6 +58,7 @@ const App = () => (
               <Route path="/email-tickets/:id" element={<EmailTicketDetail />} />
               <Route path="/inbound-events" element={<InboundEmailEvents />} />
               <Route path="/operational-dashboard" element={<OperationalDashboard />} />
+              <Route path="/extension-calls" element={<ExtensionCalls />} />
             </Route>
 
             {/* Portal (client) routes */}
