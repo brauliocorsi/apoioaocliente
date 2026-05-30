@@ -535,3 +535,14 @@ Com os novos campos passamos a poder construir, sem refactor, queries para:
 ### Riscos / fora de âmbito
 - Auto-anexo automático ainda não dispara sem clique — recomendação `auto_append_safe` apenas destaca o botão.
 - Módulo de Ligações não foi tocado destrutivamente; integração de confirmação fica dependente da documentação Let's Call.
+
+## Fase 10.2 — Auditoria real de chamadas
+
+- `phone_calls` ganhou colunas aditivas: `call_status` (answered/missed/no_answer/busy/failed/cancelled/unknown), `cdr_raw` (JSONB completo), `cdr_answered_at`, `cdr_ended_at`, `cdr_src`, `cdr_dst`.
+- `letscall-sync-cdr` mapeia `cdr.disposition` → `call_status` e guarda o payload bruto. Faz backfill nas linhas já existentes.
+- Vista `phone_calls_reconciliation` recriada com `match_count` + `matched_call_id` e novo estado `ambiguous` (>1 candidato em ±15 min).
+- Painel Operacional (`CallsPanel`): KPIs Total/Atendidas/Não atendidas/Recebidas/Efetuadas + Taxa de atendimento + Duração média; listas de órfãos CDR↔sistema.
+- Botão **Ver CDR MicroSIP** em cada registo (`CdrDetailDialog`): mostra ramal, direção, origem/destino, início/atendimento/fim, duração, status; raw payload só visível a supervisores; lista candidatos quando ambíguo.
+- Timeline do ticket: chamada mostra "(atendida)/(não atendida) · Confirmada no MicroSIP". Portal cliente nunca vê CDR.
+- Janela de reconciliação: ±15 min + telefone normalizado (sem 00351/351). DND/online não suportados pela API Let's Call → mostrado como "Estado desconhecido", nunca como offline.
+- Sem DROP/TRUNCATE/DELETE. Token Let's Call permanece só em secrets.
