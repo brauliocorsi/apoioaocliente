@@ -113,7 +113,7 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
           .eq("parent_ticket_id", ticketId)
           .order("created_at", { ascending: true }),
         supabase.from("phone_calls")
-          .select("id, created_at, direction, attended, extension, duration_seconds, source, client_name")
+          .select("id, created_at, direction, attended, call_status, extension, duration_seconds, source, client_name")
           .eq("ticket_id", ticketId)
           .order("created_at", { ascending: true }),
       ]);
@@ -211,16 +211,19 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
 
       phoneCalls.forEach((c) => {
         const dir = c.direction === "incoming" || c.direction === "inbound" ? "Recebida" : c.direction === "outgoing" || c.direction === "outbound" ? "Efetuada" : "Chamada";
-        const attended = c.attended === false ? " (não atendida)" : c.attended ? " (atendida)" : "";
+        const statusLabel = c.call_status === "answered" ? " (atendida)"
+          : ["missed", "no_answer", "busy", "failed", "cancelled"].includes(c.call_status || "") ? " (não atendida)"
+          : c.attended === true ? " (atendida)"
+          : c.attended === false ? " (não atendida)" : "";
         const ext = c.extension ? ` · ramal ${c.extension}` : "";
         const dur = c.duration_seconds ? ` · ${c.duration_seconds}s` : "";
-        const src = c.source === "letscall" ? " · MicroSIP" : c.source === "manual" ? " · manual" : "";
+        const src = c.source === "letscall" ? " · Confirmada no MicroSIP" : c.source === "manual" ? " · Registo manual" : "";
         built.push({
           id: `call-${c.id}`,
           at: c.created_at,
           kind: "phone_call",
           author: c.client_name || null,
-          summary: `${dir}${attended}${ext}${dur}${src}`,
+          summary: `${dir}${statusLabel}${ext}${dur}${src}`,
           meta: { phone_call_id: c.id },
         });
       });

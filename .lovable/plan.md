@@ -1,80 +1,91 @@
-# Fase 10 — Painel de ligações MicroSIP/Let's Call
+# Fase 10.2 — Auditoria real de chamadas
 
-Indicadores operacionais por ramal, reconciliação CDR ↔ sistema, e integração na timeline do ticket. Tudo aditivo, sem perda de dados.
+Objetivo: dar à Alessandra evidência operacional sobre chamadas atendidas/não atendidas, reconciliação Reg. Ligações ↔ MicroSIP, e acesso ao CDR detalhado — sem perder dados nem julgar funcionários.
 
-## 1. Base de dados (migração aditiva)
+## 1. Migration aditiva (sem destruição)
 
-- `phone_calls`: adicionar coluna `extension TEXT` (derivada de `queueAgent`/`dst`/`src` no sync).
-- Nova tabela `monitored_extensions`:
-  - `extension INT PRIMARY KEY`, `label TEXT`, `assigned_profile_id UUID NULL`, `is_active BOOLEAN DEFAULT true`.
-  - Seed: 200, 201, 202.
-  - RLS: `SELECT` para agentes, `INSERT/UPDATE/DELETE` apenas supervisor.
-- Nova tabela `microsip_extension_status`:
-  - `extension INT PK`, `last_call_at TIMESTAMPTZ`, `last_direction TEXT`, `last_attended BOOLEAN`, `last_seen_source TEXT`, `updated_at`.
-  - Atualizada pelo `letscall-sync-cdr` (upsert).
-  - RLS: `SELECT` agentes; escrita só via service-role.
-- Nova VIEW `phone_calls_reconciliation`:
-  - Compara `phone_calls` (sistema) com chamadas vindas do CDR (`source = 'letscall'`) através de telefone normalizado + janela ±15 min.
-  - Estados: `confirmed`, `not_found_in_microsip`, `not_registered_in_system`.
-  - Acessível a agentes (security_invoker).
+Nova migration `2026053xxxx_phase_10_2_call_audit.sql`:
 
-GRANTs explícitos em todas as tabelas novas (anon nunca, authenticated/service_role conforme política).
+- `ALTER TABLE phone_calls ADD COLUMN IF NOT EXISTS call_status TEXT` — valores normalizados: `answered | missed | no_answer | busy | failed | cancelled | unknown`. Default NULL (histórico preservado).
+- `ALTER TABLE phone_calls ADD COLUMN IF NOT EXISTS cdr_raw JSONB` — payload bruto do CDR (apenas para chamadas `letscall`). Apenas supervisor lê via RLS na UI.
+- `ALTER TABLE phone_calls ADD COLUMN IF NOT EXISTS cdr_answered_at TIMESTAMPTZ`, `cdr_ended_at TIMESTAMPTZ`, `cdr_src TEXT`, `cdr_dst TEXT`.
+- Substituir `phone_calls_reconciliation` (CREATE OR REPLACE VIEW) para acrescentar:
+  - `match_count INTEGER` (quantos candidatos no MicroSIP);
+  - status `ambiguous` quando `match_count > 1`;
+  - `matched_call_id UUID` (id do candidato único, se houver).
+- Sem DROP, sem DELETE, sem TRUNCATE. Tudo `IF NOT EXISTS` / `OR REPLACE`.
 
-## 2. Edge function `letscall-sync-cdr` (reuso)
+## 2. Edge function `letscall-sync-cdr`
 
-- Estender o parser de CDR para extrair `extension` (preferência: `queueAgent` → `dst` quando outbound interno → `src` quando inbound atendido por ramal).
-- Após inserir/atualizar `phone_calls`, fazer `upsert` em `microsip_extension_status` com a chamada mais recente por ramal.
-- Sem alterar o agendamento existente.
+- Mapear `cdr.disposition` (ou equivalente) → `call_status` normalizado.
+- Gravar `cdr_raw` (JSON completo), `cdr_answered_at`, `cdr_ended_at`, `cdr_src`, `cdr_dst`.
+- Manter `attended` (booleano) para retrocompatibilidade.
+- Nenhuma alteração ao header `x-cron-secret` já existente.
 
-## 3. UI — Painel operacional (Alessandra)
+## 3. Painel Operacional — `CallsPanel.tsx`
 
-Em `src/components/OperationalDashboard.tsx`, adicionar nova secção **"Ligações / Ramais"** (lazy, abaixo das secções atuais):
+Acrescentar à secção "Ligações / Ramais":
 
-- KPIs (últimas 24h e 7 dias, com seletor):
-  - Total de chamadas, Atendidas, Não atendidas, Outbound, Inbound.
-- Tabela por ramal (200, 201, 202):
-  - Ramal | Agente associado | Última chamada | Atendidas/Não atendidas | Atividade (badge "Ativo <5min" / "Inativo").
-  - Nota: status DND/Online real não existe na API Let's Call → derivado por atividade recente (documentado na UI com tooltip).
-- Listas acionáveis (collapsibles):
-  - **Chamadas sem registo no sistema** (CDR sem `phone_calls` correspondente).
-  - **Registos sem chamada confirmada** (`phone_calls` manuais sem CDR no intervalo).
+- Cards globais: Totais, Atendidas, Não atendidas, Feitas, Recebidas, Taxa de atendimento, Duração média.
+- Por ramal (200/201/202 já mapeados para 400/401/402): contadores próprios + última chamada + chamadas sem registo + registos sem CDR.
+- Duas listas colapsáveis:
+  - "Chamadas MicroSIP sem registo no sistema" (linhas de `phone_calls_reconciliation` com `reconciliation_status='not_registered_in_system'`).
+  - "Registos sem chamada MicroSIP" (`not_found_in_microsip`).
+- Ramal sem atividade → mostra zero, não quebra.
+- Status `unknown` ≠ offline (texto literal "Estado desconhecido").
 
-## 4. Módulo Ligações
+## 4. Reg. Ligações — `PhoneCallList.tsx` / `PhoneCalls.tsx`
 
-Em `src/components/phone/PhoneCalls.tsx` + `PhoneCallDetailDialog.tsx`:
+- Em cada linha, badge de reconciliação: `Confirmada no MicroSIP` / `Sem chamada encontrada` / `Chamada ambígua` / `Não sincronizada` (chamadas `letscall` próprias).
+- Botão "Ver CDR MicroSIP" abre modal novo `CdrDetailDialog`.
 
-- Badge "MicroSIP confirmado" / "Sem CDR" usando a view de reconciliação.
-- Mostrar `extension` na linha/detalhe quando existir.
+## 5. `CdrDetailDialog.tsx` (novo)
 
-## 5. Timeline do ticket
+- Se houver match único: mostra campos do CDR (ramal, direção, origem, destino, telefone normalizado, início, atendimento, fim, duração, status, agente).
+- Raw payload JSON em `<Collapsible>` visível **apenas para supervisor** (`has_role`).
+- Se sem match: mensagem clara.
+- Se ambíguo: lista candidatos, sem auto-escolher.
 
-Em `TicketDetail` (timeline existente), adicionar entradas para chamadas associadas (`phone_calls.ticket_id = ticket.id`) com: direção, ramal, duração, atendida/não atendida, link para o detalhe da chamada. Sem mexer no resto da timeline.
+## 6. Ticket Timeline — `TicketTimeline.tsx`
 
-## 6. Segurança e privacidade
+- Para `phone_calls` ligadas ao ticket, etiqueta extra: "Confirmada no MicroSIP" / "Sem CDR MicroSIP" conforme view.
+- Chamadas não relacionadas ao ticket continuam fora.
+- Portal cliente continua sem ver CDR.
 
-- Sem expor credenciais Let's Call no cliente (mantém-se em secrets).
-- RLS restringe tudo a agentes/supervisores.
-- Nenhum DROP/DELETE em migrações — apenas `ADD COLUMN`, `CREATE TABLE`, `CREATE VIEW`.
+## 7. Segurança
 
-## Critérios de aceitação
+- Token Let's Call permanece só em secrets (já está).
+- `cdr_raw` lido apenas pela UI quando `useAuth().isSupervisor`.
+- RLS atual de `phone_calls` (apenas `is_authenticated_agent()`) cobre o acesso; portal cliente já bloqueado.
+- Falha de API: painel continua a abrir (try/catch + fallback "sem dados").
 
-- Painel mostra ramais 200/201/202 com atendidas/não atendidas.
-- Atividade por ramal visível (proxy de online/DND, documentado).
-- Reconciliação lista os dois lados (sistema vs MicroSIP).
-- Módulo Ligações mostra badge de confirmação.
-- Timeline do ticket mostra chamadas relacionadas.
-- Nenhum dado existente perdido.
+## 8. Documentação
+
+- Atualizar `docs/system-map.md` com secção "Fase 10.2 — Auditoria real de chamadas": regras de atendida/não atendida, janela ±15min, comportamento do botão CDR, limitações (DND/online não suportados pela API), como interpretar os indicadores.
+
+## Fora deste plano (próxima fase)
+
+- Gravação/áudio, discador, ações destrutivas, score automático de funcionário, criação backend "Registar ligação" a partir do painel (deixa apenas contexto/linha).
+
+## Validação
+
+Checagem manual pós-deploy dos 12 cenários listados; nenhuma migration destrutiva.
 
 ## Detalhes técnicos
 
 ```text
-CDR (letscall-sync-cdr) ──► phone_calls (+ extension)
-                       └──► microsip_extension_status (upsert)
+phone_calls (adições)
+├── call_status TEXT
+├── cdr_raw JSONB
+├── cdr_answered_at TIMESTAMPTZ
+├── cdr_ended_at TIMESTAMPTZ
+├── cdr_src TEXT
+└── cdr_dst TEXT
 
-phone_calls_reconciliation (VIEW):
-  confirmed                 ← match telefone + |Δt| ≤ 15min
-  not_registered_in_system  ← CDR sem phone_calls
-  not_found_in_microsip     ← phone_calls (manual) sem CDR
+phone_calls_reconciliation (replace)
+├── + match_count INTEGER
+├── + matched_call_id UUID
+└── status: confirmed | ambiguous | not_found_in_microsip | not_registered_in_system
 ```
 
-Posso avançar para build mode e implementar?
+Após aprovação, executo migration + edits em ~7 ficheiros.

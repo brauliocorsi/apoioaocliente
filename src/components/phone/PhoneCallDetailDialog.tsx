@@ -16,6 +16,7 @@ import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { Link, X, ExternalLink, Save, Phone, Bell, Ticket, UserPlus, Trash2, CheckCircle2, RotateCcw, PhoneOutgoing, PhoneIncoming, PlayCircle, Zap } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useNavigate } from "react-router-dom";
+import CdrDetailDialog from "./CdrDetailDialog";
 
 interface PhoneCall {
   id: string;
@@ -533,6 +534,7 @@ function LetsCallActions({ call }: { call: PhoneCall }) {
 
 function ReconciliationBadge({ callId }: { callId: string }) {
   const [st, setSt] = useState<string | null>(null);
+  const [openCdr, setOpenCdr] = useState(false);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -546,10 +548,26 @@ function ReconciliationBadge({ callId }: { callId: string }) {
     return () => { cancelled = true; };
   }, [callId]);
   if (!st) return null;
-  if (st === "confirmed") return <Badge variant="outline" className="text-[10px] h-5 border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300">MicroSIP confirmado</Badge>;
-  if (st === "not_found_in_microsip") return <Badge variant="outline" className="text-[10px] h-5 border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300">Sem CDR</Badge>;
-  if (st === "not_registered_in_system") return <Badge variant="outline" className="text-[10px] h-5 border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300">Sem registo manual</Badge>;
-  return null;
+  const badge = (() => {
+    if (st === "confirmed") return <Badge variant="outline" className="text-[10px] h-5 border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300">Confirmada no MicroSIP</Badge>;
+    if (st === "ambiguous") return <Badge variant="outline" className="text-[10px] h-5 border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300">Chamada ambígua</Badge>;
+    if (st === "not_found_in_microsip") return <Badge variant="outline" className="text-[10px] h-5 border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300">Sem chamada MicroSIP</Badge>;
+    if (st === "not_registered_in_system") return <Badge variant="outline" className="text-[10px] h-5 border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300">Sem registo manual</Badge>;
+    return null;
+  })();
+  return (
+    <span className="inline-flex items-center gap-1">
+      {badge}
+      <button
+        type="button"
+        onClick={() => setOpenCdr(true)}
+        className="text-[10px] underline text-muted-foreground hover:text-primary"
+      >
+        Ver CDR MicroSIP
+      </button>
+      <CdrDetailDialog callId={callId} open={openCdr} onClose={() => setOpenCdr(false)} />
+    </span>
+  );
 }
 
 
