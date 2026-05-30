@@ -83,14 +83,23 @@ export default function CallsPanel() {
     return () => { cancelled = true; };
   }, [windowH]);
 
+  const isAnswered = (c: Call) => c.call_status === "answered" || (c.call_status == null && c.attended === true);
+  const isMissed = (c: Call) => ["missed", "no_answer", "busy", "failed", "cancelled"].includes(c.call_status || "")
+    || (c.call_status == null && c.attended === false);
+
   const kpis = useMemo(() => {
     const cdr = calls.filter(c => c.source === "letscall");
     const total = cdr.length;
-    const attended = cdr.filter(c => c.attended).length;
-    const missed = cdr.filter(c => c.attended === false).length;
+    const attended = cdr.filter(isAnswered).length;
+    const missed = cdr.filter(isMissed).length;
     const outbound = cdr.filter(c => c.direction === "outgoing" || c.direction === "outbound").length;
     const inbound = cdr.filter(c => c.direction === "incoming" || c.direction === "inbound").length;
-    return { total, attended, missed, outbound, inbound };
+    const answerRate = total > 0 ? Math.round((attended / total) * 100) : 0;
+    const answeredDurations = cdr.filter(isAnswered).map(c => c.duration_seconds || 0).filter(d => d > 0);
+    const avgDuration = answeredDurations.length > 0
+      ? Math.round(answeredDurations.reduce((a, b) => a + b, 0) / answeredDurations.length)
+      : 0;
+    return { total, attended, missed, outbound, inbound, answerRate, avgDuration };
   }, [calls]);
 
   const byExt = useMemo(() => {
@@ -99,8 +108,8 @@ export default function CallsPanel() {
       const k = c.extension!;
       m[k] ||= { total: 0, attended: 0, missed: 0, last: null };
       m[k].total++;
-      if (c.attended) m[k].attended++;
-      if (c.attended === false) m[k].missed++;
+      if (isAnswered(c)) m[k].attended++;
+      if (isMissed(c)) m[k].missed++;
       if (!m[k].last || c.created_at > m[k].last!) m[k].last = c.created_at;
     });
     return m;
@@ -134,12 +143,14 @@ export default function CallsPanel() {
           </Select>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <Kpi icon={Phone} label="Total" value={loading ? null : kpis.total} />
           <Kpi icon={PhoneIncoming} label="Atendidas" value={loading ? null : kpis.attended} tone="success" />
           <Kpi icon={PhoneMissed} label="Não atendidas" value={loading ? null : kpis.missed} tone="warn" />
           <Kpi icon={PhoneIncoming} label="Recebidas" value={loading ? null : kpis.inbound} />
           <Kpi icon={PhoneOutgoing} label="Efetuadas" value={loading ? null : kpis.outbound} />
+          <Kpi icon={CircleDot} label="Taxa atend." value={loading ? null : kpis.answerRate} suffix="%" tone="success" />
+          <Kpi icon={Info} label="Duração média" value={loading ? null : kpis.avgDuration} suffix="s" />
         </div>
 
         <Card>
