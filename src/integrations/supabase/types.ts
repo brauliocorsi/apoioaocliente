@@ -968,6 +968,12 @@ export type Database = {
         Row: {
           assigned_to: string | null
           attended: boolean | null
+          call_status: string | null
+          cdr_answered_at: string | null
+          cdr_dst: string | null
+          cdr_ended_at: string | null
+          cdr_raw: Json | null
+          cdr_src: string | null
           client_name: string
           client_phone: string
           closed_at: string | null
@@ -994,6 +1000,12 @@ export type Database = {
         Insert: {
           assigned_to?: string | null
           attended?: boolean | null
+          call_status?: string | null
+          cdr_answered_at?: string | null
+          cdr_dst?: string | null
+          cdr_ended_at?: string | null
+          cdr_raw?: Json | null
+          cdr_src?: string | null
           client_name: string
           client_phone: string
           closed_at?: string | null
@@ -1020,6 +1032,12 @@ export type Database = {
         Update: {
           assigned_to?: string | null
           attended?: boolean | null
+          call_status?: string | null
+          cdr_answered_at?: string | null
+          cdr_dst?: string | null
+          cdr_ended_at?: string | null
+          cdr_raw?: Json | null
+          cdr_src?: string | null
           client_name?: string
           client_phone?: string
           closed_at?: string | null
@@ -1823,10 +1841,13 @@ export type Database = {
       phone_calls_reconciliation: {
         Row: {
           attended: boolean | null
+          call_status: string | null
           client_phone: string | null
           created_at: string | null
           direction: string | null
           extension: string | null
+          match_count: number | null
+          matched_call_id: string | null
           phone_call_id: string | null
           reconciliation_status: string | null
           source: string | null
