@@ -16,6 +16,7 @@ import PriorityFlag from "@/components/ticket/PriorityFlag";
 import { Link, X, ExternalLink, Save, Phone, Bell, Ticket, UserPlus, Trash2, CheckCircle2, RotateCcw, PhoneOutgoing, PhoneIncoming, PlayCircle, Zap } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useNavigate } from "react-router-dom";
+import CdrDetailDialog from "./CdrDetailDialog";
 
 interface PhoneCall {
   id: string;
