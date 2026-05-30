@@ -25,6 +25,8 @@ type Call = {
   source: string;
   direction: string | null;
   attended: boolean | null;
+  call_status: string | null;
+  duration_seconds: number | null;
   created_at: string;
   extension: string | null;
   client_phone: string;
