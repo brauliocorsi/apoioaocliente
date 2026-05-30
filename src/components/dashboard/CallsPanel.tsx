@@ -230,7 +230,7 @@ export default function CallsPanel() {
   );
 }
 
-function Kpi({ icon: Icon, label, value, tone }: { icon: any; label: string; value: number | null; tone?: "success" | "warn" }) {
+function Kpi({ icon: Icon, label, value, tone, suffix }: { icon: any; label: string; value: number | null; tone?: "success" | "warn"; suffix?: string }) {
   const cls = tone === "success" ? "text-green-600 dark:text-green-400"
     : tone === "warn" ? "text-amber-600 dark:text-amber-400"
     : "text-muted-foreground";
@@ -240,7 +240,7 @@ function Kpi({ icon: Icon, label, value, tone }: { icon: any; label: string; val
         <div className="flex items-start justify-between gap-2">
           <div>
             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
-            <p className="text-2xl font-semibold mt-1">{value === null ? <Skeleton className="h-7 w-12" /> : value}</p>
+            <p className="text-2xl font-semibold mt-1">{value === null ? <Skeleton className="h-7 w-12" /> : <>{value}{suffix || ""}</>}</p>
           </div>
           <Icon className={`h-4 w-4 ${cls}`} />
         </div>
