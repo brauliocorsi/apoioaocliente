@@ -113,7 +113,7 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
           .eq("parent_ticket_id", ticketId)
           .order("created_at", { ascending: true }),
         supabase.from("phone_calls")
-          .select("id, created_at, direction, attended, extension, duration_seconds, source, client_name")
+          .select("id, created_at, direction, attended, call_status, extension, duration_seconds, source, client_name")
           .eq("ticket_id", ticketId)
           .order("created_at", { ascending: true }),
       ]);
