@@ -116,11 +116,11 @@ export default function CdrDetailDialog({ callId, open, onClose }: Props) {
           .neq("id", o.id);
         q = otherSource === "eq" ? q.eq("source", "letscall") : q.neq("source", "letscall");
         const { data: cands } = await q;
-        const list = (cands as Candidate[] || []).filter(c => {
+        const list = ((cands as any[]) || []).filter((c: any) => {
           const norm = (c.client_phone || "").replace(/\D/g, "").replace(/^(00351|351)/, "");
           return norm && phoneNorm && norm === phoneNorm;
         });
-        if (!cancelled) setCandidates(list.map(c => ({ ...c, phone_call_id: (c as any).id })));
+        if (!cancelled) setCandidates(list.map((c: any) => ({ ...c, phone_call_id: c.id })));
       }
       setLoading(false);
     })();
