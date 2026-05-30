@@ -60,7 +60,7 @@ export default function CallsPanel() {
       const since = new Date(Date.now() - parseInt(windowH, 10) * 3600_000).toISOString();
       const [callsRes, monRes, statRes, recRes, profRes] = await Promise.all([
         supabase.from("phone_calls")
-          .select("id, source, direction, attended, created_at, extension, client_phone, client_name, ticket_id")
+          .select("id, source, direction, attended, call_status, duration_seconds, created_at, extension, client_phone, client_name, ticket_id")
           .gte("created_at", since)
           .order("created_at", { ascending: false })
           .limit(1000),
