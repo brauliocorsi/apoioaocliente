@@ -89,6 +89,28 @@ function normalizePhone(p: string | null | undefined): string {
   return (p || "").replace(/\D/g, "").replace(/^00351/, "").replace(/^351/, "");
 }
 
+// Normalize CDR disposition → call_status enum
+function normalizeStatus(cdr: any): string {
+  const raw = String(cdr.disposition || cdr.status || cdr.call_status || "").toUpperCase().trim();
+  if (!raw) {
+    if (cdr.attended === true) return "answered";
+    if (cdr.attended === false) return "no_answer";
+    return "unknown";
+  }
+  if (raw.includes("ANSWER") && !raw.includes("NO")) return "answered";
+  if (raw.includes("NO ANSWER") || raw === "NOANSWER") return "no_answer";
+  if (raw === "MISSED") return "missed";
+  if (raw === "BUSY") return "busy";
+  if (raw === "FAILED") return "failed";
+  if (raw === "CANCEL" || raw === "CANCELLED" || raw === "CANCELED") return "cancelled";
+  return "unknown";
+}
+
+function parseDt(v: any): string | null {
+  if (!v) return null;
+  try { const d = new Date(v); return isNaN(d.getTime()) ? null : d.toISOString(); } catch { return null; }
+}
+
 async function upsertCdr(cdr: any, month: number, fallbackCreator: string) {
   const linkedid = String(cdr.linkedid || cdr.id);
   if (!linkedid) return { skipped: true };
@@ -115,6 +137,11 @@ async function upsertCdr(cdr: any, month: number, fallbackCreator: string) {
 
   const calldate = cdr.calldate ? new Date(cdr.calldate).toISOString() : new Date().toISOString();
   const attended = !!cdr.attended;
+  const callStatus = normalizeStatus(cdr);
+  const cdrAnsweredAt = parseDt(cdr.answered_at || cdr.answer_time || cdr.answeredAt);
+  const cdrEndedAt = parseDt(cdr.endtime || cdr.end_time || cdr.endedAt);
+  const cdrSrc = String(cdr.callerid || cdr.src || cdr.from || "").slice(0, 100) || null;
+  const cdrDst = String(cdr.destination || cdr.dst || cdr.to || "").slice(0, 100) || null;
 
   // Update extension status (most recent wins)
   if (extension) {
@@ -128,7 +155,18 @@ async function upsertCdr(cdr: any, month: number, fallbackCreator: string) {
     }, { onConflict: "extension" });
   }
 
-  if (existing) return { existing: true };
+  if (existing) {
+    // Backfill normalized fields on existing rows (additive only)
+    await admin.from("phone_calls").update({
+      call_status: callStatus,
+      cdr_raw: cdr,
+      cdr_answered_at: cdrAnsweredAt,
+      cdr_ended_at: cdrEndedAt,
+      cdr_src: cdrSrc,
+      cdr_dst: cdrDst,
+    }).eq("id", (existing as any).id);
+    return { existing: true };
+  }
 
   // Try to link to an open ticket by normalized phone match against any existing client
   const normalized = normalizePhone(clientPhone);
