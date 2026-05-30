@@ -209,6 +209,12 @@ async function upsertCdr(cdr: any, month: number, fallbackCreator: string) {
     ticket_id: ticketId,
     created_by: fallbackCreator,
     extension,
+    call_status: callStatus,
+    cdr_raw: cdr,
+    cdr_answered_at: cdrAnsweredAt,
+    cdr_ended_at: cdrEndedAt,
+    cdr_src: cdrSrc,
+    cdr_dst: cdrDst,
   };
 
   const { error } = await admin.from("phone_calls").insert(insert);
