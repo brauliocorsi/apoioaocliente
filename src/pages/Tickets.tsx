@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Search, Loader2, List, LayoutGrid, AlertTriangle, Clock, CheckCircle, Timer, Phone, Mail, MailCheck, Paperclip, Image, Video } from "lucide-react";
+import { Plus, Search, Loader2, List, LayoutGrid, AlertTriangle, Clock, CheckCircle, Timer, Phone, Mail, MailCheck, Paperclip, Image, Video, Ticket } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
 
 export type AttachmentInfo = {
   count: number;
