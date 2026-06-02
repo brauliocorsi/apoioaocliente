@@ -98,64 +98,76 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile
     : null;
 
   return (
-    <div className={`bg-background border rounded-md p-3 transition-shadow ${isDragging ? "shadow-lg opacity-80 rotate-2" : "hover:shadow-md"}`}>
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-mono text-muted-foreground">#{ticket.ticket_number}</span>
+    <div className={`group/card relative bg-card border border-border/70 rounded-xl p-3.5 transition-all duration-200 ${isDragging ? "shadow-elevated opacity-90 rotate-2 scale-[1.02]" : "shadow-soft hover:shadow-card-hover hover:border-primary/30 hover:-translate-y-0.5"}`}>
+      {/* Unread pulse strip */}
+      {(emailUnreadCount && emailUnreadCount > 0) || (unreadCount && unreadCount > 0) ? (
+        <span className="absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full bg-gradient-primary animate-pulse" />
+      ) : null}
+
+      {/* Top: ticket id + indicators */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-mono font-semibold text-muted-foreground bg-muted/70 px-1.5 py-0.5 rounded-md">#{ticket.ticket_number}</span>
+          <PriorityFlag priority={ticket.priority} size={14} />
+        </div>
         <div className="flex items-center gap-1.5">
           {emailUnreadCount && emailUnreadCount > 0 ? (
-            <Badge className="text-[10px] h-4 min-w-[16px] justify-center px-1 gap-0.5 bg-blue-500 hover:bg-blue-600 text-white border-0 animate-pulse">
+            <Badge className="text-[10px] h-5 min-w-[20px] justify-center px-1.5 gap-0.5 bg-info hover:bg-info text-info-foreground border-0 shadow-soft">
               <Mail className="h-3 w-3" />
               {emailUnreadCount}
             </Badge>
           ) : agentReplied ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="inline-flex items-center">
-                  <MailCheck className="h-3.5 w-3.5 text-success" />
+                <span className="inline-flex items-center justify-center h-5 w-5 rounded-md bg-success-soft">
+                  <MailCheck className="h-3 w-3 text-success" />
                 </span>
               </TooltipTrigger>
               <TooltipContent><p className="text-xs">Cliente respondido</p></TooltipContent>
             </Tooltip>
           ) : unreadCount && unreadCount > 0 ? (
-            <Badge variant="destructive" className="text-[10px] h-4 min-w-[16px] justify-center px-1">
+            <Badge variant="destructive" className="text-[10px] h-5 min-w-[20px] justify-center px-1.5 shadow-soft">
               {unreadCount}
             </Badge>
           ) : null}
           {callCount && callCount > 0 && (
-            <span className="inline-flex items-center gap-0.5 text-muted-foreground">
+            <span className="inline-flex items-center gap-0.5 text-muted-foreground bg-muted/60 rounded-md px-1.5 h-5">
               <Phone className="h-3 w-3" />
-              <span className="text-[10px]">{callCount}</span>
+              <span className="text-[10px] font-semibold">{callCount}</span>
             </span>
           )}
           {attachmentInfo && attachmentInfo.count > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="inline-flex items-center gap-0.5 text-muted-foreground">
-                  {attachmentInfo.hasImages ? <Image className="h-3 w-3 text-blue-500" /> :
-                   attachmentInfo.hasVideos ? <Video className="h-3 w-3 text-purple-500" /> :
+                <span className="inline-flex items-center gap-0.5 text-muted-foreground bg-muted/60 rounded-md px-1.5 h-5">
+                  {attachmentInfo.hasImages ? <Image className="h-3 w-3 text-info" /> :
+                   attachmentInfo.hasVideos ? <Video className="h-3 w-3" style={{ color: "hsl(var(--cat-4))" }} /> :
                    <Paperclip className="h-3 w-3" />}
-                  <span className="text-[10px]">{attachmentInfo.count}</span>
+                  <span className="text-[10px] font-semibold">{attachmentInfo.count}</span>
                 </span>
               </TooltipTrigger>
               <TooltipContent><p className="text-xs">{attachmentInfo.count} anexo(s){attachmentInfo.hasImages ? " · fotos" : ""}{attachmentInfo.hasVideos ? " · vídeos" : ""}</p></TooltipContent>
             </Tooltip>
           )}
           <KanbanSlaIcon ticket={ticket} />
-          <PriorityFlag priority={ticket.priority} size={14} />
         </div>
       </div>
-      <p className="text-sm font-medium leading-tight line-clamp-2">{ticket.subject}</p>
+
+      {/* Middle: subject */}
+      <p className="text-[14px] font-medium leading-snug line-clamp-2 text-foreground mb-1.5">{ticket.subject}</p>
       {ticket.order_number && (
-        <p className="text-[10px] text-muted-foreground mt-0.5">Enc. {ticket.order_number}</p>
+        <p className="text-[11px] text-muted-foreground mb-2 font-mono">📦 Enc. {ticket.order_number}</p>
       )}
-      <div className="flex items-center justify-between mt-1.5">
-        <p className="text-xs text-muted-foreground truncate">{ticket.client_name}</p>
+
+      {/* Bottom: client + agent */}
+      <div className="flex items-center justify-between gap-2 pt-2 border-t border-dashed border-border/60">
+        <p className="text-[12px] text-muted-foreground truncate flex-1">{ticket.client_name}</p>
         {agentProfile && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Avatar className="h-5 w-5 shrink-0">
+              <Avatar className="h-5 w-5 shrink-0 ring-1 ring-primary/30">
                 <AvatarImage src={agentProfile.avatar_url || undefined} />
-                <AvatarFallback className="text-[8px] bg-primary/10 text-primary font-semibold">
+                <AvatarFallback className="text-[8px] bg-gradient-primary text-white font-semibold">
                   {initials}
                 </AvatarFallback>
               </Avatar>
@@ -164,16 +176,20 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile
           </Tooltip>
         )}
       </div>
-      {ticket.category_id && (
-        <Badge variant="outline" className="text-[10px] mt-1.5">{categoryNames?.[ticket.category_id] || ticket.category_id}</Badge>
-      )}
-      {ticketTags && ticketTags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-1.5">
-          {ticketTags.map((tagId) => {
+
+      {/* Category + tags */}
+      {(ticket.category_id || (ticketTags && ticketTags.length > 0)) && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {ticket.category_id && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary-soft text-primary border-primary/20">
+              {categoryNames?.[ticket.category_id] || ticket.category_id}
+            </Badge>
+          )}
+          {ticketTags?.map((tagId) => {
             const tag = allTags?.find((t) => t.id === tagId);
             if (!tag) return null;
             return (
-              <Badge key={tagId} className="text-[10px] text-white border-0 px-1.5 py-0" style={{ backgroundColor: tag.color || "#6b7280" }}>
+              <Badge key={tagId} className="text-[10px] text-white border-0 px-1.5 py-0 shadow-soft" style={{ backgroundColor: tag.color || "#6b7280" }}>
                 {tag.name}
               </Badge>
             );
@@ -183,6 +199,7 @@ function TicketCard({ ticket, isDragging, categoryNames, callCount, agentProfile
     </div>
   );
 }
+
 
 function DraggableTicket({ ticket, categoryNames, callCount, agentProfile, unreadCount, emailUnreadCount, ticketTags, allTags, agentReplied, attachmentInfo, onOpenTicket }: { ticket: TicketRow; categoryNames?: Record<string, string>; callCount?: number; agentProfile?: { full_name: string; avatar_url: string | null }; unreadCount?: number; emailUnreadCount?: number; ticketTags?: string[]; allTags?: { id: string; name: string; color: string | null }[]; agentReplied?: boolean; attachmentInfo?: AttachmentInfo; onOpenTicket?: (ticketId: string) => void }) {
   const navigate = useNavigate();
@@ -226,13 +243,17 @@ function DroppableColumn({ statusId, color, children, isOver }: { statusId: stri
   return (
     <div
       ref={setNodeRef}
-      className={`flex-shrink-0 w-64 rounded-lg border border-t-4 transition-colors ${isOver ? "bg-primary/10 ring-2 ring-primary/30" : "bg-muted/30"}`}
-      style={{ borderTopColor: color }}
+      className={`flex-shrink-0 w-72 rounded-2xl border border-border/60 bg-card/40 backdrop-blur-sm transition-all overflow-hidden ${isOver ? "ring-2 ring-primary/40 shadow-glow-primary" : "shadow-soft"}`}
+      style={{
+        borderTop: `4px solid ${color}`,
+        background: isOver ? `linear-gradient(180deg, ${color}10, hsl(var(--card)/0.6))` : undefined,
+      }}
     >
       {children}
     </div>
   );
 }
+
 
 function InlineStatusHeader({
   statusId,
@@ -268,8 +289,8 @@ function InlineStatusHeader({
   };
 
   return (
-    <div className="px-3 py-2 border-b">
-      <div className="flex items-center justify-between gap-1">
+    <div className="px-3.5 py-3 border-b bg-card/60" style={{ borderBottomColor: `${color}33` }}>
+      <div className="flex items-center justify-between gap-2">
         {editing ? (
           <div className="flex items-center gap-1 flex-1">
             <Input
@@ -277,29 +298,30 @@ function InlineStatusHeader({
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") { setEditName(name); setEditing(false); } }}
-              className="h-6 text-xs px-1.5 py-0"
+              className="h-7 text-xs px-2 py-0"
             />
-            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={save}><Check className="h-3 w-3" /></Button>
-            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => { setEditName(name); setEditing(false); }}><X className="h-3 w-3" /></Button>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={save}><Check className="h-3 w-3" /></Button>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setEditName(name); setEditing(false); }}><X className="h-3 w-3" /></Button>
           </div>
         ) : (
-          <div className="flex items-center gap-1 flex-1 group">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-center gap-2 flex-1 min-w-0 group">
+            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+            <h3 className="text-[12px] font-semibold uppercase tracking-wider text-foreground truncate">
               {name}
             </h3>
             <button
               onClick={(e) => { e.stopPropagation(); setEditing(true); }}
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
+              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
             >
               <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
             </button>
           </div>
         )}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5 shrink-0">
           {slaAlerts.expired > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-destructive bg-destructive/10 rounded px-1 py-0.5">
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-destructive bg-destructive-soft rounded-md px-1.5 py-0.5">
                   <AlertTriangle className="h-3 w-3" />{slaAlerts.expired}
                 </span>
               </TooltipTrigger>
@@ -309,19 +331,23 @@ function InlineStatusHeader({
           {slaAlerts.atRisk > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-warning bg-warning/10 rounded px-1 py-0.5">
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-warning bg-warning-soft rounded-md px-1.5 py-0.5">
                   <Timer className="h-3 w-3" />{slaAlerts.atRisk}
                 </span>
               </TooltipTrigger>
               <TooltipContent><p className="text-xs">{slaAlerts.atRisk} ticket{slaAlerts.atRisk > 1 ? "s" : ""} em risco de SLA de estágio</p></TooltipContent>
             </Tooltip>
           )}
-          <Badge variant="secondary" className="text-xs h-5 min-w-[20px] justify-center">
+          <span
+            className="inline-flex items-center justify-center min-w-[26px] h-6 px-2 rounded-md text-[12px] font-bold"
+            style={{ backgroundColor: `${color}22`, color }}
+          >
             {count}
-          </Badge>
+          </span>
         </div>
       </div>
     </div>
+
   );
 }
 
@@ -460,7 +486,7 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, onO
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
+      <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
         {statuses.map((s) => (
           <DroppableColumn key={s.id} statusId={s.id} color={s.color} isOver={overColumn === s.id}>
             <InlineStatusHeader
@@ -472,21 +498,26 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, onO
               slaAlerts={getStageSlaAlerts(grouped[s.id] || [])}
             />
             <ScrollArea className="h-[calc(100vh-320px)]">
-              <div className="p-2 space-y-2">
+              <div className="p-3 space-y-2.5">
                 {(grouped[s.id] || []).map((t) => (
                   <DraggableTicket key={t.id} ticket={t} categoryNames={categoryNames} callCount={callCounts?.[t.id]} agentProfile={t.assigned_to ? agentProfiles?.[t.assigned_to] : undefined} unreadCount={unreadCounts?.[t.id]} emailUnreadCount={emailUnreadCounts?.[t.id]} ticketTags={ticketTagsMap?.[t.id]} allTags={allTags} agentReplied={agentRepliedMap?.[t.id]} attachmentInfo={attachmentInfoMap?.[t.id]} onOpenTicket={onOpenTicket} />
                 ))}
                 {(grouped[s.id] || []).length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-8">Sem tickets</p>
+                  <div className="flex flex-col items-center justify-center py-10 text-center">
+                    <div className="h-10 w-10 rounded-full bg-muted/60 flex items-center justify-center mb-2">
+                      <CheckCircle className="h-5 w-5 text-muted-foreground/50" />
+                    </div>
+                    <p className="text-xs text-muted-foreground">Sem tickets aqui</p>
+                  </div>
                 )}
               </div>
             </ScrollArea>
           </DroppableColumn>
         ))}
           {/* Add new column button */}
-          <div className="flex-shrink-0 w-64">
+          <div className="flex-shrink-0 w-72">
             {addingColumn ? (
-              <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 space-y-2">
+              <div className="rounded-2xl border border-dashed border-primary/30 bg-primary-soft/40 p-3 space-y-2 shadow-soft">
                 <Input
                   ref={newColumnInputRef}
                   placeholder="Nome do estado..."
@@ -504,7 +535,7 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, onO
                     type="color"
                     value={newColumnColor}
                     onChange={(e) => setNewColumnColor(e.target.value)}
-                    className="h-6 w-8 rounded border cursor-pointer"
+                    className="h-7 w-10 rounded-md border cursor-pointer"
                   />
                 </div>
                 <div className="flex gap-1">
@@ -519,14 +550,17 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, onO
             ) : (
               <button
                 onClick={() => setAddingColumn(true)}
-                className="w-full h-24 rounded-lg border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-colors flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary"
+                className="w-full h-28 rounded-2xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary-soft/40 transition-all flex flex-col items-center justify-center gap-1.5 text-muted-foreground hover:text-primary"
               >
-                <Plus className="h-5 w-5" />
-                <span className="text-xs font-medium">Novo Estado</span>
+                <div className="h-9 w-9 rounded-full bg-primary-soft flex items-center justify-center">
+                  <Plus className="h-5 w-5 text-primary" />
+                </div>
+                <span className="text-xs font-semibold">Novo Estado</span>
               </button>
             )}
           </div>
         </div>
+
       <DragOverlay>
         {activeTicket && <TicketCard ticket={activeTicket} isDragging categoryNames={categoryNames} callCount={callCounts?.[activeTicket.id]} agentProfile={activeTicket.assigned_to ? agentProfiles?.[activeTicket.assigned_to] : undefined} unreadCount={unreadCounts?.[activeTicket.id]} emailUnreadCount={emailUnreadCounts?.[activeTicket.id]} ticketTags={ticketTagsMap?.[activeTicket.id]} allTags={allTags} agentReplied={agentRepliedMap?.[activeTicket.id]} attachmentInfo={attachmentInfoMap?.[activeTicket.id]} />}
       </DragOverlay>

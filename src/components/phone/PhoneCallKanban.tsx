@@ -54,74 +54,76 @@ interface PhoneCallKanbanProps {
 
 function CallCard({ call, isDragging, onPreviewNotes }: { call: PhoneCall; isDragging?: boolean; onPreviewNotes?: (call: PhoneCall) => void }) {
   const priorityBadge = (p: string) =>
-    p === "P1" ? "bg-destructive/10 text-destructive border-destructive/30" :
-    p === "P2" ? "bg-warning/10 text-warning border-warning/30" :
+    p === "P1" ? "bg-destructive-soft text-destructive border-destructive/30" :
+    p === "P2" ? "bg-warning-soft text-warning border-warning/30" :
     "bg-muted text-muted-foreground border-border";
 
   return (
     <div
-      className={`bg-card border rounded-lg p-3 transition-all ${isDragging ? "shadow-xl opacity-80 rotate-1 scale-105" : "hover:shadow-md hover:border-primary/20"}`}
-      style={{ borderLeftWidth: 3, borderLeftColor: call.created_by_color || '#6b7280' }}
+      className={`relative bg-card border border-border/70 rounded-xl p-3.5 transition-all duration-200 ${isDragging ? "shadow-elevated opacity-90 rotate-2 scale-[1.02]" : "shadow-soft hover:shadow-card-hover hover:border-primary/30 hover:-translate-y-0.5"}`}
+      style={{ borderLeftWidth: 3, borderLeftColor: call.created_by_color || 'hsl(var(--muted-foreground))' }}
     >
-      <div className="flex items-center justify-between mb-1.5">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <PriorityFlag priority={call.priority} size={14} />
-          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${priorityBadge(call.priority)}`}>
+          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 font-semibold ${priorityBadge(call.priority)}`}>
             {call.priority}
           </Badge>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           {(call.reminder_count || 0) > 0 && (
-            <div className="flex items-center gap-0.5 text-warning">
+            <span className="inline-flex items-center gap-0.5 text-warning bg-warning-soft rounded-md px-1.5 h-5">
               <Bell className="h-3 w-3" />
-              <span className="text-[10px] font-semibold">{call.reminder_count}</span>
-            </div>
+              <span className="text-[10px] font-bold">{call.reminder_count}</span>
+            </span>
           )}
           {call.ticket_id && (
-            <Badge variant="outline" className="text-[10px] px-1 py-0 bg-primary/5 text-primary border-primary/20">
+            <span className="inline-flex items-center justify-center h-5 w-5 rounded-md bg-primary-soft text-primary text-[11px]" title="Vinculado a ticket">
               🔗
-            </Badge>
+            </span>
           )}
         </div>
       </div>
       <p
-        className="text-sm font-medium leading-tight line-clamp-2 mb-1 cursor-pointer hover:text-primary transition-colors"
+        className="text-[14px] font-medium leading-snug line-clamp-2 mb-1.5 cursor-pointer hover:text-primary transition-colors"
         onClick={(e) => { e.stopPropagation(); onPreviewNotes?.(call); }}
         title="Clique para ver texto completo"
       >{call.subject}</p>
-      <p className="text-xs text-muted-foreground truncate">{call.client_name}</p>
-      <div className="flex items-center justify-between mt-0.5">
+      <p className="text-[12px] text-muted-foreground truncate flex items-center gap-1">
+        <User className="h-3 w-3" /> {call.client_name}
+      </p>
+      <div className="flex items-center justify-between mt-1.5 gap-2">
         {call.created_by_name && (
-          <div className="flex items-center gap-1">
-            <Avatar className="h-4 w-4">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Avatar className="h-5 w-5">
               <AvatarImage src={call.created_by_avatar || undefined} />
-              <AvatarFallback className="text-[7px] font-semibold bg-muted text-muted-foreground">
+              <AvatarFallback className="text-[8px] font-semibold bg-muted text-muted-foreground">
                 {call.created_by_name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <span className="text-[10px] text-muted-foreground/70">{call.created_by_name}</span>
+            <span className="text-[10px] text-muted-foreground truncate">{call.created_by_name.split(" ")[0]}</span>
           </div>
         )}
         {call.assigned_to_name && (
-          <div className="flex items-center gap-1" title={`Atribuído a ${call.assigned_to_name}`}>
-            <span className="text-[10px] text-muted-foreground/50">→</span>
-            <Avatar className="h-4 w-4 ring-1 ring-primary/30">
+          <div className="flex items-center gap-1 shrink-0" title={`Atribuído a ${call.assigned_to_name}`}>
+            <span className="text-[10px] text-muted-foreground/60">→</span>
+            <Avatar className="h-5 w-5 ring-1 ring-primary/40">
               <AvatarImage src={call.assigned_to_avatar || undefined} />
-              <AvatarFallback className="text-[7px] font-semibold" style={{ backgroundColor: call.assigned_to_color || '#6b7280', color: 'white' }}>
+              <AvatarFallback className="text-[8px] font-semibold text-white" style={{ backgroundColor: call.assigned_to_color || 'hsl(var(--primary))' }}>
                 {call.assigned_to_name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <span className="text-[10px] text-primary/70 font-medium">{call.assigned_to_name.split(" ")[0]}</span>
+            <span className="text-[10px] text-primary font-semibold">{call.assigned_to_name.split(" ")[0]}</span>
           </div>
         )}
       </div>
-      <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-dashed">
-        <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-          <Phone className="h-3 w-3" /> {call.client_phone}
+      <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-dashed border-border/60 gap-2">
+        <span className="text-[11px] text-muted-foreground flex items-center gap-1 truncate">
+          <Phone className="h-3 w-3 shrink-0" /> {call.client_phone}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {call.invoice_number && (
-            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5" title="Nº fatura">
               <FileText className="h-3 w-3" /> {call.invoice_number}
             </span>
           )}
@@ -133,6 +135,7 @@ function CallCard({ call, isDragging, onPreviewNotes }: { call: PhoneCall; isDra
     </div>
   );
 }
+
 
 function DraggableCall({ call, onSelect, onPreviewNotes }: { call: PhoneCall; onSelect: (c: PhoneCall) => void; onPreviewNotes: (c: PhoneCall) => void }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -159,13 +162,14 @@ function DroppableColumn({ columnId, color, children, isOver }: { columnId: stri
   return (
     <div
       ref={setNodeRef}
-      className={`flex-1 min-w-[240px] rounded-lg border border-t-4 transition-colors ${isOver ? "bg-primary/5 ring-2 ring-primary/20" : "bg-muted/20"}`}
-      style={{ borderTopColor: color }}
+      className={`flex-1 min-w-[260px] rounded-2xl border border-border/60 bg-card/40 backdrop-blur-sm transition-all overflow-hidden ${isOver ? "ring-2 ring-primary/40 shadow-glow-primary" : "shadow-soft"}`}
+      style={{ borderTop: `4px solid ${color}` }}
     >
       {children}
     </div>
   );
 }
+
 
 function InlineEditHeader({
   status,
@@ -197,8 +201,8 @@ function InlineEditHeader({
   };
 
   return (
-    <div className="px-3 py-2.5 border-b">
-      <div className="flex items-center justify-between gap-1">
+    <div className="px-3.5 py-3 border-b bg-card/60" style={{ borderBottomColor: `${status.color}33` }}>
+      <div className="flex items-center justify-between gap-2">
         {editing ? (
           <div className="flex items-center gap-1 flex-1">
             <Input
@@ -206,28 +210,32 @@ function InlineEditHeader({
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") { setName(status.name); setEditing(false); } }}
-              className="h-6 text-xs px-1.5 py-0"
+              className="h-7 text-xs px-2 py-0"
             />
-            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={save}><Check className="h-3 w-3" /></Button>
-            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => { setName(status.name); setEditing(false); }}><X className="h-3 w-3" /></Button>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={save}><Check className="h-3 w-3" /></Button>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setName(status.name); setEditing(false); }}><X className="h-3 w-3" /></Button>
           </div>
         ) : (
-          <div className="flex items-center gap-1 flex-1 group">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-center gap-2 flex-1 min-w-0 group">
+            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: status.color }} />
+            <h3 className="text-[12px] font-semibold uppercase tracking-wider text-foreground truncate">
               {status.name}
             </h3>
             <button
               onClick={(e) => { e.stopPropagation(); setEditing(true); }}
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
+              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
             >
               <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
             </button>
           </div>
         )}
-        <div className="flex items-center gap-1">
-          <Badge variant="secondary" className="text-xs h-5 min-w-[20px] justify-center">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span
+            className="inline-flex items-center justify-center min-w-[26px] h-6 px-2 rounded-md text-[12px] font-bold"
+            style={{ backgroundColor: `${status.color}22`, color: status.color }}
+          >
             {count}
-          </Badge>
+          </span>
           {!status.is_default && count === 0 && (
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(status.id); }}
@@ -242,6 +250,7 @@ function InlineEditHeader({
     </div>
   );
 }
+
 
 export default function PhoneCallKanban({ calls, onSelect, onStatusChanged }: PhoneCallKanbanProps) {
   const { statuses, refetch: refetchStatuses } = usePhoneCallStatuses();

@@ -1,91 +1,123 @@
-# Fase 10.2 — Auditoria real de chamadas
+## Objetivo
 
-Objetivo: dar à Alessandra evidência operacional sobre chamadas atendidas/não atendidas, reconciliação Reg. Ligações ↔ MicroSIP, e acesso ao CDR detalhado — sem perder dados nem julgar funcionários.
+Modernizar toda a aplicação interna com visual mais colorido, espaçoso e didático, mantendo 100% da lógica de negócio. Foco especial em **legibilidade**, **clareza visual** e **melhoria dos kanbans** (Tickets e Ligações).
 
-## 1. Migration aditiva (sem destruição)
+---
 
-Nova migration `2026053xxxx_phase_10_2_call_audit.sql`:
+## 1. Sistema de Design (base de tudo)
 
-- `ALTER TABLE phone_calls ADD COLUMN IF NOT EXISTS call_status TEXT` — valores normalizados: `answered | missed | no_answer | busy | failed | cancelled | unknown`. Default NULL (histórico preservado).
-- `ALTER TABLE phone_calls ADD COLUMN IF NOT EXISTS cdr_raw JSONB` — payload bruto do CDR (apenas para chamadas `letscall`). Apenas supervisor lê via RLS na UI.
-- `ALTER TABLE phone_calls ADD COLUMN IF NOT EXISTS cdr_answered_at TIMESTAMPTZ`, `cdr_ended_at TIMESTAMPTZ`, `cdr_src TEXT`, `cdr_dst TEXT`.
-- Substituir `phone_calls_reconciliation` (CREATE OR REPLACE VIEW) para acrescentar:
-  - `match_count INTEGER` (quantos candidatos no MicroSIP);
-  - status `ambiguous` quando `match_count > 1`;
-  - `matched_call_id UUID` (id do candidato único, se houver).
-- Sem DROP, sem DELETE, sem TRUNCATE. Tudo `IF NOT EXISTS` / `OR REPLACE`.
+Atualizar `src/index.css` e `tailwind.config.ts`:
 
-## 2. Edge function `letscall-sync-cdr`
+- **Paleta colorida** (mantendo HSL semântico):
+  - Primary: índigo vibrante `hsl(243 75% 59%)`
+  - Accent: turquesa `hsl(174 72% 56%)`
+  - Success: verde-esmeralda, Warning: âmbar, Destructive: coral
+  - Cores dedicadas por categoria de ticket (8 categorias) e por status do kanban
+- **Tipografia**: manter Inter, mas hierarquia mais clara (display 28/32px, h2 20px, body 14px, micro 12px).
+- **Espaçamento**: aumentar paddings (cards `p-5`, seções `gap-6`, página `p-8`).
+- **Radius**: subir para `1rem` em cards principais, manter `0.75rem` em elementos internos.
+- **Sombras**: nova escala suave colorida (`shadow-soft`, `shadow-glow-primary`).
+- **Gradientes utilitários** para headers de seção e cards de destaque.
 
-- Mapear `cdr.disposition` (ou equivalente) → `call_status` normalizado.
-- Gravar `cdr_raw` (JSON completo), `cdr_answered_at`, `cdr_ended_at`, `cdr_src`, `cdr_dst`.
-- Manter `attended` (booleano) para retrocompatibilidade.
-- Nenhuma alteração ao header `x-cron-secret` já existente.
+---
 
-## 3. Painel Operacional — `CallsPanel.tsx`
+## 2. Shell da Aplicação
 
-Acrescentar à secção "Ligações / Ramais":
+**`AppSidebar`**
+- Reorganizar em grupos colapsáveis com ícones coloridos por área (Operação, Comunicação, Catálogo, Sistema).
+- Item ativo com pílula colorida full-width + barra lateral em accent.
+- Avatar do utilizador + role no rodapé com indicador online.
+- Tooltip didático em modo colapsado.
 
-- Cards globais: Totais, Atendidas, Não atendidas, Feitas, Recebidas, Taxa de atendimento, Duração média.
-- Por ramal (200/201/202 já mapeados para 400/401/402): contadores próprios + última chamada + chamadas sem registo + registos sem CDR.
-- Duas listas colapsáveis:
-  - "Chamadas MicroSIP sem registo no sistema" (linhas de `phone_calls_reconciliation` com `reconciliation_status='not_registered_in_system'`).
-  - "Registos sem chamada MicroSIP" (`not_found_in_microsip`).
-- Ramal sem atividade → mostra zero, não quebra.
-- Status `unknown` ≠ offline (texto literal "Estado desconhecido").
+**`AppLayout` / Header**
+- Header mais alto (h-14), com breadcrumb dinâmico à esquerda + ações à direita.
+- Barra de busca global compacta no centro (Ctrl+K).
+- Background sutilmente diferenciado do conteúdo.
 
-## 4. Reg. Ligações — `PhoneCallList.tsx` / `PhoneCalls.tsx`
+---
 
-- Em cada linha, badge de reconciliação: `Confirmada no MicroSIP` / `Sem chamada encontrada` / `Chamada ambígua` / `Não sincronizada` (chamadas `letscall` próprias).
-- Botão "Ver CDR MicroSIP" abre modal novo `CdrDetailDialog`.
+## 3. Dashboard (`/dashboard`)
 
-## 5. `CdrDetailDialog.tsx` (novo)
+- Manter estrutura recente (StatCards + tabs + Action Queue), mas:
+  - StatCards com **acentos coloridos por tom** e mini-spark de tendência.
+  - Action Queue com cards "convidativos" (ícone grande, CTA claro).
+  - Tabs com indicador animado.
+  - Saudação personalizada no topo ("Bom dia, {nome} — tem X tickets urgentes").
 
-- Se houver match único: mostra campos do CDR (ramal, direção, origem, destino, telefone normalizado, início, atendimento, fim, duração, status, agente).
-- Raw payload JSON em `<Collapsible>` visível **apenas para supervisor** (`has_role`).
-- Se sem match: mensagem clara.
-- Se ambíguo: lista candidatos, sem auto-escolher.
+---
 
-## 6. Ticket Timeline — `TicketTimeline.tsx`
+## 4. Kanbans (Tickets + Ligações) — foco principal
 
-- Para `phone_calls` ligadas ao ticket, etiqueta extra: "Confirmada no MicroSIP" / "Sem CDR MicroSIP" conforme view.
-- Chamadas não relacionadas ao ticket continuam fora.
-- Portal cliente continua sem ver CDR.
+**Toolbar superior** (novo, comum aos dois kanbans):
+- Busca textual + filtros rápidos (Agente, Prioridade, Tag, SLA).
+- Toggle visualização (Kanban / Lista).
+- Contador total + "Apenas meus" / "Não atribuídos".
 
-## 7. Segurança
+**Colunas**
+- Header com:
+  - Cor de status na borda superior (mais grossa, 4px).
+  - Nome + contador grande + mini-indicador de SLA agregado (✓ no prazo / ⚠ atenção / ! atrasados).
+  - Ações: renomear/excluir mantidas, mais acessíveis.
+- Background da coluna ligeiramente tonalizado conforme cor do status.
+- Empty state ilustrado.
 
-- Token Let's Call permanece só em secrets (já está).
-- `cdr_raw` lido apenas pela UI quando `useAuth().isSupervisor`.
-- RLS atual de `phone_calls` (apenas `is_authenticated_agent()`) cobre o acesso; portal cliente já bloqueado.
-- Falha de API: painel continua a abrir (try/catch + fallback "sem dados").
+**Cards de ticket/ligação**
+- Layout em 3 zonas claras:
+  1. **Topo**: prioridade (pílula colorida) + categoria (chip colorido) + indicador SLA (badge com tempo restante e cor).
+  2. **Meio**: título maior (15px, 2 linhas), cliente, nº encomenda.
+  3. **Rodapé**: avatares (criador → atribuído), tags compactas, timestamp relativo, ícones de email/portal/anexos.
+- Borda esquerda colorida = cor do criador (mantém).
+- **Indicadores visuais novos**:
+  - Pulse animado em cards com mensagem não lida.
+  - Badge "SLA" com countdown colorido (verde > amarelo > laranja > vermelho).
+  - Ícone de canal (📧 email, 💬 portal, ☎ ligação).
+- Hover: leve elevação + outline accent.
 
-## 8. Documentação
+---
 
-- Atualizar `docs/system-map.md` com secção "Fase 10.2 — Auditoria real de chamadas": regras de atendida/não atendida, janela ±15min, comportamento do botão CDR, limitações (DND/online não suportados pela API), como interpretar os indicadores.
+## 5. Páginas Principais
 
-## Fora deste plano (próxima fase)
+- **Tickets, PhoneCalls, EmailTickets, DeliveryConfirmations, PostDelivery, DelayedOrders**: padronizar header de página (título + descrição curta explicativa + ações primárias).
+- **TicketDetail**: refinar sidebar e timeline (espaçamento, ícones coloridos por tipo de evento, separadores mais suaves).
+- **Settings**: tabs verticais com ícones coloridos.
 
-- Gravação/áudio, discador, ações destrutivas, score automático de funcionário, criação backend "Registar ligação" a partir do painel (deixa apenas contexto/linha).
+---
 
-## Validação
+## 6. Detalhes técnicos
 
-Checagem manual pós-deploy dos 12 cenários listados; nenhuma migration destrutiva.
+- Tudo via tokens semânticos (HSL) — sem cores hardcoded em componentes.
+- Novos componentes utilitários:
+  - `PageHeader` (título + descrição + ações)
+  - `KanbanToolbar` (busca + filtros)
+  - `SlaBadge` (countdown colorido)
+  - `CategoryChip` (chip colorido por categoria)
+- Animações com `tailwindcss-animate` já instalado; sem novas dependências.
+- Mantém toda lógica: drag-and-drop, RLS, queries, realtime, mentions, SLA — nenhum business logic alterado.
 
-## Detalhes técnicos
+---
+
+## 7. Entregáveis
 
 ```text
-phone_calls (adições)
-├── call_status TEXT
-├── cdr_raw JSONB
-├── cdr_answered_at TIMESTAMPTZ
-├── cdr_ended_at TIMESTAMPTZ
-├── cdr_src TEXT
-└── cdr_dst TEXT
-
-phone_calls_reconciliation (replace)
-├── + match_count INTEGER
-├── + matched_call_id UUID
-└── status: confirmed | ambiguous | not_found_in_microsip | not_registered_in_system
+src/index.css                                  (paleta colorida + tokens)
+src/components/AppSidebar.tsx                  (grupos + cores)
+src/components/AppLayout.tsx                   (header + breadcrumb)
+src/components/ui/PageHeader.tsx               (novo)
+src/components/kanban/KanbanToolbar.tsx        (novo)
+src/components/ticket/SlaBadge.tsx             (novo)
+src/components/ticket/CategoryChip.tsx         (novo)
+src/components/KanbanBoard.tsx                 (refit colunas + cards)
+src/components/phone/PhoneCallKanban.tsx       (refit colunas + cards)
+src/pages/Dashboard.tsx                        (saudação + polish)
+src/pages/Tickets.tsx, PhoneCalls.tsx, ...     (PageHeader + toolbar)
 ```
 
-Após aprovação, executo migration + edits em ~7 ficheiros.
+## 8. Fora de escopo
+
+- Portal do cliente (`/portal/*`) — mantém como está.
+- Lógica de SLA, regras, automações, edge functions.
+- Refatoração de queries/dados.
+
+---
+
+Posso seguir e implementar a primeira fase (design system + shell + kanbans), depois iterar nas páginas restantes — ou prefere que faça tudo numa só passagem?
