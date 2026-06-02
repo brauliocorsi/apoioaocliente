@@ -17,6 +17,7 @@ import PhoneCallKanban from "@/components/phone/PhoneCallKanban";
 import PhoneCallDetailDialog from "@/components/phone/PhoneCallDetailDialog";
 import PhoneCallList from "@/components/phone/PhoneCallList";
 import NotePreviewDialog from "@/components/phone/NotePreviewDialog";
+import { PageHeader } from "@/components/PageHeader";
 
 type PhoneCall = {
   id: string;
