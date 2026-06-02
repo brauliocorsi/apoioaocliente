@@ -63,34 +63,23 @@ const priorityColors: Record<string, string> = {
 interface StatCardProps {
   title: string;
   value: number | string;
-  icon: React.ReactNode;
-  accent?: string;
+  icon?: React.ReactNode;
+  tone?: "default" | "destructive" | "success" | "warning";
   subtitle?: string;
-  trend?: "up" | "down" | "neutral";
 }
 
-function StatCard({ title, value, icon, accent, subtitle, trend }: StatCardProps) {
+function StatCard({ title, value, tone = "default", subtitle }: StatCardProps) {
+  const valueCls =
+    tone === "destructive" ? "text-destructive"
+    : tone === "success" ? "text-success"
+    : tone === "warning" ? "text-warning"
+    : "text-foreground";
   return (
-    <Card className="group relative overflow-hidden transition-shadow hover:shadow-md">
-      <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${accent || "bg-primary/[0.02]"}`} />
-      <CardContent className="p-4 relative">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">{title}</p>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-bold tracking-tight">{value}</span>
-              {trend && trend !== "neutral" && (
-                trend === "up"
-                  ? <TrendingUp className="h-3.5 w-3.5 text-success" />
-                  : <TrendingDown className="h-3.5 w-3.5 text-destructive" />
-              )}
-            </div>
-            {subtitle && <p className="text-[10px] text-muted-foreground">{subtitle}</p>}
-          </div>
-          <div className="h-9 w-9 rounded-xl bg-muted/80 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-            {icon}
-          </div>
-        </div>
+    <Card className="shadow-sm hover:shadow-md transition-shadow">
+      <CardContent className="p-4">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{title}</p>
+        <p className={`text-2xl font-bold tracking-tight mt-1 ${valueCls}`}>{value}</p>
+        {subtitle && <p className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</p>}
       </CardContent>
     </Card>
   );
@@ -101,9 +90,27 @@ function ListItem({ onClick, children }: { onClick?: () => void; children: React
   return (
     <div
       onClick={onClick}
-      className="flex items-center justify-between rounded-xl border border-border/60 p-3.5 cursor-pointer hover:bg-muted/40 hover:border-border transition-all duration-200 group"
+      className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors group"
     >
       {children}
+    </div>
+  );
+}
+
+/* ---------- PriorityPill ---------- */
+function PriorityPill({ level, count }: { level: "P1" | "P2" | "P3"; count: number }) {
+  const s = {
+    P1: { bg: "bg-destructive/5 dark:bg-destructive/10", border: "border-destructive/20", dot: "bg-destructive", text: "text-destructive", label: "text-destructive/90" },
+    P2: { bg: "bg-warning/5 dark:bg-warning/10", border: "border-warning/20", dot: "bg-warning", text: "text-warning", label: "text-warning/90" },
+    P3: { bg: "bg-muted/40", border: "border-border", dot: "bg-muted-foreground/60", text: "text-foreground", label: "text-muted-foreground" },
+  }[level];
+  return (
+    <div className={`flex items-center justify-between px-4 py-3 rounded-xl border ${s.bg} ${s.border}`}>
+      <div className="flex items-center gap-2.5">
+        <span className={`h-2 w-2 rounded-full ${s.dot}`} />
+        <span className={`text-sm font-semibold ${s.label}`}>Prioridade {level}</span>
+      </div>
+      <span className={`text-xl font-bold ${s.text}`}>{count}</span>
     </div>
   );
 }
