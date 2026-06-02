@@ -162,13 +162,14 @@ function DroppableColumn({ columnId, color, children, isOver }: { columnId: stri
   return (
     <div
       ref={setNodeRef}
-      className={`flex-1 min-w-[240px] rounded-lg border border-t-4 transition-colors ${isOver ? "bg-primary/5 ring-2 ring-primary/20" : "bg-muted/20"}`}
-      style={{ borderTopColor: color }}
+      className={`flex-1 min-w-[260px] rounded-2xl border border-border/60 bg-card/40 backdrop-blur-sm transition-all overflow-hidden ${isOver ? "ring-2 ring-primary/40 shadow-glow-primary" : "shadow-soft"}`}
+      style={{ borderTop: `4px solid ${color}` }}
     >
       {children}
     </div>
   );
 }
+
 
 function InlineEditHeader({
   status,
@@ -200,8 +201,8 @@ function InlineEditHeader({
   };
 
   return (
-    <div className="px-3 py-2.5 border-b">
-      <div className="flex items-center justify-between gap-1">
+    <div className="px-3.5 py-3 border-b bg-card/60" style={{ borderBottomColor: `${status.color}33` }}>
+      <div className="flex items-center justify-between gap-2">
         {editing ? (
           <div className="flex items-center gap-1 flex-1">
             <Input
@@ -209,28 +210,32 @@ function InlineEditHeader({
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") { setName(status.name); setEditing(false); } }}
-              className="h-6 text-xs px-1.5 py-0"
+              className="h-7 text-xs px-2 py-0"
             />
-            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={save}><Check className="h-3 w-3" /></Button>
-            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => { setName(status.name); setEditing(false); }}><X className="h-3 w-3" /></Button>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={save}><Check className="h-3 w-3" /></Button>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setName(status.name); setEditing(false); }}><X className="h-3 w-3" /></Button>
           </div>
         ) : (
-          <div className="flex items-center gap-1 flex-1 group">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-center gap-2 flex-1 min-w-0 group">
+            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: status.color }} />
+            <h3 className="text-[12px] font-semibold uppercase tracking-wider text-foreground truncate">
               {status.name}
             </h3>
             <button
               onClick={(e) => { e.stopPropagation(); setEditing(true); }}
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
+              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
             >
               <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
             </button>
           </div>
         )}
-        <div className="flex items-center gap-1">
-          <Badge variant="secondary" className="text-xs h-5 min-w-[20px] justify-center">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span
+            className="inline-flex items-center justify-center min-w-[26px] h-6 px-2 rounded-md text-[12px] font-bold"
+            style={{ backgroundColor: `${status.color}22`, color: status.color }}
+          >
             {count}
-          </Badge>
+          </span>
           {!status.is_default && count === 0 && (
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(status.id); }}
@@ -245,6 +250,7 @@ function InlineEditHeader({
     </div>
   );
 }
+
 
 export default function PhoneCallKanban({ calls, onSelect, onStatusChanged }: PhoneCallKanbanProps) {
   const { statuses, refetch: refetchStatuses } = usePhoneCallStatuses();
