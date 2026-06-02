@@ -305,25 +305,27 @@ export default function Tickets() {
   return (
     <TooltipProvider>
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Tickets</h1>
-          <p className="text-muted-foreground">Gestão de tickets de suporte</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex border rounded-md">
-            <Button variant={view === "list" ? "secondary" : "ghost"} size="icon" className="h-9 w-9 rounded-r-none" onClick={() => setView("list")}>
-              <List className="h-4 w-4" />
+      <PageHeader
+        title="Tickets"
+        subtitle={`${filtered.length} ticket${filtered.length === 1 ? "" : "s"} · gestão de suporte`}
+        icon={<Ticket className="h-5 w-5" />}
+        accent="primary"
+        actions={
+          <>
+            <div className="flex border border-border/60 rounded-lg overflow-hidden bg-card/80 backdrop-blur-sm">
+              <Button variant={view === "list" ? "secondary" : "ghost"} size="icon" className="h-9 w-9 rounded-none" onClick={() => setView("list")}>
+                <List className="h-4 w-4" />
+              </Button>
+              <Button variant={view === "kanban" ? "secondary" : "ghost"} size="icon" className="h-9 w-9 rounded-none" onClick={() => setView("kanban")}>
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+            </div>
+            <Button onClick={() => navigate("/tickets/new")} className="shadow-soft">
+              <Plus className="mr-2 h-4 w-4" /> Novo Ticket
             </Button>
-            <Button variant={view === "kanban" ? "secondary" : "ghost"} size="icon" className="h-9 w-9 rounded-l-none" onClick={() => setView("kanban")}>
-              <LayoutGrid className="h-4 w-4" />
-            </Button>
-          </div>
-          <Button onClick={() => navigate("/tickets/new")}>
-            <Plus className="mr-2 h-4 w-4" /> Novo Ticket
-          </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {!loading && <SlaDashboard tickets={filtered as SlaTicket[]} />}
 
