@@ -243,13 +243,17 @@ function DroppableColumn({ statusId, color, children, isOver }: { statusId: stri
   return (
     <div
       ref={setNodeRef}
-      className={`flex-shrink-0 w-64 rounded-lg border border-t-4 transition-colors ${isOver ? "bg-primary/10 ring-2 ring-primary/30" : "bg-muted/30"}`}
-      style={{ borderTopColor: color }}
+      className={`flex-shrink-0 w-72 rounded-2xl border border-border/60 bg-card/40 backdrop-blur-sm transition-all overflow-hidden ${isOver ? "ring-2 ring-primary/40 shadow-glow-primary" : "shadow-soft"}`}
+      style={{
+        borderTop: `4px solid ${color}`,
+        background: isOver ? `linear-gradient(180deg, ${color}10, hsl(var(--card)/0.6))` : undefined,
+      }}
     >
       {children}
     </div>
   );
 }
+
 
 function InlineStatusHeader({
   statusId,
