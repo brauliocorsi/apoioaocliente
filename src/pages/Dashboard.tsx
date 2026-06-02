@@ -63,34 +63,23 @@ const priorityColors: Record<string, string> = {
 interface StatCardProps {
   title: string;
   value: number | string;
-  icon: React.ReactNode;
-  accent?: string;
+  icon?: React.ReactNode;
+  tone?: "default" | "destructive" | "success" | "warning";
   subtitle?: string;
-  trend?: "up" | "down" | "neutral";
 }
 
-function StatCard({ title, value, icon, accent, subtitle, trend }: StatCardProps) {
+function StatCard({ title, value, tone = "default", subtitle }: StatCardProps) {
+  const valueCls =
+    tone === "destructive" ? "text-destructive"
+    : tone === "success" ? "text-success"
+    : tone === "warning" ? "text-warning"
+    : "text-foreground";
   return (
-    <Card className="group relative overflow-hidden transition-shadow hover:shadow-md">
-      <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${accent || "bg-primary/[0.02]"}`} />
-      <CardContent className="p-4 relative">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">{title}</p>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-bold tracking-tight">{value}</span>
-              {trend && trend !== "neutral" && (
-                trend === "up"
-                  ? <TrendingUp className="h-3.5 w-3.5 text-success" />
-                  : <TrendingDown className="h-3.5 w-3.5 text-destructive" />
-              )}
-            </div>
-            {subtitle && <p className="text-[10px] text-muted-foreground">{subtitle}</p>}
-          </div>
-          <div className="h-9 w-9 rounded-xl bg-muted/80 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-            {icon}
-          </div>
-        </div>
+    <Card className="shadow-sm hover:shadow-md transition-shadow">
+      <CardContent className="p-4">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{title}</p>
+        <p className={`text-2xl font-bold tracking-tight mt-1 ${valueCls}`}>{value}</p>
+        {subtitle && <p className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</p>}
       </CardContent>
     </Card>
   );
@@ -101,9 +90,27 @@ function ListItem({ onClick, children }: { onClick?: () => void; children: React
   return (
     <div
       onClick={onClick}
-      className="flex items-center justify-between rounded-xl border border-border/60 p-3.5 cursor-pointer hover:bg-muted/40 hover:border-border transition-all duration-200 group"
+      className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/40 transition-colors group"
     >
       {children}
+    </div>
+  );
+}
+
+/* ---------- PriorityPill ---------- */
+function PriorityPill({ level, count }: { level: "P1" | "P2" | "P3"; count: number }) {
+  const s = {
+    P1: { bg: "bg-destructive/5 dark:bg-destructive/10", border: "border-destructive/20", dot: "bg-destructive", text: "text-destructive", label: "text-destructive/90" },
+    P2: { bg: "bg-warning/5 dark:bg-warning/10", border: "border-warning/20", dot: "bg-warning", text: "text-warning", label: "text-warning/90" },
+    P3: { bg: "bg-muted/40", border: "border-border", dot: "bg-muted-foreground/60", text: "text-foreground", label: "text-muted-foreground" },
+  }[level];
+  return (
+    <div className={`flex items-center justify-between px-4 py-3 rounded-xl border ${s.bg} ${s.border}`}>
+      <div className="flex items-center gap-2.5">
+        <span className={`h-2 w-2 rounded-full ${s.dot}`} />
+        <span className={`text-sm font-semibold ${s.label}`}>Prioridade {level}</span>
+      </div>
+      <span className={`text-xl font-bold ${s.text}`}>{count}</span>
     </div>
   );
 }
@@ -250,7 +257,7 @@ export default function Dashboard() {
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
   return (
-    <div className="space-y-5 max-w-[1400px] mx-auto">
+    <div className="space-y-6 max-w-[1400px] mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -270,74 +277,73 @@ export default function Dashboard() {
         </ToggleGroup>
       </div>
 
-      {/* Reminders banner */}
-      {upcomingReminders.length > 0 && (
-        <Card className="border-warning/20 bg-warning/[0.02]">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <div className="h-8 w-8 rounded-lg bg-warning/10 flex items-center justify-center">
-                <Bell className="h-4 w-4 text-warning" />
-              </div>
-              Lembretes Próximos
-              <Badge variant="secondary" className="text-xs">{upcomingReminders.length}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-1.5">
-              {upcomingReminders.map((r) => (
-                <ListItem key={r.id} onClick={() => navigate("/phone-calls")}>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{r.message}</p>
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">{r.client_name} – {r.subject}</p>
+      {/* Fila de Ação: Lembretes + Respostas lado a lado */}
+      {(upcomingReminders.length > 0 || unreadEmailTickets.length > 0) && (
+        <div className={`grid gap-4 ${upcomingReminders.length > 0 && unreadEmailTickets.length > 0 ? "lg:grid-cols-2" : "grid-cols-1"}`}>
+          {upcomingReminders.length > 0 && (
+            <Card className="shadow-sm overflow-hidden">
+              <div className="px-5 py-3.5 border-b flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-7 w-7 rounded-lg bg-warning/10 flex items-center justify-center">
+                    <Bell className="h-3.5 w-3.5 text-warning" />
                   </div>
-                  <span className="text-xs font-medium text-muted-foreground tabular-nums shrink-0 ml-3">
-                    {format(new Date(r.remind_at), "HH:mm", { locale: pt })}
-                  </span>
-                </ListItem>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Unread email tickets */}
-      {unreadEmailTickets.length > 0 && (
-        <Card className="border-blue-500/20 bg-blue-500/[0.02]">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <Eye className="h-4 w-4 text-blue-500" />
+                  <h3 className="text-sm font-semibold">Lembretes Próximos</h3>
+                  <Badge variant="secondary" className="text-[10px] h-5">{upcomingReminders.length}</Badge>
+                </div>
               </div>
-              Respostas de Clientes Aguardando Visualização
-              <Badge variant="secondary" className="text-xs">{unreadEmailTickets.length}</Badge>
-            </CardTitle>
-            <button onClick={() => navigate("/email-tickets")} className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition-colors">
-              Ver todos <ArrowUpRight className="h-3 w-3" />
-            </button>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-1.5">
-              {unreadEmailTickets.slice(0, 5).map((t) => (
-                <ListItem key={t.id} onClick={() => navigate(`/tickets/${t.id}`)}>
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse shrink-0" />
-                    <span className="text-xs font-mono text-muted-foreground/70 shrink-0">#{t.ticket_number}</span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">{t.subject}</p>
-                      <p className="text-xs text-muted-foreground truncate">{t.client_name}</p>
+              <div className="divide-y">
+                {upcomingReminders.map((r) => (
+                  <ListItem key={r.id} onClick={() => navigate("/phone-calls")}>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">{r.message}</p>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{r.client_name} – {r.subject}</p>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-3">
-                    <span className="text-[10px] text-muted-foreground">
-                      {formatDistanceToNow(new Date(t.last_client_msg_at), { addSuffix: true, locale: pt })}
+                    <span className="text-xs font-medium text-muted-foreground tabular-nums shrink-0 ml-3">
+                      {format(new Date(r.remind_at), "HH:mm", { locale: pt })}
                     </span>
-                    <Badge className={`${priorityColors[t.priority]} text-[10px] px-1.5 py-0`}>{t.priority}</Badge>
+                  </ListItem>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {unreadEmailTickets.length > 0 && (
+            <Card className="shadow-sm overflow-hidden">
+              <div className="px-5 py-3.5 border-b flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-7 w-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                    <Eye className="h-3.5 w-3.5 text-blue-500" />
                   </div>
-                </ListItem>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                  <h3 className="text-sm font-semibold">Aguardando Visualização</h3>
+                  <Badge variant="secondary" className="text-[10px] h-5">{unreadEmailTickets.length}</Badge>
+                </div>
+                <button onClick={() => navigate("/email-tickets")} className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition-colors">
+                  Ver todos <ArrowUpRight className="h-3 w-3" />
+                </button>
+              </div>
+              <div className="divide-y">
+                {unreadEmailTickets.slice(0, 5).map((t) => (
+                  <ListItem key={t.id} onClick={() => navigate(`/tickets/${t.id}`)}>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse shrink-0" />
+                      <span className="text-xs font-mono text-muted-foreground/70 shrink-0">#{t.ticket_number}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">{t.subject}</p>
+                        <p className="text-xs text-muted-foreground truncate">{t.client_name}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <span className="text-[10px] text-muted-foreground">
+                        {formatDistanceToNow(new Date(t.last_client_msg_at), { addSuffix: true, locale: pt })}
+                      </span>
+                      <Badge className={`${priorityColors[t.priority]} text-[10px] px-1.5 py-0`}>{t.priority}</Badge>
+                    </div>
+                  </ListItem>
+                ))}
+              </div>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* TABS */}
@@ -360,221 +366,161 @@ export default function Dashboard() {
         {/* ===================== TAB: TICKETS ===================== */}
         <TabsContent value="tickets" className="space-y-4">
           <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-            <StatCard title="Abertos" value={openTickets.length} icon={<Ticket className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
-            <StatCard title="Criados" value={fTickets.length} icon={<CalendarClock className="h-4 w-4 text-muted-foreground" />} />
-            <StatCard title="SLA em Risco" value={slaAtRisk.length} icon={<AlertTriangle className="h-4 w-4 text-destructive" />} accent="bg-destructive/[0.03]" />
-            <StatCard title="Resolvidos" value={resolvedInPeriod.length} icon={<CheckCircle2 className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
-            <StatCard title="Emails Recebidos" value={emailsReceived} icon={<Inbox className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
-            <StatCard title="Tempo Médio" value={`${avgResolutionHours}h`} icon={<Clock className="h-4 w-4 text-muted-foreground" />} subtitle="resolução" />
+            <StatCard title="Abertos" value={openTickets.length} />
+            <StatCard title="Criados" value={fTickets.length} />
+            <StatCard title="SLA em Risco" value={slaAtRisk.length} tone={slaAtRisk.length > 0 ? "destructive" : "default"} />
+            <StatCard title="Resolvidos" value={resolvedInPeriod.length} tone="success" />
+            <StatCard title="Emails Recebidos" value={emailsReceived} />
+            <StatCard title="Tempo Médio" value={`${avgResolutionHours}h`} subtitle="resolução" />
           </div>
 
-          {/* Priority breakdown */}
-          <div className="grid gap-3 grid-cols-3">
-            <Card className="border-destructive/20">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="h-9 w-9 rounded-lg bg-destructive/10 flex items-center justify-center">
-                  <AlertTriangle className="h-4 w-4 text-destructive" />
-                </div>
-                <div>
-                  <p className="text-xl font-bold text-destructive">{ticketsByPriority.P1}</p>
-                  <p className="text-[10px] text-muted-foreground">Prioridade P1</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-warning/20">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="h-9 w-9 rounded-lg bg-warning/10 flex items-center justify-center">
-                  <Clock className="h-4 w-4 text-warning" />
-                </div>
-                <div>
-                  <p className="text-xl font-bold text-warning">{ticketsByPriority.P2}</p>
-                  <p className="text-[10px] text-muted-foreground">Prioridade P2</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
-                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-xl font-bold">{ticketsByPriority.P3}</p>
-                  <p className="text-[10px] text-muted-foreground">Prioridade P3</p>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="grid gap-3 grid-cols-1 md:grid-cols-3">
+            <PriorityPill level="P1" count={ticketsByPriority.P1} />
+            <PriorityPill level="P2" count={ticketsByPriority.P2} />
+            <PriorityPill level="P3" count={ticketsByPriority.P3} />
           </div>
 
           {/* Recent tickets */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Tickets Recentes Abertos</CardTitle>
-                <button onClick={() => navigate("/tickets")} className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition-colors">
-                  Ver todos <ArrowUpRight className="h-3 w-3" />
-                </button>
+          <Card className="shadow-sm overflow-hidden">
+            <div className="px-5 py-3.5 border-b flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Tickets Recentes Abertos</h3>
+              <button onClick={() => navigate("/tickets")} className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition-colors">
+                Ver todos <ArrowUpRight className="h-3 w-3" />
+              </button>
+            </div>
+            {openTickets.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">Nenhum ticket aberto</p>
+            ) : (
+              <div className="divide-y">
+                {openTickets.slice(0, 8).map((t) => (
+                  <ListItem key={t.id} onClick={() => navigate(`/tickets/${t.id}`)}>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <span className="text-xs font-mono text-muted-foreground/70 shrink-0">#{t.ticket_number}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">{t.subject}</p>
+                        <p className="text-xs text-muted-foreground truncate">{t.client_name}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <span className="text-[10px] text-muted-foreground">
+                        {formatDistanceToNow(new Date(t.created_at), { addSuffix: true, locale: pt })}
+                      </span>
+                      <Badge className={`${priorityColors[t.priority]} text-[10px] px-1.5 py-0`}>{t.priority}</Badge>
+                    </div>
+                  </ListItem>
+                ))}
               </div>
-            </CardHeader>
-            <CardContent>
-              {openTickets.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">Nenhum ticket aberto</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {openTickets.slice(0, 8).map((t) => (
-                    <ListItem key={t.id} onClick={() => navigate(`/tickets/${t.id}`)}>
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <span className="text-xs font-mono text-muted-foreground/70 shrink-0">#{t.ticket_number}</span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">{t.subject}</p>
-                          <p className="text-xs text-muted-foreground truncate">{t.client_name}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0 ml-3">
-                        <span className="text-[10px] text-muted-foreground">
-                          {formatDistanceToNow(new Date(t.created_at), { addSuffix: true, locale: pt })}
-                        </span>
-                        <Badge className={`${priorityColors[t.priority]} text-[10px] px-1.5 py-0`}>{t.priority}</Badge>
-                      </div>
-                    </ListItem>
-                  ))}
-                </div>
-              )}
-            </CardContent>
+            )}
           </Card>
         </TabsContent>
 
         {/* ===================== TAB: LIGAÇÕES ===================== */}
         <TabsContent value="calls" className="space-y-4">
           <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-            <StatCard title="Ligações Abertas" value={openCalls.length} icon={<PhoneCall className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
-            <StatCard title="Registadas" value={fCalls.length} icon={<PhoneIncoming className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
-            <StatCard title="Fechadas" value={closedInPeriod.length} icon={<CheckCircle2 className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
-            <StatCard title="Lembretes Pendentes" value={upcomingReminders.length} icon={<Bell className="h-4 w-4 text-warning" />} accent="bg-warning/[0.03]" />
+            <StatCard title="Ligações Abertas" value={openCalls.length} />
+            <StatCard title="Registadas" value={fCalls.length} />
+            <StatCard title="Fechadas" value={closedInPeriod.length} tone="success" />
+            <StatCard title="Lembretes Pendentes" value={upcomingReminders.length} tone={upcomingReminders.length > 0 ? "warning" : "default"} />
           </div>
 
-          {/* Priority breakdown */}
-          <div className="grid gap-3 grid-cols-3">
+          <div className="grid gap-3 grid-cols-1 md:grid-cols-3">
             {(["P1", "P2", "P3"] as const).map((p) => {
               const count = openCalls.filter((c) => c.priority === p.toLowerCase() || c.priority === p).length;
-              const colors = { P1: "text-destructive bg-destructive/10", P2: "text-warning bg-warning/10", P3: "text-muted-foreground bg-muted" };
-              return (
-                <Card key={p}>
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${colors[p].split(" ")[1]}`}>
-                      <Phone className={`h-4 w-4 ${colors[p].split(" ")[0]}`} />
-                    </div>
-                    <div>
-                      <p className={`text-xl font-bold ${colors[p].split(" ")[0]}`}>{count}</p>
-                      <p className="text-[10px] text-muted-foreground">{p} abertas</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
+              return <PriorityPill key={p} level={p} count={count} />;
             })}
           </div>
 
-          {/* Recent calls */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Últimas Ligações</CardTitle>
-                <button onClick={() => navigate("/phone-calls")} className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition-colors">
-                  Ver todas <ArrowUpRight className="h-3 w-3" />
-                </button>
+          <Card className="shadow-sm overflow-hidden">
+            <div className="px-5 py-3.5 border-b flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Últimas Ligações</h3>
+              <button onClick={() => navigate("/phone-calls")} className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition-colors">
+                Ver todas <ArrowUpRight className="h-3 w-3" />
+              </button>
+            </div>
+            {phoneCalls.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">Nenhuma ligação registada</p>
+            ) : (
+              <div className="divide-y">
+                {phoneCalls.slice(0, 8).map((c) => (
+                  <ListItem key={c.id} onClick={() => navigate("/phone-calls")}>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <Phone className="h-4 w-4 text-primary/60 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">{c.subject}</p>
+                        <p className="text-xs text-muted-foreground truncate">{c.client_name} · {c.client_phone}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <span className="text-[10px] text-muted-foreground">
+                        {formatDistanceToNow(new Date(c.created_at), { addSuffix: true, locale: pt })}
+                      </span>
+                      {!c.closed_at && <Badge variant="outline" className="text-[10px] px-1.5 py-0">Aberta</Badge>}
+                      {c.closed_at && <Badge className="bg-success/10 text-success border-0 text-[10px] px-1.5 py-0">Fechada</Badge>}
+                    </div>
+                  </ListItem>
+                ))}
               </div>
-            </CardHeader>
-            <CardContent>
-              {phoneCalls.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">Nenhuma ligação registada</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {phoneCalls.slice(0, 8).map((c) => (
-                    <ListItem key={c.id} onClick={() => navigate("/phone-calls")}>
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <Phone className="h-4 w-4 text-primary/60 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">{c.subject}</p>
-                          <p className="text-xs text-muted-foreground truncate">{c.client_name} · {c.client_phone}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0 ml-3">
-                        <span className="text-[10px] text-muted-foreground">
-                          {formatDistanceToNow(new Date(c.created_at), { addSuffix: true, locale: pt })}
-                        </span>
-                        {!c.closed_at && <Badge variant="outline" className="text-[10px] px-1.5 py-0">Aberta</Badge>}
-                        {c.closed_at && <Badge className="bg-success/10 text-success border-0 text-[10px] px-1.5 py-0">Fechada</Badge>}
-                      </div>
-                    </ListItem>
-                  ))}
-                </div>
-              )}
-            </CardContent>
+            )}
           </Card>
         </TabsContent>
 
         {/* ===================== TAB: REG. LIGAÇÕES ===================== */}
         <TabsContent value="deliveries" className="space-y-4">
           <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-            <StatCard title="Total Registos" value={fDeliveries.length} icon={<Truck className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
-            <StatCard title="Confirmados" value={confirmed.length} icon={<CheckCircle2 className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" subtitle={`${confirmRate}%`} />
-            <StatCard title="Não Confirmados" value={notConfirmed.length} icon={<AlertTriangle className="h-4 w-4 text-destructive" />} accent="bg-destructive/[0.03]" />
-            <StatCard title="Taxa Confirmação" value={`${confirmRate}%`} icon={<TrendingUp className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
+            <StatCard title="Total Registos" value={fDeliveries.length} />
+            <StatCard title="Confirmados" value={confirmed.length} tone="success" subtitle={`${confirmRate}%`} />
+            <StatCard title="Não Confirmados" value={notConfirmed.length} tone={notConfirmed.length > 0 ? "destructive" : "default"} />
+            <StatCard title="Taxa Confirmação" value={`${confirmRate}%`} tone="success" />
           </div>
 
-          {/* Recent deliveries */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Últimos Registos</CardTitle>
-                <button onClick={() => navigate("/delivery-confirmations")} className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition-colors">
-                  Ver todos <ArrowUpRight className="h-3 w-3" />
-                </button>
+          <Card className="shadow-sm overflow-hidden">
+            <div className="px-5 py-3.5 border-b flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Últimos Registos</h3>
+              <button onClick={() => navigate("/delivery-confirmations")} className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition-colors">
+                Ver todos <ArrowUpRight className="h-3 w-3" />
+              </button>
+            </div>
+            {deliveries.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">Nenhum registo encontrado</p>
+            ) : (
+              <div className="divide-y">
+                {deliveries.slice(0, 8).map((d) => (
+                  <ListItem key={d.id} onClick={() => navigate("/delivery-confirmations")}>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <Truck className="h-4 w-4 text-primary/60 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">Encomenda #{d.order_number}</p>
+                        <p className="text-xs text-muted-foreground truncate">{d.client_phone} · {d.contact_attempts} tentativa(s)</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <span className="text-[10px] text-muted-foreground">
+                        {formatDistanceToNow(new Date(d.created_at), { addSuffix: true, locale: pt })}
+                      </span>
+                      {d.confirmed
+                        ? <Badge className="bg-success/10 text-success border-0 text-[10px] px-1.5 py-0">Confirmado</Badge>
+                        : <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-destructive border-destructive/30">Não confirm.</Badge>
+                      }
+                    </div>
+                  </ListItem>
+                ))}
               </div>
-            </CardHeader>
-            <CardContent>
-              {deliveries.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">Nenhum registo encontrado</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {deliveries.slice(0, 8).map((d) => (
-                    <ListItem key={d.id} onClick={() => navigate("/delivery-confirmations")}>
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <Truck className="h-4 w-4 text-primary/60 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">Encomenda #{d.order_number}</p>
-                          <p className="text-xs text-muted-foreground truncate">{d.client_phone} · {d.contact_attempts} tentativa(s)</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0 ml-3">
-                        <span className="text-[10px] text-muted-foreground">
-                          {formatDistanceToNow(new Date(d.created_at), { addSuffix: true, locale: pt })}
-                        </span>
-                        {d.confirmed
-                          ? <Badge className="bg-success/10 text-success border-0 text-[10px] px-1.5 py-0">Confirmado</Badge>
-                          : <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-destructive border-destructive/30">Não confirm.</Badge>
-                        }
-                      </div>
-                    </ListItem>
-                  ))}
-                </div>
-              )}
-            </CardContent>
+            )}
           </Card>
         </TabsContent>
 
         {/* ===================== TAB: PÓS-ENTREGA ===================== */}
         <TabsContent value="post" className="space-y-4">
           <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
-            <StatCard title="Total Inquéritos" value={fPostDeliveries.length} icon={<ClipboardCheck className="h-4 w-4 text-primary" />} accent="bg-primary/[0.03]" />
-            <StatCard title="Satisfação" value={`${satisfactionRate}%`} icon={<ThumbsUp className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
-            <StatCard title="Com Problemas" value={issuesCount} icon={<ThumbsDown className="h-4 w-4 text-destructive" />} accent="bg-destructive/[0.03]" />
-            <StatCard title="Taxa Atendimento" value={`${answerRate}%`} icon={<Phone className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" subtitle={`${answeredCalls} atendeu · ${notAnsweredCalls} não atendeu`} />
-            <StatCard title="Atendeu" value={answeredCalls} icon={<PhoneIncoming className="h-4 w-4 text-success" />} accent="bg-success/[0.03]" />
-            <StatCard title="Não Atendeu" value={notAnsweredCalls} icon={<PhoneOutgoing className="h-4 w-4 text-destructive" />} accent="bg-destructive/[0.03]" />
-            {avgNps !== null && <StatCard title="NPS Montagem" value={avgNps} icon={<Star className="h-4 w-4 text-warning" />} accent="bg-warning/[0.03]" />}
+            <StatCard title="Total Inquéritos" value={fPostDeliveries.length} />
+            <StatCard title="Satisfação" value={`${satisfactionRate}%`} tone="success" />
+            <StatCard title="Com Problemas" value={issuesCount} tone={issuesCount > 0 ? "destructive" : "default"} />
+            <StatCard title="Taxa Atendimento" value={`${answerRate}%`} tone="success" subtitle={`${answeredCalls} atendeu · ${notAnsweredCalls} não atendeu`} />
+            <StatCard title="Atendeu" value={answeredCalls} tone="success" />
+            <StatCard title="Não Atendeu" value={notAnsweredCalls} tone={notAnsweredCalls > 0 ? "destructive" : "default"} />
+            {avgNps !== null && <StatCard title="NPS Montagem" value={avgNps} tone="warning" />}
           </div>
 
-          {/* Quality breakdown */}
           <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
             {[
               { label: "Produto OK", value: postDeliveries.filter((p) => p.product_ok).length, total: postDeliveries.length, icon: Package, color: "text-success" },
@@ -582,7 +528,7 @@ export default function Dashboard() {
               { label: "Montagem OK", value: postDeliveries.filter((p) => p.assembly_status ? p.assembly_status === "ok" : p.assembly_ok).length, total: postDeliveries.length, icon: ClipboardCheck, color: "text-primary" },
               { label: "Cliente Satisfeito", value: satisfied.length, total: postDeliveries.length, icon: ThumbsUp, color: "text-success" },
             ].map((item) => (
-              <Card key={item.label}>
+              <Card key={item.label} className="shadow-sm">
                 <CardContent className="p-4 flex items-center gap-3">
                   <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
                     <item.icon className={`h-4 w-4 ${item.color}`} />
@@ -598,45 +544,40 @@ export default function Dashboard() {
             ))}
           </div>
 
-          {/* Recent post-deliveries */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Últimos Inquéritos</CardTitle>
-                <button onClick={() => navigate("/post-delivery")} className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition-colors">
-                  Ver todos <ArrowUpRight className="h-3 w-3" />
-                </button>
+          <Card className="shadow-sm overflow-hidden">
+            <div className="px-5 py-3.5 border-b flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Últimos Inquéritos</h3>
+              <button onClick={() => navigate("/post-delivery")} className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition-colors">
+                Ver todos <ArrowUpRight className="h-3 w-3" />
+              </button>
+            </div>
+            {postDeliveries.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">Nenhum inquérito encontrado</p>
+            ) : (
+              <div className="divide-y">
+                {postDeliveries.slice(0, 8).map((p) => (
+                  <ListItem key={p.id} onClick={() => navigate("/post-delivery")}>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <ClipboardCheck className="h-4 w-4 text-primary/60 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">Encomenda #{p.order_number}</p>
+                        <p className="text-xs text-muted-foreground truncate">{p.client_name} · {p.client_phone}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <span className="text-[10px] text-muted-foreground">
+                        {formatDistanceToNow(new Date(p.created_at), { addSuffix: true, locale: pt })}
+                      </span>
+                      {p.client_satisfied
+                        ? <Badge className="bg-success/10 text-success border-0 text-[10px] px-1.5 py-0">Satisfeito</Badge>
+                        : <Badge className="bg-destructive/10 text-destructive border-0 text-[10px] px-1.5 py-0">Insatisfeito</Badge>
+                      }
+                      {p.issues_reported && <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-destructive">Problemas</Badge>}
+                    </div>
+                  </ListItem>
+                ))}
               </div>
-            </CardHeader>
-            <CardContent>
-              {postDeliveries.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-8 text-center">Nenhum inquérito encontrado</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {postDeliveries.slice(0, 8).map((p) => (
-                    <ListItem key={p.id} onClick={() => navigate("/post-delivery")}>
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <ClipboardCheck className="h-4 w-4 text-primary/60 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">Encomenda #{p.order_number}</p>
-                          <p className="text-xs text-muted-foreground truncate">{p.client_name} · {p.client_phone}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0 ml-3">
-                        <span className="text-[10px] text-muted-foreground">
-                          {formatDistanceToNow(new Date(p.created_at), { addSuffix: true, locale: pt })}
-                        </span>
-                        {p.client_satisfied
-                          ? <Badge className="bg-success/10 text-success border-0 text-[10px] px-1.5 py-0">Satisfeito</Badge>
-                          : <Badge className="bg-destructive/10 text-destructive border-0 text-[10px] px-1.5 py-0">Insatisfeito</Badge>
-                        }
-                        {p.issues_reported && <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-destructive">Problemas</Badge>}
-                      </div>
-                    </ListItem>
-                  ))}
-                </div>
-              )}
-            </CardContent>
+            )}
           </Card>
         </TabsContent>
       </Tabs>
