@@ -256,25 +256,42 @@ export default function Dashboard() {
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Bom dia" : hour < 19 ? "Boa tarde" : "Boa noite";
+  const firstName = ((user?.user_metadata as any)?.full_name || user?.email?.split("@")[0] || "").split(" ")[0];
+  const urgentCount = ticketsByPriority.P1;
+
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground text-sm">Visão geral do suporte ao cliente · {periodLabel}</p>
+      {/* Hero header */}
+      <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-primary/10 via-card to-accent/10 px-6 py-6 shadow-soft">
+        <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-primary/20 opacity-40 blur-3xl" aria-hidden />
+        <div className="pointer-events-none absolute -left-16 -bottom-16 h-48 w-48 rounded-full bg-accent/20 opacity-30 blur-3xl" aria-hidden />
+        <div className="relative flex items-center justify-between flex-wrap gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+              {greeting}{firstName ? `, ${firstName}` : ""} 👋
+            </h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              {urgentCount > 0 ? (
+                <>Tem <span className="font-semibold text-destructive">{urgentCount} ticket{urgentCount > 1 ? "s" : ""} urgente{urgentCount > 1 ? "s" : ""}</span> a aguardar resposta · {periodLabel}</>
+              ) : (
+                <>Visão geral do suporte ao cliente · {periodLabel}</>
+              )}
+            </p>
+          </div>
+          <ToggleGroup type="single" value={period} onValueChange={(v) => v && setPeriod(v as PeriodFilter)} className="bg-card/80 backdrop-blur-sm border border-border/60 rounded-lg p-0.5 shadow-soft">
+            <ToggleGroupItem value="today" className="text-xs px-3 h-8 rounded-md data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm">
+              <Calendar className="h-3.5 w-3.5 mr-1" /> Hoje
+            </ToggleGroupItem>
+            <ToggleGroupItem value="7d" className="text-xs px-3 h-8 rounded-md data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm">
+              7 dias
+            </ToggleGroupItem>
+            <ToggleGroupItem value="30d" className="text-xs px-3 h-8 rounded-md data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm">
+              30 dias
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
-        <ToggleGroup type="single" value={period} onValueChange={(v) => v && setPeriod(v as PeriodFilter)} className="bg-muted rounded-lg p-0.5">
-          <ToggleGroupItem value="today" className="text-xs px-3 h-8 rounded-md data-[state=on]:bg-background data-[state=on]:shadow-sm">
-            <Calendar className="h-3.5 w-3.5 mr-1" /> Hoje
-          </ToggleGroupItem>
-          <ToggleGroupItem value="7d" className="text-xs px-3 h-8 rounded-md data-[state=on]:bg-background data-[state=on]:shadow-sm">
-            7 dias
-          </ToggleGroupItem>
-          <ToggleGroupItem value="30d" className="text-xs px-3 h-8 rounded-md data-[state=on]:bg-background data-[state=on]:shadow-sm">
-            30 dias
-          </ToggleGroupItem>
-        </ToggleGroup>
       </div>
 
       {/* Fila de Ação: Lembretes + Respostas lado a lado */}
