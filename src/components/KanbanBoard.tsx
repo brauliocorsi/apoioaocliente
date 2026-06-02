@@ -486,7 +486,7 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, onO
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
+      <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
         {statuses.map((s) => (
           <DroppableColumn key={s.id} statusId={s.id} color={s.color} isOver={overColumn === s.id}>
             <InlineStatusHeader
@@ -498,21 +498,26 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, onO
               slaAlerts={getStageSlaAlerts(grouped[s.id] || [])}
             />
             <ScrollArea className="h-[calc(100vh-320px)]">
-              <div className="p-2 space-y-2">
+              <div className="p-3 space-y-2.5">
                 {(grouped[s.id] || []).map((t) => (
                   <DraggableTicket key={t.id} ticket={t} categoryNames={categoryNames} callCount={callCounts?.[t.id]} agentProfile={t.assigned_to ? agentProfiles?.[t.assigned_to] : undefined} unreadCount={unreadCounts?.[t.id]} emailUnreadCount={emailUnreadCounts?.[t.id]} ticketTags={ticketTagsMap?.[t.id]} allTags={allTags} agentReplied={agentRepliedMap?.[t.id]} attachmentInfo={attachmentInfoMap?.[t.id]} onOpenTicket={onOpenTicket} />
                 ))}
                 {(grouped[s.id] || []).length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-8">Sem tickets</p>
+                  <div className="flex flex-col items-center justify-center py-10 text-center">
+                    <div className="h-10 w-10 rounded-full bg-muted/60 flex items-center justify-center mb-2">
+                      <CheckCircle className="h-5 w-5 text-muted-foreground/50" />
+                    </div>
+                    <p className="text-xs text-muted-foreground">Sem tickets aqui</p>
+                  </div>
                 )}
               </div>
             </ScrollArea>
           </DroppableColumn>
         ))}
           {/* Add new column button */}
-          <div className="flex-shrink-0 w-64">
+          <div className="flex-shrink-0 w-72">
             {addingColumn ? (
-              <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 space-y-2">
+              <div className="rounded-2xl border border-dashed border-primary/30 bg-primary-soft/40 p-3 space-y-2 shadow-soft">
                 <Input
                   ref={newColumnInputRef}
                   placeholder="Nome do estado..."
@@ -530,7 +535,7 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, onO
                     type="color"
                     value={newColumnColor}
                     onChange={(e) => setNewColumnColor(e.target.value)}
-                    className="h-6 w-8 rounded border cursor-pointer"
+                    className="h-7 w-10 rounded-md border cursor-pointer"
                   />
                 </div>
                 <div className="flex gap-1">
@@ -545,14 +550,17 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, onO
             ) : (
               <button
                 onClick={() => setAddingColumn(true)}
-                className="w-full h-24 rounded-lg border-2 border-dashed border-border hover:border-primary/50 hover:bg-primary/5 transition-colors flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary"
+                className="w-full h-28 rounded-2xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary-soft/40 transition-all flex flex-col items-center justify-center gap-1.5 text-muted-foreground hover:text-primary"
               >
-                <Plus className="h-5 w-5" />
-                <span className="text-xs font-medium">Novo Estado</span>
+                <div className="h-9 w-9 rounded-full bg-primary-soft flex items-center justify-center">
+                  <Plus className="h-5 w-5 text-primary" />
+                </div>
+                <span className="text-xs font-semibold">Novo Estado</span>
               </button>
             )}
           </div>
         </div>
+
       <DragOverlay>
         {activeTicket && <TicketCard ticket={activeTicket} isDragging categoryNames={categoryNames} callCount={callCounts?.[activeTicket.id]} agentProfile={activeTicket.assigned_to ? agentProfiles?.[activeTicket.assigned_to] : undefined} unreadCount={unreadCounts?.[activeTicket.id]} emailUnreadCount={emailUnreadCounts?.[activeTicket.id]} ticketTags={ticketTagsMap?.[activeTicket.id]} allTags={allTags} agentReplied={agentRepliedMap?.[activeTicket.id]} attachmentInfo={attachmentInfoMap?.[activeTicket.id]} />}
       </DragOverlay>
