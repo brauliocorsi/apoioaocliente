@@ -17,6 +17,7 @@ import PhoneCallKanban from "@/components/phone/PhoneCallKanban";
 import PhoneCallDetailDialog from "@/components/phone/PhoneCallDetailDialog";
 import PhoneCallList from "@/components/phone/PhoneCallList";
 import NotePreviewDialog from "@/components/phone/NotePreviewDialog";
+import { PageHeader } from "@/components/PageHeader";
 
 type PhoneCall = {
   id: string;
@@ -209,10 +210,12 @@ export default function PhoneCalls() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Ligações</h1>
-        <p className="text-muted-foreground">Controle de atendimentos telefónicos</p>
-      </div>
+      <PageHeader
+        title="Ligações"
+        subtitle={`${activeCalls.length} ativa${activeCalls.length === 1 ? "" : "s"} · controle de atendimentos telefónicos`}
+        icon={<Phone className="h-5 w-5" />}
+        accent="accent"
+      />
 
       {/* Summary cards */}
       <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
