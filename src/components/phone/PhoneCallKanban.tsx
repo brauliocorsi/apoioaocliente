@@ -54,74 +54,76 @@ interface PhoneCallKanbanProps {
 
 function CallCard({ call, isDragging, onPreviewNotes }: { call: PhoneCall; isDragging?: boolean; onPreviewNotes?: (call: PhoneCall) => void }) {
   const priorityBadge = (p: string) =>
-    p === "P1" ? "bg-destructive/10 text-destructive border-destructive/30" :
-    p === "P2" ? "bg-warning/10 text-warning border-warning/30" :
+    p === "P1" ? "bg-destructive-soft text-destructive border-destructive/30" :
+    p === "P2" ? "bg-warning-soft text-warning border-warning/30" :
     "bg-muted text-muted-foreground border-border";
 
   return (
     <div
-      className={`bg-card border rounded-lg p-3 transition-all ${isDragging ? "shadow-xl opacity-80 rotate-1 scale-105" : "hover:shadow-md hover:border-primary/20"}`}
-      style={{ borderLeftWidth: 3, borderLeftColor: call.created_by_color || '#6b7280' }}
+      className={`relative bg-card border border-border/70 rounded-xl p-3.5 transition-all duration-200 ${isDragging ? "shadow-elevated opacity-90 rotate-2 scale-[1.02]" : "shadow-soft hover:shadow-card-hover hover:border-primary/30 hover:-translate-y-0.5"}`}
+      style={{ borderLeftWidth: 3, borderLeftColor: call.created_by_color || 'hsl(var(--muted-foreground))' }}
     >
-      <div className="flex items-center justify-between mb-1.5">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
           <PriorityFlag priority={call.priority} size={14} />
-          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${priorityBadge(call.priority)}`}>
+          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 font-semibold ${priorityBadge(call.priority)}`}>
             {call.priority}
           </Badge>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           {(call.reminder_count || 0) > 0 && (
-            <div className="flex items-center gap-0.5 text-warning">
+            <span className="inline-flex items-center gap-0.5 text-warning bg-warning-soft rounded-md px-1.5 h-5">
               <Bell className="h-3 w-3" />
-              <span className="text-[10px] font-semibold">{call.reminder_count}</span>
-            </div>
+              <span className="text-[10px] font-bold">{call.reminder_count}</span>
+            </span>
           )}
           {call.ticket_id && (
-            <Badge variant="outline" className="text-[10px] px-1 py-0 bg-primary/5 text-primary border-primary/20">
+            <span className="inline-flex items-center justify-center h-5 w-5 rounded-md bg-primary-soft text-primary text-[11px]" title="Vinculado a ticket">
               🔗
-            </Badge>
+            </span>
           )}
         </div>
       </div>
       <p
-        className="text-sm font-medium leading-tight line-clamp-2 mb-1 cursor-pointer hover:text-primary transition-colors"
+        className="text-[14px] font-medium leading-snug line-clamp-2 mb-1.5 cursor-pointer hover:text-primary transition-colors"
         onClick={(e) => { e.stopPropagation(); onPreviewNotes?.(call); }}
         title="Clique para ver texto completo"
       >{call.subject}</p>
-      <p className="text-xs text-muted-foreground truncate">{call.client_name}</p>
-      <div className="flex items-center justify-between mt-0.5">
+      <p className="text-[12px] text-muted-foreground truncate flex items-center gap-1">
+        <User className="h-3 w-3" /> {call.client_name}
+      </p>
+      <div className="flex items-center justify-between mt-1.5 gap-2">
         {call.created_by_name && (
-          <div className="flex items-center gap-1">
-            <Avatar className="h-4 w-4">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Avatar className="h-5 w-5">
               <AvatarImage src={call.created_by_avatar || undefined} />
-              <AvatarFallback className="text-[7px] font-semibold bg-muted text-muted-foreground">
+              <AvatarFallback className="text-[8px] font-semibold bg-muted text-muted-foreground">
                 {call.created_by_name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <span className="text-[10px] text-muted-foreground/70">{call.created_by_name}</span>
+            <span className="text-[10px] text-muted-foreground truncate">{call.created_by_name.split(" ")[0]}</span>
           </div>
         )}
         {call.assigned_to_name && (
-          <div className="flex items-center gap-1" title={`Atribuído a ${call.assigned_to_name}`}>
-            <span className="text-[10px] text-muted-foreground/50">→</span>
-            <Avatar className="h-4 w-4 ring-1 ring-primary/30">
+          <div className="flex items-center gap-1 shrink-0" title={`Atribuído a ${call.assigned_to_name}`}>
+            <span className="text-[10px] text-muted-foreground/60">→</span>
+            <Avatar className="h-5 w-5 ring-1 ring-primary/40">
               <AvatarImage src={call.assigned_to_avatar || undefined} />
-              <AvatarFallback className="text-[7px] font-semibold" style={{ backgroundColor: call.assigned_to_color || '#6b7280', color: 'white' }}>
+              <AvatarFallback className="text-[8px] font-semibold text-white" style={{ backgroundColor: call.assigned_to_color || 'hsl(var(--primary))' }}>
                 {call.assigned_to_name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()}
               </AvatarFallback>
             </Avatar>
-            <span className="text-[10px] text-primary/70 font-medium">{call.assigned_to_name.split(" ")[0]}</span>
+            <span className="text-[10px] text-primary font-semibold">{call.assigned_to_name.split(" ")[0]}</span>
           </div>
         )}
       </div>
-      <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-dashed">
-        <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-          <Phone className="h-3 w-3" /> {call.client_phone}
+      <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-dashed border-border/60 gap-2">
+        <span className="text-[11px] text-muted-foreground flex items-center gap-1 truncate">
+          <Phone className="h-3 w-3 shrink-0" /> {call.client_phone}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {call.invoice_number && (
-            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5" title="Nº fatura">
               <FileText className="h-3 w-3" /> {call.invoice_number}
             </span>
           )}
@@ -133,6 +135,7 @@ function CallCard({ call, isDragging, onPreviewNotes }: { call: PhoneCall; isDra
     </div>
   );
 }
+
 
 function DraggableCall({ call, onSelect, onPreviewNotes }: { call: PhoneCall; onSelect: (c: PhoneCall) => void; onPreviewNotes: (c: PhoneCall) => void }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
