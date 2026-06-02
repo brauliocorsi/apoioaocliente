@@ -289,8 +289,8 @@ function InlineStatusHeader({
   };
 
   return (
-    <div className="px-3 py-2 border-b">
-      <div className="flex items-center justify-between gap-1">
+    <div className="px-3.5 py-3 border-b bg-card/60" style={{ borderBottomColor: `${color}33` }}>
+      <div className="flex items-center justify-between gap-2">
         {editing ? (
           <div className="flex items-center gap-1 flex-1">
             <Input
@@ -298,29 +298,30 @@ function InlineStatusHeader({
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") { setEditName(name); setEditing(false); } }}
-              className="h-6 text-xs px-1.5 py-0"
+              className="h-7 text-xs px-2 py-0"
             />
-            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={save}><Check className="h-3 w-3" /></Button>
-            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => { setEditName(name); setEditing(false); }}><X className="h-3 w-3" /></Button>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={save}><Check className="h-3 w-3" /></Button>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setEditName(name); setEditing(false); }}><X className="h-3 w-3" /></Button>
           </div>
         ) : (
-          <div className="flex items-center gap-1 flex-1 group">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-center gap-2 flex-1 min-w-0 group">
+            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+            <h3 className="text-[12px] font-semibold uppercase tracking-wider text-foreground truncate">
               {name}
             </h3>
             <button
               onClick={(e) => { e.stopPropagation(); setEditing(true); }}
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
+              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
             >
               <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
             </button>
           </div>
         )}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5 shrink-0">
           {slaAlerts.expired > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-destructive bg-destructive/10 rounded px-1 py-0.5">
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-destructive bg-destructive-soft rounded-md px-1.5 py-0.5">
                   <AlertTriangle className="h-3 w-3" />{slaAlerts.expired}
                 </span>
               </TooltipTrigger>
@@ -330,19 +331,23 @@ function InlineStatusHeader({
           {slaAlerts.atRisk > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-warning bg-warning/10 rounded px-1 py-0.5">
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-warning bg-warning-soft rounded-md px-1.5 py-0.5">
                   <Timer className="h-3 w-3" />{slaAlerts.atRisk}
                 </span>
               </TooltipTrigger>
               <TooltipContent><p className="text-xs">{slaAlerts.atRisk} ticket{slaAlerts.atRisk > 1 ? "s" : ""} em risco de SLA de estágio</p></TooltipContent>
             </Tooltip>
           )}
-          <Badge variant="secondary" className="text-xs h-5 min-w-[20px] justify-center">
+          <span
+            className="inline-flex items-center justify-center min-w-[26px] h-6 px-2 rounded-md text-[12px] font-bold"
+            style={{ backgroundColor: `${color}22`, color }}
+          >
             {count}
-          </Badge>
+          </span>
         </div>
       </div>
     </div>
+
   );
 }
 
