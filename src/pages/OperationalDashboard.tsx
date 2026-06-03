@@ -28,7 +28,9 @@ import {
   PackageSearch,
   PackageX,
   ExternalLink,
+  Activity,
 } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
 import { formatDistanceToNow, format, isToday } from "date-fns";
 import { pt } from "date-fns/locale";
 import CallsPanel from "@/components/dashboard/CallsPanel";
