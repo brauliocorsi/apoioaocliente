@@ -2,6 +2,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Settings as SettingsIcon } from "lucide-react";
 import StatusPage from "./StatusPage";
 import CategoriesPage from "./CategoriesPage";
 import TagsPage from "./TagsPage";
@@ -14,16 +15,19 @@ import ClientsTab from "@/components/settings/ClientsTab";
 import SlaConfigTab from "@/components/settings/SlaConfigTab";
 import HolidaysTab from "@/components/settings/HolidaysTab";
 import DecisionRulesTab from "@/components/settings/DecisionRulesTab";
+import { PageHeader } from "@/components/PageHeader";
 
 export default function SettingsPage() {
   const { profile, role } = useAuth();
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
-        <p className="text-muted-foreground">Perfil, estados, categorias, etiquetas e templates</p>
-      </div>
+      <PageHeader
+        title="Configurações"
+        subtitle="Perfil, estados, categorias, etiquetas, SLA e integrações"
+        icon={<SettingsIcon className="h-6 w-6" />}
+        accent="primary"
+      />
 
       <Tabs defaultValue="profile" className="space-y-4">
         <TabsList className="flex-wrap h-auto gap-1">
