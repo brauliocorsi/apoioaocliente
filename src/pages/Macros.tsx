@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, Search, Loader2, Pencil, Trash2, Save, X, Plus } from "lucide-react";
+import { Copy, Search, Loader2, Pencil, Trash2, Save, X, Plus, MessageSquareText } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
 import {
   Dialog,
   DialogContent,
@@ -174,15 +175,17 @@ export default function Macros() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Macros de Resposta</h1>
-          <p className="text-muted-foreground">{macros.length} modelos pré-definidos para email e WhatsApp</p>
-        </div>
-        <Button onClick={handleCreate}>
-          <Plus className="mr-1 h-4 w-4" /> Nova Macro
-        </Button>
-      </div>
+      <PageHeader
+        title="Macros de Resposta"
+        subtitle={`${macros.length} modelos pré-definidos para email e WhatsApp`}
+        icon={<MessageSquareText className="h-6 w-6" />}
+        accent="accent"
+        actions={
+          <Button onClick={handleCreate}>
+            <Plus className="mr-1 h-4 w-4" /> Nova Macro
+          </Button>
+        }
+      />
 
       <div className="flex gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">

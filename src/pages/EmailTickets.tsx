@@ -16,6 +16,7 @@ import { pt } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { PageHeader } from "@/components/PageHeader";
 
 type EmailTicketRow = {
   id: string;
@@ -334,25 +335,24 @@ export default function EmailTickets() {
           Abrir Caixa de Entrada
         </Button>
       </div>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Mail className="h-6 w-6 text-primary" />
-            Email Tickets
-          </h1>
-          <p className="text-muted-foreground">Tickets originados por email — com fila de revisão e lista de bloqueio</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => triggerPoll(false)} disabled={polling}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${polling ? "animate-spin" : ""}`} />
-            {polling ? (pollProgress || "A verificar...") : "Novos Emails"}
-          </Button>
-          <Button variant="secondary" onClick={() => triggerPoll(true)} disabled={polling}>
-            <Mail className="h-4 w-4 mr-2" />
-            {polling ? (pollProgress || "A importar...") : "Importar Todos"}
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Email Tickets"
+        subtitle="Tickets originados por email — com fila de revisão e lista de bloqueio"
+        icon={<Mail className="h-6 w-6" />}
+        accent="primary"
+        actions={
+          <>
+            <Button variant="outline" onClick={() => triggerPoll(false)} disabled={polling}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${polling ? "animate-spin" : ""}`} />
+              {polling ? (pollProgress || "A verificar...") : "Novos Emails"}
+            </Button>
+            <Button variant="secondary" onClick={() => triggerPoll(true)} disabled={polling}>
+              <Mail className="h-4 w-4 mr-2" />
+              {polling ? (pollProgress || "A importar...") : "Importar Todos"}
+            </Button>
+          </>
+        }
+      />
 
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

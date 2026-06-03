@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import { Progress } from "@/components/ui/progress";
 import DelayedOrdersCharts from "@/components/delayed/DelayedOrdersCharts";
 import VendaPDFDialog from "@/components/ticket/VendaPDFDialog";
+import { PageHeader } from "@/components/PageHeader";
 
 type DelayedOrder = {
   id: string;
@@ -297,40 +298,39 @@ export default function DelayedOrders() {
   return (
     <TooltipProvider>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Controlo de Encomendas</h1>
-            <p className="text-sm text-muted-foreground">
-              Monitorização automática de encomendas pendentes — Sincroniza diariamente às 08:00
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {lastSync && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <CalendarClock className="h-3 w-3" />
-                    Último sync: {format(new Date(lastSync), "dd/MM HH:mm")}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>Última sincronização automática com o GestãoClick</TooltipContent>
-              </Tooltip>
-            )}
-            <Button variant="outline" size="sm" onClick={() => setShowArchived(!showArchived)}>
-              <Archive className="h-4 w-4 mr-1" />
-              {showArchived ? "Ativas" : "Arquivadas"}
-            </Button>
-            <Button variant="outline" size="sm" onClick={fetchOrders}>
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Atualizar
-            </Button>
-            <Button onClick={runManualSync} disabled={syncing} className="gap-1">
-              {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-              Sincronizar agora
-            </Button>
-          </div>
-        </div>
+        <PageHeader
+          title="Controlo de Encomendas"
+          subtitle="Monitorização automática de encomendas pendentes — sincroniza diariamente às 08:00"
+          icon={<AlertTriangle className="h-6 w-6" />}
+          accent="warning"
+          actions={
+            <>
+              {lastSync && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-xs text-muted-foreground flex items-center gap-1 mr-2">
+                      <CalendarClock className="h-3 w-3" />
+                      Último sync: {format(new Date(lastSync), "dd/MM HH:mm")}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Última sincronização automática com o GestãoClick</TooltipContent>
+                </Tooltip>
+              )}
+              <Button variant="outline" size="sm" onClick={() => setShowArchived(!showArchived)}>
+                <Archive className="h-4 w-4 mr-1" />
+                {showArchived ? "Ativas" : "Arquivadas"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={fetchOrders}>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Atualizar
+              </Button>
+              <Button onClick={runManualSync} disabled={syncing} className="gap-1">
+                {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                Sincronizar agora
+              </Button>
+            </>
+          }
+        />
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-6 gap-3">

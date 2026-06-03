@@ -11,6 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import { Loader2, Mail, ExternalLink, RefreshCw, CheckCircle, Ban, ShieldOff, Archive, Link2, Plus, AlertTriangle } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { pt } from "date-fns/locale";
+import { PageHeader } from "@/components/PageHeader";
 
 type EventRow = {
   id: string;
@@ -194,21 +195,18 @@ export default function InboundEmailEvents() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight flex items-center gap-2">
-            <Mail className="h-5 w-5 text-primary" />
-            Caixa de Entrada
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Registo de todos os e-mails recebidos e respectivas decisões de encaminhamento.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          Atualizar
-        </Button>
-      </div>
+      <PageHeader
+        title="Caixa de Entrada"
+        subtitle="Registo de todos os e-mails recebidos e respectivas decisões de encaminhamento."
+        icon={<Mail className="h-6 w-6" />}
+        accent="primary"
+        actions={
+          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            Atualizar
+          </Button>
+        }
+      />
 
       <Card className="p-4 space-y-4">
         <div className="flex flex-wrap items-center gap-2">
