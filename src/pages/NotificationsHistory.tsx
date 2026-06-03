@@ -190,9 +190,9 @@ export default function NotificationsHistory() {
     <div className="space-y-5 max-w-5xl mx-auto">
       <PageHeader
         title="Histórico de notificações"
-        description={`${items.length} no total • ${unreadCount} por ler`}
+        subtitle={`${items.length} no total • ${unreadCount} por ler`}
         accent="primary"
-        icon={History}
+        icon={<History className="h-5 w-5" />}
         actions={
           unreadCount > 0 ? (
             <Button variant="outline" size="sm" onClick={markAllRead} className="gap-2">
