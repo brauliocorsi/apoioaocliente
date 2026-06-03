@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, Search, Loader2, Pencil, Trash2, Save, X, Plus } from "lucide-react";
+import { Copy, Search, Loader2, Pencil, Trash2, Save, X, Plus, MessageSquareText } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
 import {
   Dialog,
   DialogContent,
