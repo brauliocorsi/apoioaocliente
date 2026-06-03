@@ -52,19 +52,19 @@ interface Props {
   preloadedEvents?: Array<{ id: string; created_at: string; event_type: string; content?: string | null; user_id?: string | null; metadata?: unknown }>;
 }
 
-const KIND_META: Record<TimelineKind, { label: string; icon: React.ComponentType<{ className?: string }>; tone: string }> = {
-  customer_message: { label: "Cliente", icon: User, tone: "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300" },
-  agent_reply: { label: "Agente", icon: MessageSquare, tone: "border-primary/30 text-primary" },
-  internal_note: { label: "Interno", icon: MessageSquare, tone: "border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300" },
-  system_event: { label: "Sistema", icon: Bot, tone: "border-muted-foreground/30 text-muted-foreground" },
-  status_changed: { label: "Status", icon: Activity, tone: "border-purple-300 text-purple-700 dark:border-purple-700 dark:text-purple-300" },
-  email_sent: { label: "E-mail enviado", icon: Mail, tone: "border-primary/30 text-primary" },
-  email_failed: { label: "Falha de e-mail", icon: MailX, tone: "border-destructive/40 text-destructive" },
-  email_received: { label: "E-mail recebido", icon: Inbox, tone: "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300" },
-  attachment_added: { label: "Anexo", icon: Paperclip, tone: "border-muted-foreground/30 text-muted-foreground" },
-  ticket_continuation_created: { label: "Continuação", icon: GitBranch, tone: "border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300" },
-  inbound_event: { label: "Caixa de Entrada", icon: AlertTriangle, tone: "border-muted-foreground/30 text-muted-foreground" },
-  phone_call: { label: "Chamada", icon: Phone, tone: "border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300" },
+const KIND_META: Record<TimelineKind, { label: string; icon: React.ComponentType<{ className?: string }>; tint: string; ring: string; badge: string }> = {
+  customer_message: { label: "Cliente", icon: User, tint: "bg-info/15 text-info", ring: "ring-info/30", badge: "border-info/40 text-info" },
+  agent_reply: { label: "Agente", icon: MessageSquare, tint: "bg-primary/15 text-primary", ring: "ring-primary/30", badge: "border-primary/40 text-primary" },
+  internal_note: { label: "Interno", icon: MessageSquare, tint: "bg-warning/15 text-warning", ring: "ring-warning/30", badge: "border-warning/40 text-warning" },
+  system_event: { label: "Sistema", icon: Bot, tint: "bg-muted text-muted-foreground", ring: "ring-border", badge: "border-border text-muted-foreground" },
+  status_changed: { label: "Status", icon: Activity, tint: "bg-accent/15 text-accent", ring: "ring-accent/30", badge: "border-accent/40 text-accent" },
+  email_sent: { label: "E-mail enviado", icon: Mail, tint: "bg-primary/15 text-primary", ring: "ring-primary/30", badge: "border-primary/40 text-primary" },
+  email_failed: { label: "Falha de e-mail", icon: MailX, tint: "bg-destructive/15 text-destructive", ring: "ring-destructive/30", badge: "border-destructive/40 text-destructive" },
+  email_received: { label: "E-mail recebido", icon: Inbox, tint: "bg-info/15 text-info", ring: "ring-info/30", badge: "border-info/40 text-info" },
+  attachment_added: { label: "Anexo", icon: Paperclip, tint: "bg-muted text-muted-foreground", ring: "ring-border", badge: "border-border text-muted-foreground" },
+  ticket_continuation_created: { label: "Continuação", icon: GitBranch, tint: "bg-warning/15 text-warning", ring: "ring-warning/30", badge: "border-warning/40 text-warning" },
+  inbound_event: { label: "Caixa de Entrada", icon: AlertTriangle, tint: "bg-muted text-muted-foreground", ring: "ring-border", badge: "border-border text-muted-foreground" },
+  phone_call: { label: "Chamada", icon: Phone, tint: "bg-success/15 text-success", ring: "ring-success/30", badge: "border-success/40 text-success" },
 };
 
 function stripHtml(s: string | null | undefined, limit = 200): string {
@@ -242,10 +242,12 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
   }, [ticketId, preloadedMessages, preloadedEvents]);
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="shadow-soft">
+      <CardHeader className="pb-3">
         <CardTitle className="text-sm flex items-center gap-2">
-          <Activity className="h-4 w-4" />
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent">
+            <Activity className="h-4 w-4" />
+          </span>
           Histórico completo do ticket
           {!loading && <span className="text-xs text-muted-foreground font-normal">({items.length})</span>}
         </CardTitle>
@@ -258,21 +260,21 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
         ) : items.length === 0 ? (
           <p className="text-sm text-muted-foreground">Sem eventos.</p>
         ) : (
-          <ol className="relative border-l border-border ml-2 space-y-3">
+          <ol className="relative ml-4 space-y-5 before:absolute before:left-[15px] before:top-1 before:bottom-1 before:w-px before:bg-gradient-to-b before:from-border before:via-border/60 before:to-transparent">
             {items.map((it) => {
               const meta = KIND_META[it.kind];
               const Icon = meta.icon;
               return (
-                <li key={it.id} className="ml-4">
-                  <span className="absolute -left-[7px] flex h-3 w-3 items-center justify-center rounded-full bg-background border border-border">
-                    <Icon className="h-2.5 w-2.5 text-muted-foreground" />
+                <li key={it.id} className="relative pl-10">
+                  <span className={`absolute left-0 top-0 flex h-8 w-8 items-center justify-center rounded-full ring-2 ${meta.tint} ${meta.ring} ring-offset-2 ring-offset-card`}>
+                    <Icon className="h-3.5 w-3.5" />
                   </span>
-                  <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 ${meta.tone}`}>
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 ${meta.badge}`}>
                       {meta.label}
                     </Badge>
                     {it.author && (
-                      <span className="text-xs font-medium text-foreground">{it.author}</span>
+                      <span className="text-xs font-semibold text-foreground">{it.author}</span>
                     )}
                     <span className="text-[11px] text-muted-foreground">
                       {new Date(it.at).toLocaleString("pt-PT", {
@@ -281,7 +283,7 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
                       })}
                     </span>
                   </div>
-                  <p className="text-sm text-foreground/90 break-words">{it.summary || "—"}</p>
+                  <p className="text-sm text-foreground/90 break-words leading-relaxed">{it.summary || "—"}</p>
                 </li>
               );
             })}
