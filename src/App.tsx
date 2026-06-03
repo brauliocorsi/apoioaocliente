@@ -30,6 +30,7 @@ import EmailTicketDetail from "./pages/EmailTicketDetail";
 import InboundEmailEvents from "./pages/InboundEmailEvents";
 import OperationalDashboard from "./pages/OperationalDashboard";
 import ExtensionCalls from "./pages/ExtensionCalls";
+import NotificationsHistory from "./pages/NotificationsHistory";
 
 const queryClient = new QueryClient();
 
