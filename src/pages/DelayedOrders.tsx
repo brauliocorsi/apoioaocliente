@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import { Progress } from "@/components/ui/progress";
 import DelayedOrdersCharts from "@/components/delayed/DelayedOrdersCharts";
 import VendaPDFDialog from "@/components/ticket/VendaPDFDialog";
+import { PageHeader } from "@/components/PageHeader";
 
 type DelayedOrder = {
   id: string;
