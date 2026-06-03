@@ -52,19 +52,19 @@ interface Props {
   preloadedEvents?: Array<{ id: string; created_at: string; event_type: string; content?: string | null; user_id?: string | null; metadata?: unknown }>;
 }
 
-const KIND_META: Record<TimelineKind, { label: string; icon: React.ComponentType<{ className?: string }>; tone: string }> = {
-  customer_message: { label: "Cliente", icon: User, tone: "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300" },
-  agent_reply: { label: "Agente", icon: MessageSquare, tone: "border-primary/30 text-primary" },
-  internal_note: { label: "Interno", icon: MessageSquare, tone: "border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300" },
-  system_event: { label: "Sistema", icon: Bot, tone: "border-muted-foreground/30 text-muted-foreground" },
-  status_changed: { label: "Status", icon: Activity, tone: "border-purple-300 text-purple-700 dark:border-purple-700 dark:text-purple-300" },
-  email_sent: { label: "E-mail enviado", icon: Mail, tone: "border-primary/30 text-primary" },
-  email_failed: { label: "Falha de e-mail", icon: MailX, tone: "border-destructive/40 text-destructive" },
-  email_received: { label: "E-mail recebido", icon: Inbox, tone: "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300" },
-  attachment_added: { label: "Anexo", icon: Paperclip, tone: "border-muted-foreground/30 text-muted-foreground" },
-  ticket_continuation_created: { label: "Continuação", icon: GitBranch, tone: "border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-300" },
-  inbound_event: { label: "Caixa de Entrada", icon: AlertTriangle, tone: "border-muted-foreground/30 text-muted-foreground" },
-  phone_call: { label: "Chamada", icon: Phone, tone: "border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-300" },
+const KIND_META: Record<TimelineKind, { label: string; icon: React.ComponentType<{ className?: string }>; tint: string; ring: string; badge: string }> = {
+  customer_message: { label: "Cliente", icon: User, tint: "bg-info/15 text-info", ring: "ring-info/30", badge: "border-info/40 text-info" },
+  agent_reply: { label: "Agente", icon: MessageSquare, tint: "bg-primary/15 text-primary", ring: "ring-primary/30", badge: "border-primary/40 text-primary" },
+  internal_note: { label: "Interno", icon: MessageSquare, tint: "bg-warning/15 text-warning", ring: "ring-warning/30", badge: "border-warning/40 text-warning" },
+  system_event: { label: "Sistema", icon: Bot, tint: "bg-muted text-muted-foreground", ring: "ring-border", badge: "border-border text-muted-foreground" },
+  status_changed: { label: "Status", icon: Activity, tint: "bg-accent/15 text-accent", ring: "ring-accent/30", badge: "border-accent/40 text-accent" },
+  email_sent: { label: "E-mail enviado", icon: Mail, tint: "bg-primary/15 text-primary", ring: "ring-primary/30", badge: "border-primary/40 text-primary" },
+  email_failed: { label: "Falha de e-mail", icon: MailX, tint: "bg-destructive/15 text-destructive", ring: "ring-destructive/30", badge: "border-destructive/40 text-destructive" },
+  email_received: { label: "E-mail recebido", icon: Inbox, tint: "bg-info/15 text-info", ring: "ring-info/30", badge: "border-info/40 text-info" },
+  attachment_added: { label: "Anexo", icon: Paperclip, tint: "bg-muted text-muted-foreground", ring: "ring-border", badge: "border-border text-muted-foreground" },
+  ticket_continuation_created: { label: "Continuação", icon: GitBranch, tint: "bg-warning/15 text-warning", ring: "ring-warning/30", badge: "border-warning/40 text-warning" },
+  inbound_event: { label: "Caixa de Entrada", icon: AlertTriangle, tint: "bg-muted text-muted-foreground", ring: "ring-border", badge: "border-border text-muted-foreground" },
+  phone_call: { label: "Chamada", icon: Phone, tint: "bg-success/15 text-success", ring: "ring-success/30", badge: "border-success/40 text-success" },
 };
 
 function stripHtml(s: string | null | undefined, limit = 200): string {
