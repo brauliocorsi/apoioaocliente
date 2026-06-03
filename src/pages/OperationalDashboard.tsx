@@ -280,18 +280,20 @@ export default function OperationalDashboard() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Painel Operacional</h1>
-          <p className="text-sm text-muted-foreground mt-1">Visão de cobrança e coordenação diária. Apenas leitura.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <FilterSelect value={period} onChange={setPeriod} options={PERIOD_OPTS} placeholder="Período" />
-          <FilterSelect value={priority} onChange={setPriority} options={[{ value: "all", label: "Todas prioridades" }, { value: "P1", label: "P1" }, { value: "P2", label: "P2" }, { value: "P3", label: "P3" }]} />
-          <FilterSelect value={agent} onChange={setAgent} options={[{ value: "all", label: "Todos responsáveis" }, { value: "none", label: "Sem responsável" }, ...profiles.map(p => ({ value: p.id, label: p.full_name }))]} />
-          <FilterSelect value={category} onChange={setCategory} options={[{ value: "all", label: "Todas categorias" }, ...categories.map(c => ({ value: c.id, label: c.name }))]} />
-        </div>
-      </header>
+      <PageHeader
+        title="Painel Operacional"
+        subtitle="Visão de cobrança e coordenação diária. Apenas leitura."
+        icon={<Activity className="h-6 w-6" />}
+        accent="accent"
+        actions={
+          <>
+            <FilterSelect value={period} onChange={setPeriod} options={PERIOD_OPTS} placeholder="Período" />
+            <FilterSelect value={priority} onChange={setPriority} options={[{ value: "all", label: "Todas prioridades" }, { value: "P1", label: "P1" }, { value: "P2", label: "P2" }, { value: "P3", label: "P3" }]} />
+            <FilterSelect value={agent} onChange={setAgent} options={[{ value: "all", label: "Todos responsáveis" }, { value: "none", label: "Sem responsável" }, ...profiles.map(p => ({ value: p.id, label: p.full_name }))]} />
+            <FilterSelect value={category} onChange={setCategory} options={[{ value: "all", label: "Todas categorias" }, ...categories.map(c => ({ value: c.id, label: c.name }))]} />
+          </>
+        }
+      />
 
       {/* CARDS */}
       <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
