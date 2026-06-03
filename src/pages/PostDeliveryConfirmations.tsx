@@ -273,10 +273,12 @@ export default function PostDeliveryConfirmations() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <ClipboardCheck className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold text-foreground">Confirmação Pós-Entrega</h1>
-      </div>
+      <PageHeader
+        title="Confirmação Pós-Entrega"
+        subtitle="Avaliação de produto, montagem e satisfação do cliente"
+        icon={<ClipboardCheck className="h-6 w-6" />}
+        accent="success"
+      />
 
       {/* Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-4">
