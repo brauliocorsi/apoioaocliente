@@ -164,10 +164,12 @@ export default function DeliveryConfirmations() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Truck className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold text-foreground">Registro de Ligações</h1>
-      </div>
+      <PageHeader
+        title="Registro de Ligações"
+        subtitle="Confirmações de entrega por telefone"
+        icon={<Truck className="h-6 w-6" />}
+        accent="accent"
+      />
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
