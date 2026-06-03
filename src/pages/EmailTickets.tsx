@@ -16,6 +16,7 @@ import { pt } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { PageHeader } from "@/components/PageHeader";
 
 type EmailTicketRow = {
   id: string;
