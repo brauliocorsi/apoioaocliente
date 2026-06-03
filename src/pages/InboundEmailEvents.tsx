@@ -11,6 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import { Loader2, Mail, ExternalLink, RefreshCw, CheckCircle, Ban, ShieldOff, Archive, Link2, Plus, AlertTriangle } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { pt } from "date-fns/locale";
+import { PageHeader } from "@/components/PageHeader";
 
 type EventRow = {
   id: string;
