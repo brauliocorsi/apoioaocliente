@@ -22,6 +22,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { startOfDay, startOfWeek, startOfMonth, isAfter } from "date-fns";
+import { PageHeader } from "@/components/PageHeader";
 
 type DateFilter = "all" | "today" | "week" | "month";
 
