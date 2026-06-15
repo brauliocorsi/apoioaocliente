@@ -1,123 +1,92 @@
+# Refatorar macros + sugestão de resposta por IA
+
 ## Objetivo
-
-Modernizar toda a aplicação interna com visual mais colorido, espaçoso e didático, mantendo 100% da lógica de negócio. Foco especial em **legibilidade**, **clareza visual** e **melhoria dos kanbans** (Tickets e Ligações).
-
----
-
-## 1. Sistema de Design (base de tudo)
-
-Atualizar `src/index.css` e `tailwind.config.ts`:
-
-- **Paleta colorida** (mantendo HSL semântico):
-  - Primary: índigo vibrante `hsl(243 75% 59%)`
-  - Accent: turquesa `hsl(174 72% 56%)`
-  - Success: verde-esmeralda, Warning: âmbar, Destructive: coral
-  - Cores dedicadas por categoria de ticket (8 categorias) e por status do kanban
-- **Tipografia**: manter Inter, mas hierarquia mais clara (display 28/32px, h2 20px, body 14px, micro 12px).
-- **Espaçamento**: aumentar paddings (cards `p-5`, seções `gap-6`, página `p-8`).
-- **Radius**: subir para `1rem` em cards principais, manter `0.75rem` em elementos internos.
-- **Sombras**: nova escala suave colorida (`shadow-soft`, `shadow-glow-primary`).
-- **Gradientes utilitários** para headers de seção e cards de destaque.
+1. Ligar cada macro a **categorias/subcategorias obrigatórias** e **tags opcionais**, filtrando automaticamente as sugestões no ticket.
+2. Adicionar **botão "Sugerir resposta IA"** que analisa toda a conversa, documentos da empresa (T&C) e — sob pedido — fotos anexadas, devolvendo uma resposta formal editável.
 
 ---
 
-## 2. Shell da Aplicação
+## Parte 1 — Macros contextuais
 
-**`AppSidebar`**
-- Reorganizar em grupos colapsáveis com ícones coloridos por área (Operação, Comunicação, Catálogo, Sistema).
-- Item ativo com pílula colorida full-width + barra lateral em accent.
-- Avatar do utilizador + role no rodapé com indicador online.
-- Tooltip didático em modo colapsado.
+### Base de dados
+Migração que adiciona à tabela `macros`:
+- `category_ids text[]` (obrigatório ao criar — pelo menos 1)
+- `subcategory_ids text[]` (obrigatório ao criar — pelo menos 1)
+- `tag_ids text[]` (opcional, default `{}`)
+- `is_active boolean default true`
 
-**`AppLayout` / Header**
-- Header mais alto (h-14), com breadcrumb dinâmico à esquerda + ações à direita.
-- Barra de busca global compacta no centro (Ctrl+K).
-- Background sutilmente diferenciado do conteúdo.
+Índices GIN nos três arrays para filtragem rápida.
 
----
+### UI — `src/pages/Macros.tsx`
+No editor/criador adicionar:
+- Multi-select de **Categorias** (obrigatório)
+- Multi-select de **Subcategorias** (filtra pelas categorias selecionadas, obrigatório)
+- Multi-select de **Tags** (opcional)
+- Switch "Ativa"
 
-## 3. Dashboard (`/dashboard`)
+Lista mostra chips coloridos das categorias/subcategorias/tags ligadas + filtro por categoria/subcategoria.
 
-- Manter estrutura recente (StatCards + tabs + Action Queue), mas:
-  - StatCards com **acentos coloridos por tom** e mini-spark de tendência.
-  - Action Queue com cards "convidativos" (ícone grande, CTA claro).
-  - Tabs com indicador animado.
-  - Saudação personalizada no topo ("Bom dia, {nome} — tem X tickets urgentes").
-
----
-
-## 4. Kanbans (Tickets + Ligações) — foco principal
-
-**Toolbar superior** (novo, comum aos dois kanbans):
-- Busca textual + filtros rápidos (Agente, Prioridade, Tag, SLA).
-- Toggle visualização (Kanban / Lista).
-- Contador total + "Apenas meus" / "Não atribuídos".
-
-**Colunas**
-- Header com:
-  - Cor de status na borda superior (mais grossa, 4px).
-  - Nome + contador grande + mini-indicador de SLA agregado (✓ no prazo / ⚠ atenção / ! atrasados).
-  - Ações: renomear/excluir mantidas, mais acessíveis.
-- Background da coluna ligeiramente tonalizado conforme cor do status.
-- Empty state ilustrado.
-
-**Cards de ticket/ligação**
-- Layout em 3 zonas claras:
-  1. **Topo**: prioridade (pílula colorida) + categoria (chip colorido) + indicador SLA (badge com tempo restante e cor).
-  2. **Meio**: título maior (15px, 2 linhas), cliente, nº encomenda.
-  3. **Rodapé**: avatares (criador → atribuído), tags compactas, timestamp relativo, ícones de email/portal/anexos.
-- Borda esquerda colorida = cor do criador (mantém).
-- **Indicadores visuais novos**:
-  - Pulse animado em cards com mensagem não lida.
-  - Badge "SLA" com countdown colorido (verde > amarelo > laranja > vermelho).
-  - Ícone de canal (📧 email, 💬 portal, ☎ ligação).
-- Hover: leve elevação + outline accent.
+### UI — `src/components/ticket/MacroSelector.tsx`
+Substituir o motor de "sugeridas" atual por filtragem direta:
+- **Compatíveis** (topo): macros cujo `category_ids` inclui a categoria do ticket **E** `subcategory_ids` inclui a subcategoria. Boost extra se alguma tag do ticket bater com `tag_ids`.
+- **Outras** (recolhidas): restantes macros ativas.
+Manter pesquisa e preenchimento de placeholders.
 
 ---
 
-## 5. Páginas Principais
+## Parte 2 — Sugestão de resposta por IA
 
-- **Tickets, PhoneCalls, EmailTickets, DeliveryConfirmations, PostDelivery, DelayedOrders**: padronizar header de página (título + descrição curta explicativa + ações primárias).
-- **TicketDetail**: refinar sidebar e timeline (espaçamento, ícones coloridos por tipo de evento, separadores mais suaves).
-- **Settings**: tabs verticais com ícones coloridos.
+### Documento T&C (Definições)
+Novo separador **"Documentos da Empresa"** em `SettingsPage`:
+- Upload de PDF/DOCX/TXT para bucket privado `company-documents` (supervisor only).
+- Tabela `company_documents` com `id, title, file_path, file_type, extracted_text, is_active, uploaded_by, created_at`.
+- Ao fazer upload, edge function `extract-document-text` lê o ficheiro, extrai texto (PDF via `pdf-parse`, DOCX via `mammoth`, TXT direto) e guarda em `extracted_text`.
+- Lista permite ativar/desativar e remover.
 
----
+### Edge function `suggest-ai-reply`
+Input: `{ ticket_id: uuid, include_images?: boolean }`
 
-## 6. Detalhes técnicos
+Fluxo:
+1. Validar JWT do agente (RLS via `is_authenticated_agent`).
+2. Carregar ticket (cliente, categoria, subcategoria, tags, encomenda, descrição).
+3. Carregar **toda** a `ticket_messages` ordenada cronologicamente (cliente + agente).
+4. Carregar texto dos `company_documents` ativos (concatenado, truncado a ~30k chars).
+5. Se `include_images`, listar `ticket_attachments` do tipo `image/*` e obter URLs assinadas (60s) para enviar como input multimodal.
+6. Chamar **Lovable AI Gateway** (`https://ai.gateway.lovable.dev/v1/chat/completions`) com:
+   - Modelo: `google/gemini-2.5-pro` se imagens, `google/gemini-3-flash-preview` caso contrário.
+   - System prompt: persona formal de apoio UP Móveis, sempre em PT-PT, baseada nos T&C fornecidos, evitar promessas não suportadas, assinar com nome do agente.
+   - User content: contexto estruturado + histórico da conversa + (opcional) imagens.
+7. Tratar 429/402 com erros amigáveis.
+8. Devolver `{ suggestion: string, model: string, used_images: boolean, doc_count: number }`.
 
-- Tudo via tokens semânticos (HSL) — sem cores hardcoded em componentes.
-- Novos componentes utilitários:
-  - `PageHeader` (título + descrição + ações)
-  - `KanbanToolbar` (busca + filtros)
-  - `SlaBadge` (countdown colorido)
-  - `CategoryChip` (chip colorido por categoria)
-- Animações com `tailwindcss-animate` já instalado; sem novas dependências.
-- Mantém toda lógica: drag-and-drop, RLS, queries, realtime, mentions, SLA — nenhum business logic alterado.
-
----
-
-## 7. Entregáveis
-
-```text
-src/index.css                                  (paleta colorida + tokens)
-src/components/AppSidebar.tsx                  (grupos + cores)
-src/components/AppLayout.tsx                   (header + breadcrumb)
-src/components/ui/PageHeader.tsx               (novo)
-src/components/kanban/KanbanToolbar.tsx        (novo)
-src/components/ticket/SlaBadge.tsx             (novo)
-src/components/ticket/CategoryChip.tsx         (novo)
-src/components/KanbanBoard.tsx                 (refit colunas + cards)
-src/components/phone/PhoneCallKanban.tsx       (refit colunas + cards)
-src/pages/Dashboard.tsx                        (saudação + polish)
-src/pages/Tickets.tsx, PhoneCalls.tsx, ...     (PageHeader + toolbar)
-```
-
-## 8. Fora de escopo
-
-- Portal do cliente (`/portal/*`) — mantém como está.
-- Lógica de SLA, regras, automações, edge functions.
-- Refatoração de queries/dados.
+### UI no ticket
+Novo botão **"Sugerir resposta IA"** ✨ junto ao botão Macros em `TicketTimeline.tsx`:
+- Abre dialog com:
+  - Toggle "Incluir análise de fotos" (off por defeito).
+  - Botão "Gerar sugestão" → loading → mostra resposta em `Textarea` editável.
+  - Botões "Regenerar", "Inserir na resposta" (preenche a caixa de resposta), "Copiar".
+  - Rodapé indica modelo usado e nº de documentos T&C considerados.
+- Toasts para erros (sem T&C ativos avisa supervisor para fazer upload).
 
 ---
 
-Posso seguir e implementar a primeira fase (design system + shell + kanbans), depois iterar nas páginas restantes — ou prefere que faça tudo numa só passagem?
+## Detalhes técnicos
+
+- Migração: ALTER macros + nova tabela `company_documents` + bucket privado + RLS (select/insert agente, write supervisor) + GRANTs.
+- Backfill: macros existentes recebem `is_active=true` e arrays vazios; UI mostra aviso "macro sem categoria — não aparecerá nas sugestões" até serem editadas.
+- Edge functions novas: `extract-document-text`, `suggest-ai-reply` (ambas com `verify_jwt=false`, validação manual via `is_authenticated_agent`).
+- Lovable AI key (`LOVABLE_API_KEY`) já existe — sem novos secrets.
+- Imagens enviadas como `image_url` data-URL ou URL assinada, conforme suportado pelo modelo.
+- Limite: máx 40 mensagens mais recentes + truncar mensagens >2k chars para controlar tokens.
+- Sem alterações ao motor de decisões existente (continua a operar em paralelo).
+
+## Ficheiros afetados (estimativa)
+- `supabase/migrations/<new>.sql`
+- `supabase/functions/extract-document-text/index.ts` (novo)
+- `supabase/functions/suggest-ai-reply/index.ts` (novo)
+- `src/pages/Macros.tsx`
+- `src/components/ticket/MacroSelector.tsx`
+- `src/components/settings/CompanyDocumentsTab.tsx` (novo)
+- `src/pages/SettingsPage.tsx` (registar separador)
+- `src/components/ticket/TicketTimeline.tsx` (botão + dialog)
+- `src/components/ticket/AiSuggestionDialog.tsx` (novo)

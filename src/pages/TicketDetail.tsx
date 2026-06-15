@@ -18,6 +18,7 @@ import { DecisionEngine, type RuleSuggestion, type DecisionRule } from "@/lib/de
 import { v4 as uuidv4 } from "uuid";
 import FileUpload from "@/components/FileUpload";
 import MacroSelector from "@/components/ticket/MacroSelector";
+import AiSuggestionDialog from "@/components/ticket/AiSuggestionDialog";
 import TicketSidebar from "@/components/ticket/TicketSidebar";
 import SlaIndicator from "@/components/ticket/SlaIndicator";
 import PriorityFlag from "@/components/ticket/PriorityFlag";
@@ -163,6 +164,7 @@ export default function TicketDetail() {
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState("");
   const [reply, setReply] = useState("");
+  const [aiOpen, setAiOpen] = useState(false);
   const [addingNote, setAddingNote] = useState(false);
   const [sendingReply, setSendingReply] = useState(false);
   const [suggestions, setSuggestions] = useState<RuleSuggestion[]>([]);

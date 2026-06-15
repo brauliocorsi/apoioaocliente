@@ -15,6 +15,7 @@ import ClientsTab from "@/components/settings/ClientsTab";
 import SlaConfigTab from "@/components/settings/SlaConfigTab";
 import HolidaysTab from "@/components/settings/HolidaysTab";
 import DecisionRulesTab from "@/components/settings/DecisionRulesTab";
+import CompanyDocumentsTab from "@/components/settings/CompanyDocumentsTab";
 import { PageHeader } from "@/components/PageHeader";
 
 export default function SettingsPage() {
@@ -44,6 +45,7 @@ export default function SettingsPage() {
           <TabsTrigger value="smtp">Email SMTP</TabsTrigger>
           <TabsTrigger value="email-logs">Logs Email</TabsTrigger>
           <TabsTrigger value="clients">Clientes</TabsTrigger>
+          <TabsTrigger value="company-docs">Documentos IA</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="max-w-2xl space-y-6">
@@ -122,6 +124,10 @@ export default function SettingsPage() {
 
         <TabsContent value="clients">
           <ClientsTab />
+        </TabsContent>
+
+        <TabsContent value="company-docs">
+          <CompanyDocumentsTab />
         </TabsContent>
       </Tabs>
     </div>
