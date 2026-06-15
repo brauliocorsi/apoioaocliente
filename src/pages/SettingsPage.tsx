@@ -45,6 +45,7 @@ export default function SettingsPage() {
           <TabsTrigger value="smtp">Email SMTP</TabsTrigger>
           <TabsTrigger value="email-logs">Logs Email</TabsTrigger>
           <TabsTrigger value="clients">Clientes</TabsTrigger>
+          <TabsTrigger value="company-docs">Documentos IA</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="max-w-2xl space-y-6">
