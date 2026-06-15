@@ -15,6 +15,7 @@ import ClientsTab from "@/components/settings/ClientsTab";
 import SlaConfigTab from "@/components/settings/SlaConfigTab";
 import HolidaysTab from "@/components/settings/HolidaysTab";
 import DecisionRulesTab from "@/components/settings/DecisionRulesTab";
+import CompanyDocumentsTab from "@/components/settings/CompanyDocumentsTab";
 import { PageHeader } from "@/components/PageHeader";
 
 export default function SettingsPage() {
