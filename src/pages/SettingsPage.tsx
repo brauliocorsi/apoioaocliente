@@ -125,6 +125,10 @@ export default function SettingsPage() {
         <TabsContent value="clients">
           <ClientsTab />
         </TabsContent>
+
+        <TabsContent value="company-docs">
+          <CompanyDocumentsTab />
+        </TabsContent>
       </Tabs>
     </div>
   );
