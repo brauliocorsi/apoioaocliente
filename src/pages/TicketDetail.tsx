@@ -164,6 +164,7 @@ export default function TicketDetail() {
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState("");
   const [reply, setReply] = useState("");
+  const [aiOpen, setAiOpen] = useState(false);
   const [addingNote, setAddingNote] = useState(false);
   const [sendingReply, setSendingReply] = useState(false);
   const [suggestions, setSuggestions] = useState<RuleSuggestion[]>([]);
