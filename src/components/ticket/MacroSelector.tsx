@@ -23,14 +23,9 @@ interface MacroSelectorProps {
   onSelect: (content: string) => void;
 }
 
-/**
- * Fill both new-style {var} placeholders (legacy) and the simple [cliente]/[ticket]/[encomenda]/[produto]
- * placeholders requested in Phase 9. Never inserts "undefined" / "null" — empty values become "".
- */
 function fillPlaceholders(content: string, ticket: any): string {
   const safe = (v: any) => (v === undefined || v === null ? "" : String(v));
   return content
-    // legacy curly placeholders kept for backward compatibility
     .replace(/\{nome_cliente\}/g, safe(ticket?.client_name))
     .replace(/\{n_encomenda\}/g, safe(ticket?.order_number))
     .replace(/\{data_entrega\}/g, safe(ticket?.delivery_date))
@@ -43,121 +38,57 @@ function fillPlaceholders(content: string, ticket: any): string {
     .replace(/\{n_assistencia\}/g, safe(ticket?.service_number))
     .replace(/\{data_levantamento\}/g, safe(ticket?.pickup_date))
     .replace(/\{tipo_entrega\}/g, ticket?.delivery_type === "entrega" ? "Entrega" : ticket?.delivery_type === "levantamento" ? "Levantamento" : "")
-    // Phase 9 — short bracket placeholders
     .replace(/\[cliente\]/g, safe(ticket?.client_name))
     .replace(/\[ticket\]/g, safe(ticket?.ticket_number))
     .replace(/\[encomenda\]/g, safe(ticket?.order_number))
     .replace(/\[produto\]/g, safe(ticket?.product_name));
 }
 
-/**
- * Phase 9 — simple rule-based macro suggestions (no AI).
- * Returns macro IDs scored by relevance.
- */
-function computeSuggestedIds(args: {
-  macros: any[];
-  tagNames: string[];
-  categoryName?: string;
-  hasOrder: boolean;
-  pausedReason?: string | null;
-  isResolvedOrClosed: boolean;
-}): Set<string> {
-  const { macros, tagNames, categoryName, hasOrder, pausedReason, isResolvedOrClosed } = args;
-  const hay = [
-    categoryName || "",
-    ...tagNames,
-  ].join(" ").toLowerCase();
-
-  const suggested = new Set<string>();
-  const pick = (predicate: (m: any) => boolean) => macros.filter(predicate).forEach((m) => suggested.add(m.id));
-
-  if (/atraso/.test(hay)) pick((m) => /atraso|atualiza/i.test(m.title));
-  if (/entrega/.test(hay)) pick((m) => /atraso|atualiza|entrega/i.test(m.title));
-  if (/garantia/.test(hay)) pick((m) => m.macro_category === "garantia");
-  if (/defeito|danific|dano/.test(hay)) {
-    pick((m) => /dano|defeito|fotos|registo/i.test(m.title) || m.macro_category === "garantia");
-  }
-  if (/pe[cç]a|falta/.test(hay)) pick((m) => /pe[cç]a|falta/i.test(m.title));
-
-  if (!hasOrder) pick((m) => /sem n[uú]mero|n[uú]mero de encomenda/i.test(m.title));
-  if (pausedReason && /fornecedor|f[aá]brica/i.test(pausedReason)) {
-    pick((m) => /fornecedor|f[aá]brica|aguarda/i.test(m.title));
-  }
-  if (isResolvedOrClosed) pick((m) => /encerramento|resolu/i.test(m.title));
-
-  return suggested;
-}
-
 export default function MacroSelector({ ticket, tags = [], onSelect }: MacroSelectorProps) {
   const [macros, setMacros] = useState<any[]>([]);
-  const [tagNames, setTagNames] = useState<string[]>([]);
-  const [categoryName, setCategoryName] = useState<string>("");
-  const [statusInfo, setStatusInfo] = useState<{ is_resolved: boolean; is_closed: boolean; pauses_sla: boolean; pause_reason: string | null } | null>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
   useEffect(() => {
-    supabase.from("macros").select("*").order("sort_order").then(({ data }) => {
+    supabase.from("macros").select("*").eq("is_active", true).order("sort_order").then(({ data }) => {
       setMacros(data || []);
     });
   }, []);
 
-  // Resolve tag names + category + status meta for suggestion rules
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (tags && tags.length > 0) {
-        const { data } = await supabase.from("tags").select("id,name").in("id", tags);
-        if (!cancelled) setTagNames(((data || []) as any[]).map((t) => t.name));
-      } else {
-        setTagNames([]);
-      }
-      if (ticket?.category_id) {
-        const { data } = await supabase.from("categories").select("name").eq("id", ticket.category_id).maybeSingle();
-        if (!cancelled && data) setCategoryName((data as any).name || "");
-      }
-      if (ticket?.status) {
-        const { data } = await supabase
-          .from("ticket_statuses")
-          .select("is_resolved,is_closed,pauses_sla,sla_pause_reason")
-          .eq("id", ticket.status)
-          .maybeSingle();
-        if (!cancelled && data) {
-          setStatusInfo({
-            is_resolved: !!(data as any).is_resolved,
-            is_closed: !!(data as any).is_closed,
-            pauses_sla: !!(data as any).pauses_sla,
-            pause_reason: (data as any).sla_pause_reason ?? null,
-          });
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [ticket?.category_id, ticket?.status, tags?.join("|")]);
+  // Score each macro by context match: cat (required) + subcat (required) + tag (bonus)
+  const scored = useMemo(() => {
+    const catId: string | undefined = ticket?.category_id;
+    const subId: string | undefined = ticket?.subcategory_id;
+    const ticketTagSet = new Set(tags);
 
-  const suggestedIds = useMemo(
-    () =>
-      computeSuggestedIds({
-        macros,
-        tagNames,
-        categoryName,
-        hasOrder: !!ticket?.order_number,
-        pausedReason: statusInfo?.pauses_sla ? statusInfo?.pause_reason : null,
-        isResolvedOrClosed: !!(statusInfo?.is_resolved || statusInfo?.is_closed),
-      }),
-    [macros, tagNames, categoryName, ticket?.order_number, statusInfo],
-  );
+    return macros.map((m) => {
+      const cats: string[] = m.category_ids || [];
+      const subs: string[] = m.subcategory_ids || [];
+      const mTags: string[] = m.tag_ids || [];
+
+      const matchCat = catId && cats.includes(catId);
+      const matchSub = subId && subs.includes(subId);
+      const matchTag = mTags.some((t) => ticketTagSet.has(t));
+
+      // Suggested only when both category AND subcategory match
+      const isSuggested = !!(matchCat && matchSub);
+      // Tag adds a small score bump (for ordering inside the suggested group)
+      const score = (isSuggested ? 10 : 0) + (matchTag ? 5 : 0);
+      return { ...m, _isSuggested: isSuggested, _score: score, _matchTag: matchTag };
+    });
+  }, [macros, ticket?.category_id, ticket?.subcategory_id, tags.join("|")]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return macros;
-    return macros.filter(
+    if (!q) return scored;
+    return scored.filter(
       (m) => m.title.toLowerCase().includes(q) || m.content.toLowerCase().includes(q),
     );
-  }, [macros, query]);
+  }, [scored, query]);
 
-  const suggested = filtered.filter((m) => suggestedIds.has(m.id));
-  const others = filtered.filter((m) => !suggestedIds.has(m.id));
+  const suggested = filtered.filter((m) => m._isSuggested).sort((a, b) => b._score - a._score);
+  const others = filtered.filter((m) => !m._isSuggested);
+  const suggestedCount = scored.filter((m) => m._isSuggested).length;
 
   const handleSelect = (macro: any) => {
     onSelect(fillPlaceholders(macro.content, ticket));
@@ -174,6 +105,7 @@ export default function MacroSelector({ ticket, tags = [], onSelect }: MacroSele
         <span className="text-sm font-medium flex items-center gap-1.5">
           {isSuggested && <Sparkles className="h-3 w-3 text-primary" />}
           {m.title}
+          {m._matchTag && <Badge variant="outline" className="text-[9px] h-4 px-1">tag</Badge>}
         </span>
         <Badge variant="secondary" className="text-[10px] shrink-0">
           {categoryLabels[m.macro_category] || m.macro_category}
@@ -188,9 +120,9 @@ export default function MacroSelector({ ticket, tags = [], onSelect }: MacroSele
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" type="button">
           <BookOpen className="h-3.5 w-3.5 mr-1.5" /> Macros
-          {suggestedIds.size > 0 && (
+          {suggestedCount > 0 && (
             <Badge variant="secondary" className="ml-1.5 text-[10px] h-4 px-1.5">
-              {suggestedIds.size}
+              {suggestedCount}
             </Badge>
           )}
         </Button>
@@ -212,12 +144,14 @@ export default function MacroSelector({ ticket, tags = [], onSelect }: MacroSele
             {suggested.length > 0 && (
               <>
                 <div className="px-3 pt-1 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground font-medium flex items-center gap-1.5">
-                  <Sparkles className="h-3 w-3 text-primary" /> Sugeridas
+                  <Sparkles className="h-3 w-3 text-primary" /> Compatíveis com este ticket
                 </div>
                 {suggested.map((m) => renderRow(m, true))}
-                <div className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
-                  Todas
-                </div>
+                {others.length > 0 && (
+                  <div className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                    Outras macros
+                  </div>
+                )}
               </>
             )}
             {others.length === 0 && suggested.length === 0 ? (
