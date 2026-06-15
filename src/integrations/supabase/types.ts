@@ -241,6 +241,45 @@ export type Database = {
         }
         Relationships: []
       }
+      company_documents: {
+        Row: {
+          created_at: string
+          extracted_text: string | null
+          file_path: string
+          file_size: number | null
+          file_type: string
+          id: string
+          is_active: boolean
+          title: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          extracted_text?: string | null
+          file_path: string
+          file_size?: number | null
+          file_type: string
+          id?: string
+          is_active?: boolean
+          title: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          extracted_text?: string | null
+          file_path?: string
+          file_size?: number | null
+          file_type?: string
+          id?: string
+          is_active?: boolean
+          title?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
       decision_rules: {
         Row: {
           condition_extra: Json | null
@@ -671,26 +710,38 @@ export type Database = {
       }
       macros: {
         Row: {
+          category_ids: string[]
           content: string
           id: string
+          is_active: boolean
           macro_category: Database["public"]["Enums"]["macro_category"]
           sort_order: number
+          subcategory_ids: string[]
+          tag_ids: string[]
           title: string
           variables: string[] | null
         }
         Insert: {
+          category_ids?: string[]
           content: string
           id: string
+          is_active?: boolean
           macro_category: Database["public"]["Enums"]["macro_category"]
           sort_order?: number
+          subcategory_ids?: string[]
+          tag_ids?: string[]
           title: string
           variables?: string[] | null
         }
         Update: {
+          category_ids?: string[]
           content?: string
           id?: string
+          is_active?: boolean
           macro_category?: Database["public"]["Enums"]["macro_category"]
           sort_order?: number
+          subcategory_ids?: string[]
+          tag_ids?: string[]
           title?: string
           variables?: string[] | null
         }
