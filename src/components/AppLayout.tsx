@@ -55,8 +55,16 @@ export function AppLayout() {
 
   if (!session) return <Navigate to="/auth" replace />;
 
+  const sidebarDefaultOpen =
+    typeof document !== "undefined"
+      ? document.cookie
+          .split("; ")
+          .find((c) => c.startsWith("sidebar:state="))
+          ?.split("=")[1] !== "false"
+      : true;
+
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={sidebarDefaultOpen}>
       <div className="flex min-h-screen w-full bg-background">
         <AppSidebar />
         <main className="flex-1 flex flex-col min-w-0">

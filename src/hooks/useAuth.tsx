@@ -23,46 +23,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (userId: string) => {
-    const { data: profileData } = await supabase
-      .from("profiles")
-      .select("full_name, email, avatar_url, is_active")
-      .eq("id", userId)
-      .single();
+    try {
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("full_name, email, avatar_url, is_active")
+        .eq("id", userId)
+        .single();
 
-    // If account is deactivated, force sign out immediately
-    if (profileData && (profileData as any).is_active === false) {
-      await supabase.auth.signOut();
-      setProfile(null);
-      setRole(null);
-      if (typeof window !== "undefined") {
-        alert("A sua conta foi desativada. Contacte um supervisor.");
-        window.location.href = "/auth";
+      // If account is deactivated, force sign out immediately
+      if (profileData && (profileData as any).is_active === false) {
+        await supabase.auth.signOut();
+        setProfile(null);
+        setRole(null);
+        if (typeof window !== "undefined") {
+          alert("A sua conta foi desativada. Contacte um supervisor.");
+          window.location.href = "/auth";
+        }
+        return;
       }
-      return;
+
+      if (profileData) setProfile(profileData as any);
+
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .single();
+      if (roleData) setRole(roleData.role);
+    } catch (e) {
+      // swallow; ensure loading still resolves via finally
+    } finally {
+      setLoading(false);
     }
-
-    if (profileData) setProfile(profileData as any);
-
-    const { data: roleData } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .single();
-    if (roleData) setRole(roleData.role);
   };
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
-          setTimeout(() => fetchProfile(session.user.id), 0);
+          // Defer to avoid deadlock with Supabase auth callback
+          setTimeout(() => {
+            fetchProfile(session.user.id);
+          }, 0);
         } else {
           setProfile(null);
           setRole(null);
+          setLoading(false);
         }
-        setLoading(false);
       }
     );
 
@@ -71,8 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
