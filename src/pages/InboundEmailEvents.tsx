@@ -56,6 +56,12 @@ const STATUS_BADGES: Record<string, { label: string; variant: "default" | "secon
   reviewed: { label: "Revisto", variant: "outline" },
 };
 
+function spamLabel(score: number): { label: string; cls: string } {
+  if (score >= 80) return { label: "Provável spam", cls: "text-destructive font-semibold" };
+  if (score >= 40) return { label: "Suspeito", cls: "text-amber-600 font-medium" };
+  return { label: "Legítimo", cls: "text-emerald-600 font-medium" };
+}
+
 export default function InboundEmailEvents() {
   const [rows, setRows] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -258,9 +264,12 @@ export default function InboundEmailEvents() {
                     <TableCell className="text-sm max-w-[280px] truncate">{r.subject || "—"}</TableCell>
                     <TableCell><Badge variant={badge.variant}>{badge.label}</Badge></TableCell>
                     <TableCell className="text-xs">
-                      <span className={r.spam_score >= 80 ? "text-destructive font-semibold" : r.spam_score >= 40 ? "text-amber-600 font-medium" : "text-muted-foreground"}>
-                        {r.spam_score}
+                      <span className={spamLabel(r.spam_score).cls}>
+                        {spamLabel(r.spam_score).label}
                       </span>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                        score {r.spam_score}
+                      </div>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{r.routing_action || "—"}</TableCell>
                     <TableCell>
@@ -377,7 +386,7 @@ export default function InboundEmailEvents() {
             <Field label="Remetente" value={`${selected.from_name || ""} <${selected.from_address}>`} />
             <Field label="Assunto" value={selected.subject || "—"} />
             <Field label="Status" value={STATUS_BADGES[selected.status]?.label || selected.status} />
-            <Field label="Spam score" value={String(selected.spam_score)} />
+            <Field label="Spam" value={`${spamLabel(selected.spam_score).label} (score ${selected.spam_score})`} />
             <Field label="Ação" value={selected.routing_action || "—"} />
             <Field label="Processado em" value={selected.processed_at ? format(new Date(selected.processed_at), "dd/MM/yyyy HH:mm", { locale: pt }) : "—"} />
             {selected.routed_ticket_id && (
