@@ -148,7 +148,18 @@ export default function InboundEmailEvents() {
         });
         return null;
       }
-      toast({ title: "Ação executada", description: actionLabel(action) });
+      const taken = (data as any)?.action_taken as string | undefined;
+      const tn = (data as any)?.ticket_number;
+      const ptn = (data as any)?.parent_ticket_number;
+      if (action === "create_ticket" && taken === "appended") {
+        toast({ title: "E-mail anexado", description: `Anexado ao ticket aberto #${tn} do cliente.` });
+      } else if (action === "create_ticket" && taken === "continuation") {
+        toast({ title: "Ticket de continuação criado", description: `#${tn} criado (continuação do #${ptn} fechado).` });
+      } else if (action === "create_ticket" && taken === "new") {
+        toast({ title: "Ticket criado", description: `Novo ticket #${tn}.` });
+      } else {
+        toast({ title: "Ação executada", description: actionLabel(action) });
+      }
       await load();
       if (selected && selected.id === eventId) {
         const updated = await supabase

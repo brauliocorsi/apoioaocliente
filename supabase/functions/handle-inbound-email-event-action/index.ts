@@ -150,6 +150,96 @@ Deno.serve(async (req) => {
         return json({ success: true, status: "already_created", ticket_id: ev.routed_ticket_id });
       }
 
+      // ---- LOOKUP: open/closed tickets for the same client ---------------
+      // Behaviour:
+      //   open ticket exists  -> auto-append (do not create a duplicate)
+      //   only closed/resolved-> create new ticket as continuation (parent_ticket_id)
+      //   none                -> normal create
+      let openTicket: { id: string; ticket_number: number; subject: string | null } | null = null;
+      let closedParent: { id: string; ticket_number: number; client_name: string | null; client_email: string | null; client_phone: string | null; order_number: string | null; category_id: string | null; subcategory_id: string | null; priority: string | null } | null = null;
+      const lookupEmail = (ev.from_address || "").toLowerCase().trim();
+      if (lookupEmail) {
+        const { data: candidates } = await admin
+          .from("tickets")
+          .select("id, ticket_number, subject, status, client_name, client_email, client_phone, order_number, category_id, subcategory_id, priority, updated_at")
+          .ilike("client_email", lookupEmail)
+          .order("updated_at", { ascending: false })
+          .limit(20);
+        if (candidates && candidates.length > 0) {
+          const statusIds = Array.from(new Set(candidates.map((t: any) => t.status).filter(Boolean)));
+          const { data: sts } = await admin
+            .from("ticket_statuses")
+            .select("id, is_closed, is_resolved")
+            .in("id", statusIds);
+          const stMap = new Map((sts || []).map((s: any) => [s.id, s]));
+          for (const t of candidates as any[]) {
+            const st = stMap.get(t.status) as any;
+            const isClosed = !!st?.is_closed || !!st?.is_resolved;
+            if (!isClosed && !openTicket) {
+              openTicket = { id: t.id, ticket_number: t.ticket_number, subject: t.subject };
+            } else if (isClosed && !closedParent) {
+              closedParent = {
+                id: t.id, ticket_number: t.ticket_number,
+                client_name: t.client_name, client_email: t.client_email,
+                client_phone: t.client_phone, order_number: t.order_number,
+                category_id: t.category_id, subcategory_id: t.subcategory_id,
+                priority: t.priority,
+              };
+            }
+            if (openTicket) break;
+          }
+        }
+      }
+
+      // ── If an OPEN ticket exists, auto-append the email there ──────────
+      if (openTicket) {
+        let content = ev.body_preview as string | null;
+        let pe: any = null;
+        if (ev.pending_email_id) {
+          const { data } = await admin
+            .from("pending_emails").select("*").eq("id", ev.pending_email_id).maybeSingle();
+          pe = data;
+          if (pe) content = pe.body_html || pe.body_text || content;
+        }
+        content = content || "(email sem conteúdo)";
+
+        await admin.from("ticket_messages").insert({
+          ticket_id: openTicket.id,
+          sender_id: userId,
+          sender_type: "client",
+          content,
+        });
+        await admin.from("ticket_events").insert({
+          ticket_id: openTicket.id,
+          event_type: "note",
+          user_id: userId,
+          content: `E-mail anexado automaticamente a partir da Caixa de Entrada (remetente: ${ev.from_address})`,
+          metadata: { inbound_event_id: eventId, auto_routed: true },
+        });
+        if (pe) {
+          await admin.from("pending_emails").update({
+            status: "approved", reviewed_by: userId, reviewed_at: new Date().toISOString(),
+            ticket_id: openTicket.id,
+            rejection_reason: "Auto-anexado via Caixa de Entrada (ticket aberto do cliente)",
+          }).eq("id", pe.id);
+        }
+        await updateEvent({
+          status: "processed",
+          routing_action: "auto_appended_to_open_ticket",
+          routed_ticket_id: openTicket.id,
+          routing_reason: `Anexado ao ticket aberto #${openTicket.ticket_number} do mesmo cliente`,
+          processed_at: new Date().toISOString(),
+        });
+        return json({
+          success: true,
+          action_taken: "appended",
+          ticket_id: openTicket.id,
+          ticket_number: openTicket.ticket_number,
+        });
+      }
+
+
+
       // ---- CLAIM-FIRST (zero-delete) -----------------------------------
       // Atomically mark the event as being handled before creating a ticket.
       // This avoids using recently-added lock columns while the Data API schema
@@ -234,16 +324,30 @@ Deno.serve(async (req) => {
         orderCandidates.size === 1 ? null /* will be lookup-ready */ : "multiple_matches";
       const extractedOrder = orderCandidates.size === 1 ? [...orderCandidates][0] : null;
 
+      // If only closed/resolved tickets exist for this client, create a CONTINUATION ticket.
+      const isContinuation = !!closedParent;
+      const subjectPrefix = isContinuation && closedParent
+        ? `[Continuação #${closedParent.ticket_number}] `
+        : "";
+      const rawSubject = ev.subject || "(sem assunto)";
+      const newSubject = (subjectPrefix + rawSubject).substring(0, 200);
+
       const ticketInsert: Record<string, unknown> = {
-        client_name: ev.from_name || ev.from_address,
-        client_email: ev.from_address,
-        subject: ev.subject || "(sem assunto)",
+        client_name: (isContinuation ? closedParent?.client_name : null) || ev.from_name || ev.from_address,
+        client_email: (isContinuation ? closedParent?.client_email : null) || ev.from_address,
+        ...(isContinuation && closedParent?.client_phone ? { client_phone: closedParent.client_phone } : {}),
+        ...(isContinuation && closedParent?.category_id ? { category_id: closedParent.category_id } : {}),
+        ...(isContinuation && closedParent?.subcategory_id ? { subcategory_id: closedParent.subcategory_id } : {}),
+        subject: newSubject,
         description,
-        priority: "P2",
+        priority: (isContinuation && closedParent?.priority) || "P2",
         status: "novo",
         created_by: userId,
         email_received_at: ev.received_at,
-        ...(extractedOrder ? { order_number: extractedOrder } : {}),
+        ...(isContinuation && closedParent ? { parent_ticket_id: closedParent.id } : {}),
+        ...(extractedOrder
+          ? { order_number: extractedOrder }
+          : (isContinuation && closedParent?.order_number ? { order_number: closedParent.order_number } : {})),
         ...(orderStatus ? { order_lookup_status: orderStatus } : {}),
       };
 
@@ -268,14 +372,33 @@ Deno.serve(async (req) => {
         return json({ success: false, message: tErr?.message || "Erro ao criar ticket" }, 500);
       }
 
+      // Cross-link continuation in the parent timeline.
+      if (isContinuation && closedParent) {
+        await admin.from("ticket_events").insert([
+          {
+            ticket_id: newTicket.id, event_type: "note", user_id: userId,
+            content: `Novo ticket criado como continuação do #${closedParent.ticket_number} (fechado/resolvido).`,
+            metadata: { parent_ticket_id: closedParent.id, inbound_event_id: eventId },
+          },
+          {
+            ticket_id: closedParent.id, event_type: "note", user_id: userId,
+            content: `Cliente respondeu por e-mail — novo ticket #${newTicket.ticket_number} aberto.`,
+            metadata: { child_ticket_id: newTicket.id },
+          },
+        ]);
+      }
+
       // Attach the freshly created ticket to the event we already locked.
       await admin
         .from("inbound_email_events")
         .update({
           status: "processed",
-          routing_action: "manual_created_ticket",
+          routing_action: isContinuation ? "manual_created_continuation" : "manual_created_ticket",
           routed_ticket_id: newTicket.id,
-          routing_reason: "Criado manualmente a partir da Caixa de Entrada",
+          parent_ticket_id: isContinuation && closedParent ? closedParent.id : null,
+          routing_reason: isContinuation
+            ? `Continuação de #${closedParent?.ticket_number} (fechado)`
+            : "Criado manualmente a partir da Caixa de Entrada",
           processed_at: new Date().toISOString(),
           action_metadata: mergedMeta,
           ...(extractedOrder || orderCandidates.size > 0
@@ -283,6 +406,8 @@ Deno.serve(async (req) => {
             : {}),
         })
         .eq("id", eventId);
+
+
 
       await admin.from("email_threads").insert({
         ticket_id: newTicket.id,
@@ -314,7 +439,13 @@ Deno.serve(async (req) => {
         console.error("confirmation fire error", (e as Error).message);
       }
 
-      return json({ success: true, ticket_id: newTicket.id, ticket_number: newTicket.ticket_number });
+      return json({
+        success: true,
+        action_taken: isContinuation ? "continuation" : "new",
+        ticket_id: newTicket.id,
+        ticket_number: newTicket.ticket_number,
+        ...(isContinuation && closedParent ? { parent_ticket_number: closedParent.ticket_number } : {}),
+      });
     }
 
     if (action === "append_to_ticket") {
