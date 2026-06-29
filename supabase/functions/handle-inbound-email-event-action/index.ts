@@ -151,34 +151,30 @@ Deno.serve(async (req) => {
       }
 
       // ---- CLAIM-FIRST (zero-delete) -----------------------------------
-      // Atomically acquire a lock on this event BEFORE creating any ticket.
-      // If another concurrent request already holds the lock or routed the
-      // event, we never insert a ticket — so there is nothing to delete.
-      const LOCK_TTL_MS = 60_000;
-      const lockCutoff = new Date(Date.now() - LOCK_TTL_MS).toISOString();
-      const nowIso = new Date().toISOString();
-
-      const { data: claimedEvents, error: lockErr } = await admin
+      // Atomically mark the event as being handled before creating a ticket.
+      // This avoids using recently-added lock columns while the Data API schema
+      // cache catches up, and still prevents duplicate creates through status +
+      // routed_ticket_id guards.
+      const { data: claimedEvents, error: claimErr } = await admin
         .from("inbound_email_events")
         .update({
-          processing_locked_at: nowIso,
-          processing_locked_by: userId,
+          status: "processing",
+          action_metadata: mergedMeta,
         })
         .eq("id", eventId)
         .is("routed_ticket_id", null)
         .not("status", "in", "(processed,duplicate,spam,ignored,reviewed)")
-        .or(`processing_locked_at.is.null,processing_locked_at.lt.${lockCutoff}`)
         .select("id");
 
-      if (lockErr) {
-        return json({ success: false, message: lockErr.message }, 500);
+      if (claimErr) {
+        return json({ success: false, message: claimErr.message }, 500);
       }
 
       if (!claimedEvents || claimedEvents.length === 0) {
         // Re-read to give the caller a meaningful reason.
         const { data: refreshed } = await admin
           .from("inbound_email_events")
-          .select("routed_ticket_id, status, processing_locked_at")
+          .select("routed_ticket_id, status")
           .eq("id", eventId)
           .maybeSingle();
         if (refreshed?.routed_ticket_id) {
@@ -199,8 +195,7 @@ Deno.serve(async (req) => {
         await admin
           .from("inbound_email_events")
           .update({
-            processing_locked_at: null,
-            processing_locked_by: null,
+            status: String(ev.status || "pending_review"),
             ...(extraMeta || {}),
           })
           .eq("id", eventId);
@@ -283,8 +278,6 @@ Deno.serve(async (req) => {
           routing_reason: "Criado manualmente a partir da Caixa de Entrada",
           processed_at: new Date().toISOString(),
           action_metadata: mergedMeta,
-          processing_locked_at: null,
-          processing_locked_by: null,
           ...(extractedOrder || orderCandidates.size > 0
             ? { extracted_order_number: extractedOrder ?? [...orderCandidates].join(",") }
             : {}),
