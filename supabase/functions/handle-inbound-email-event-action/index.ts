@@ -439,7 +439,13 @@ Deno.serve(async (req) => {
         console.error("confirmation fire error", (e as Error).message);
       }
 
-      return json({ success: true, ticket_id: newTicket.id, ticket_number: newTicket.ticket_number });
+      return json({
+        success: true,
+        action_taken: isContinuation ? "continuation" : "new",
+        ticket_id: newTicket.id,
+        ticket_number: newTicket.ticket_number,
+        ...(isContinuation && closedParent ? { parent_ticket_number: closedParent.ticket_number } : {}),
+      });
     }
 
     if (action === "append_to_ticket") {
