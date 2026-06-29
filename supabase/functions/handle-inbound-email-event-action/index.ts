@@ -150,6 +150,96 @@ Deno.serve(async (req) => {
         return json({ success: true, status: "already_created", ticket_id: ev.routed_ticket_id });
       }
 
+      // ---- LOOKUP: open/closed tickets for the same client ---------------
+      // Behaviour:
+      //   open ticket exists  -> auto-append (do not create a duplicate)
+      //   only closed/resolved-> create new ticket as continuation (parent_ticket_id)
+      //   none                -> normal create
+      let openTicket: { id: string; ticket_number: number; subject: string | null } | null = null;
+      let closedParent: { id: string; ticket_number: number; client_name: string | null; client_email: string | null; client_phone: string | null; order_number: string | null; category_id: string | null; subcategory_id: string | null; priority: string | null } | null = null;
+      const lookupEmail = (ev.from_address || "").toLowerCase().trim();
+      if (lookupEmail) {
+        const { data: candidates } = await admin
+          .from("tickets")
+          .select("id, ticket_number, subject, status, client_name, client_email, client_phone, order_number, category_id, subcategory_id, priority, updated_at")
+          .ilike("client_email", lookupEmail)
+          .order("updated_at", { ascending: false })
+          .limit(20);
+        if (candidates && candidates.length > 0) {
+          const statusIds = Array.from(new Set(candidates.map((t: any) => t.status).filter(Boolean)));
+          const { data: sts } = await admin
+            .from("ticket_statuses")
+            .select("id, is_closed, is_resolved")
+            .in("id", statusIds);
+          const stMap = new Map((sts || []).map((s: any) => [s.id, s]));
+          for (const t of candidates as any[]) {
+            const st = stMap.get(t.status) as any;
+            const isClosed = !!st?.is_closed || !!st?.is_resolved;
+            if (!isClosed && !openTicket) {
+              openTicket = { id: t.id, ticket_number: t.ticket_number, subject: t.subject };
+            } else if (isClosed && !closedParent) {
+              closedParent = {
+                id: t.id, ticket_number: t.ticket_number,
+                client_name: t.client_name, client_email: t.client_email,
+                client_phone: t.client_phone, order_number: t.order_number,
+                category_id: t.category_id, subcategory_id: t.subcategory_id,
+                priority: t.priority,
+              };
+            }
+            if (openTicket) break;
+          }
+        }
+      }
+
+      // ── If an OPEN ticket exists, auto-append the email there ──────────
+      if (openTicket) {
+        let content = ev.body_preview as string | null;
+        let pe: any = null;
+        if (ev.pending_email_id) {
+          const { data } = await admin
+            .from("pending_emails").select("*").eq("id", ev.pending_email_id).maybeSingle();
+          pe = data;
+          if (pe) content = pe.body_html || pe.body_text || content;
+        }
+        content = content || "(email sem conteúdo)";
+
+        await admin.from("ticket_messages").insert({
+          ticket_id: openTicket.id,
+          sender_id: userId,
+          sender_type: "client",
+          content,
+        });
+        await admin.from("ticket_events").insert({
+          ticket_id: openTicket.id,
+          event_type: "note",
+          user_id: userId,
+          content: `E-mail anexado automaticamente a partir da Caixa de Entrada (remetente: ${ev.from_address})`,
+          metadata: { inbound_event_id: eventId, auto_routed: true },
+        });
+        if (pe) {
+          await admin.from("pending_emails").update({
+            status: "approved", reviewed_by: userId, reviewed_at: new Date().toISOString(),
+            ticket_id: openTicket.id,
+            rejection_reason: "Auto-anexado via Caixa de Entrada (ticket aberto do cliente)",
+          }).eq("id", pe.id);
+        }
+        await updateEvent({
+          status: "processed",
+          routing_action: "auto_appended_to_open_ticket",
+          routed_ticket_id: openTicket.id,
+          routing_reason: `Anexado ao ticket aberto #${openTicket.ticket_number} do mesmo cliente`,
+          processed_at: new Date().toISOString(),
+        });
+        return json({
+          success: true,
+          action_taken: "appended",
+          ticket_id: openTicket.id,
+          ticket_number: openTicket.ticket_number,
+        });
+      }
+
+
+
       // ---- CLAIM-FIRST (zero-delete) -----------------------------------
       // Atomically mark the event as being handled before creating a ticket.
       // This avoids using recently-added lock columns while the Data API schema
