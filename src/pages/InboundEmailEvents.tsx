@@ -133,12 +133,11 @@ export default function InboundEmailEvents() {
     );
   }, [rows, search]);
 
-  async function runAction(action: string, extra: Record<string, unknown> = {}) {
-    if (!selected) return;
+  async function runActionOn(eventId: string, action: string, extra: Record<string, unknown> = {}) {
     setActing(true);
     try {
       const { data, error } = await supabase.functions.invoke("handle-inbound-email-event-action", {
-        body: { event_id: selected.id, action, ...extra },
+        body: { event_id: eventId, action, ...extra },
       });
       if (error) throw error;
       if (data && (data as any).success === false) {
@@ -151,13 +150,14 @@ export default function InboundEmailEvents() {
       }
       toast({ title: "Ação executada", description: actionLabel(action) });
       await load();
-      // refresh selected
-      const updated = await supabase
-        .from("inbound_email_events")
-        .select("*")
-        .eq("id", selected.id)
-        .maybeSingle();
-      if (updated.data) setSelected(updated.data as any);
+      if (selected && selected.id === eventId) {
+        const updated = await supabase
+          .from("inbound_email_events")
+          .select("*")
+          .eq("id", eventId)
+          .maybeSingle();
+        if (updated.data) setSelected(updated.data as any);
+      }
       return data;
     } catch (err: any) {
       toast({ title: "Erro", description: err.message || String(err), variant: "destructive" });
@@ -165,6 +165,11 @@ export default function InboundEmailEvents() {
     } finally {
       setActing(false);
     }
+  }
+
+  async function runAction(action: string, extra: Record<string, unknown> = {}) {
+    if (!selected) return;
+    return runActionOn(selected.id, action, extra);
   }
 
   async function searchTickets() {
