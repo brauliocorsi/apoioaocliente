@@ -282,6 +282,16 @@ export default function InboundEmailEvents() {
                         <Link to={`/tickets/${r.routed_ticket_id}`} onClick={(e) => e.stopPropagation()} className="text-primary hover:underline text-xs inline-flex items-center gap-1">
                           Abrir <ExternalLink className="h-3 w-3" />
                         </Link>
+                      ) : (r.status === "pending_review" || r.status === "quarantined") ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          disabled={acting}
+                          onClick={(e) => { e.stopPropagation(); runActionOn(r.id, "create_ticket"); }}
+                        >
+                          <Plus className="h-3 w-3 mr-1" /> Criar
+                        </Button>
                       ) : <span className="text-xs text-muted-foreground">—</span>}
                     </TableCell>
                   </TableRow>
