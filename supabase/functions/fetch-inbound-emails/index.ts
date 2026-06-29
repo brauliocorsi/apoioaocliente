@@ -1929,45 +1929,89 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             break;
         }
 
-        // New email from unknown/closed thread → pending review queue
-        const pendingHtmlPreview = msg.bodyHtml ? msg.bodyHtml.substring(0, 20000) : "";
-        const pendingInsert: any = {
-          from_address: clientEmail.toLowerCase(),
-          from_name: clientName,
-          subject: msg.subject.substring(0, 500),
-          body_text: (msg.bodyText || "").substring(0, 5000),
-          body_html: pendingHtmlPreview ? sanitizeHtml(pendingHtmlPreview).substring(0, 10000) : "",
-          message_id: emailFingerprint,
-          status: "pending",
+        // Unknown sender, no open/closed ticket → AUTO-CREATE a new ticket directly.
+        const htmlPreviewN = msg.bodyHtml ? msg.bodyHtml.substring(0, 20000) : "";
+        const htmlFullN = htmlPreviewN ? sanitizeHtml(htmlPreviewN).substring(0, 10000) : "";
+        const textFullN = (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
+        const stripTagsN = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        const hasHtmlN = !!htmlFullN && stripTagsN(htmlFullN).length > 0;
+        const newDescription = hasHtmlN ? htmlFullN : textFullN;
+
+        const newTicketInsert: Record<string, unknown> = {
+          client_name: clientName || clientEmail,
+          client_email: clientEmail.toLowerCase(),
+          subject: (msg.subject || "(sem assunto)").substring(0, 200),
+          description: newDescription,
+          priority: "P2",
+          status: "novo",
+          created_by: createdBy!,
         };
-        if (msg.date) pendingInsert.created_at = msg.date;
+        if (msg.date) newTicketInsert.email_received_at = new Date(msg.date).toISOString();
 
-        const { data: pendingEmail } = await adminClient.from("pending_emails").insert(pendingInsert).select("id").single();
+        const { data: createdTicket, error: createTicketErr } = await adminClient
+          .from("tickets")
+          .insert(newTicketInsert)
+          .select("id, ticket_number")
+          .single();
 
-        if (pendingEmail && msg.attachments.length > 0) {
-          const attMeta = [];
-          for (const att of msg.attachments) {
-            try {
-              const meta = await storePendingAttachment(adminClient, pendingEmail.id, att);
-              attMeta.push(meta);
-            } catch (err) {
-              console.error(`Pending attachment error: ${(err as Error).message}`);
-            }
-          }
-          if (attMeta.length > 0) {
-            await adminClient.from("pending_emails")
-              .update({ attachments_meta: attMeta })
-              .eq("id", pendingEmail.id);
-          }
+        if (createTicketErr || !createdTicket) {
+          // Safety net: fall back to pending_review if auto-create failed.
+          const pendingHtmlPreview = msg.bodyHtml ? msg.bodyHtml.substring(0, 20000) : "";
+          const pendingInsert: any = {
+            from_address: clientEmail.toLowerCase(),
+            from_name: clientName,
+            subject: msg.subject.substring(0, 500),
+            body_text: (msg.bodyText || "").substring(0, 5000),
+            body_html: pendingHtmlPreview ? sanitizeHtml(pendingHtmlPreview).substring(0, 10000) : "",
+            message_id: emailFingerprint,
+            status: "pending",
+          };
+          if (msg.date) pendingInsert.created_at = msg.date;
+          const { data: pendingEmail } = await adminClient.from("pending_emails").insert(pendingInsert).select("id").single();
+          await updateInboundEvent(adminClient, eventId, {
+            status: "pending_review",
+            routing_action: "pending_review",
+            routing_reason: `auto-create falhou: ${createTicketErr?.message || "erro"}`,
+            pending_email_id: pendingEmail?.id ?? null,
+            processed_at: new Date().toISOString(),
+          });
+          pending++;
+          await imap.markAsSeen(seqNum);
+          newEmailProcessed = true;
+          break;
         }
 
+        await adminClient.from("email_threads").insert({
+          ticket_id: createdTicket.id,
+          email_address: clientEmail.toLowerCase(),
+          last_message_id: emailFingerprint,
+        });
+
+        if (msg.attachments.length > 0) {
+          for (const att of msg.attachments) {
+            try {
+              await uploadAttachment(adminClient, createdTicket.id, att, createdBy!);
+            } catch (err) {
+              console.error(`Attachment error: ${(err as Error).message}`);
+            }
+          }
+        }
+        await fetchAttachmentsParts(imap, adminClient, seqNum, createdTicket.id, createdBy!);
+
+        await fireTicketCreatedConfirmation(createdTicket.id, "email");
+
         await updateInboundEvent(adminClient, eventId, {
-          status: "pending_review",
-          routing_action: "pending_review",
-          routing_reason: "no matching open ticket",
-          pending_email_id: pendingEmail?.id ?? null,
+          status: "processed",
+          routing_action: "auto_created_ticket",
+          routed_ticket_id: createdTicket.id,
+          routing_reason: "Auto-criado (remetente sem tickets existentes)",
           processed_at: new Date().toISOString(),
         });
+        created++;
+        await imap.markAsSeen(seqNum);
+        newEmailProcessed = true;
+        break;
+
         pending++;
         await imap.markAsSeen(seqNum);
         newEmailProcessed = true;
