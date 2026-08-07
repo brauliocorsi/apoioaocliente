@@ -56,16 +56,54 @@ const STATUS_BADGES: Record<string, { label: string; variant: "default" | "secon
   reviewed: { label: "Revisto", variant: "outline" },
 };
 
+type SpamKind = "spam" | "suspect" | "clean";
+
+function spamKind(r: { spam_score: number; status: string }): SpamKind {
+  if (r.status === "spam" || r.status === "quarantined" || r.spam_score >= 80) return "spam";
+  if (r.spam_score >= 40) return "suspect";
+  return "clean";
+}
+
+const SPAM_META: Record<SpamKind, { label: string; cls: string; dot: string }> = {
+  spam: {
+    label: "Spam",
+    cls: "border-destructive/40 bg-destructive/10 text-destructive",
+    dot: "bg-destructive",
+  },
+  suspect: {
+    label: "Suspeito",
+    cls: "border-amber-500/40 bg-amber-500/10 text-amber-600",
+    dot: "bg-amber-500",
+  },
+  clean: {
+    label: "Legítimo",
+    cls: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600",
+    dot: "bg-emerald-500",
+  },
+};
+
+function SpamFlag({ row, showScore = true }: { row: { spam_score: number; status: string }; showScore?: boolean }) {
+  const kind = spamKind(row);
+  const meta = SPAM_META[kind];
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.cls}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+      {meta.label}
+      {showScore && <span className="opacity-60">· {row.spam_score}</span>}
+    </span>
+  );
+}
+
 function spamLabel(score: number): { label: string; cls: string } {
-  if (score >= 80) return { label: "Provável spam", cls: "text-destructive font-semibold" };
-  if (score >= 40) return { label: "Suspeito", cls: "text-amber-600 font-medium" };
-  return { label: "Legítimo", cls: "text-emerald-600 font-medium" };
+  const kind = spamKind({ spam_score: score, status: "" });
+  return { label: SPAM_META[kind].label, cls: SPAM_META[kind].cls };
 }
 
 export default function InboundEmailEvents() {
   const [rows, setRows] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
+  const [spamView, setSpamView] = useState<"all" | SpamKind>("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<EventRow | null>(null);
   const [acting, setActing] = useState(false);
@@ -122,16 +160,24 @@ export default function InboundEmailEvents() {
     return () => { cancelled = true; };
   }, [selected?.id, selected?.status]);
 
+  const spamCounts = useMemo(() => {
+    const c = { all: rows.length, clean: 0, suspect: 0, spam: 0 };
+    rows.forEach((r) => { c[spamKind(r)]++; });
+    return c;
+  }, [rows]);
+
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
-    if (!s) return rows;
-    return rows.filter(
-      (r) =>
+    return rows.filter((r) => {
+      if (spamView !== "all" && spamKind(r) !== spamView) return false;
+      if (!s) return true;
+      return (
         r.from_address?.toLowerCase().includes(s) ||
         r.subject?.toLowerCase().includes(s) ||
-        r.routed_ticket_id?.toLowerCase().includes(s),
-    );
-  }, [rows, search]);
+        r.routed_ticket_id?.toLowerCase().includes(s)
+      );
+    });
+  }, [rows, search, spamView]);
 
   async function runActionOn(eventId: string, action: string, extra: Record<string, unknown> = {}) {
     setActing(true);
@@ -246,6 +292,34 @@ export default function InboundEmailEvents() {
           </div>
         </div>
 
+        {/* Separador spam / legítimo */}
+        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+          <span className="text-xs text-muted-foreground mr-1">Classificação:</span>
+          {([
+            { key: "all", label: "Tudo", count: spamCounts.all },
+            { key: "clean", label: "Legítimos", count: spamCounts.clean },
+            { key: "suspect", label: "Suspeitos", count: spamCounts.suspect },
+            { key: "spam", label: "Spam", count: spamCounts.spam },
+          ] as const).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setSpamView(t.key)}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                spamView === t.key
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {t.key !== "all" && (
+                <span className={`h-1.5 w-1.5 rounded-full ${SPAM_META[t.key as SpamKind].dot}`} />
+              )}
+              {t.label}
+              <span className="opacity-70">{t.count}</span>
+            </button>
+          ))}
+        </div>
+
+
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -256,13 +330,11 @@ export default function InboundEmailEvents() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Recebido</TableHead>
-                <TableHead>Remetente</TableHead>
-                <TableHead className="hidden lg:table-cell">Assunto</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden md:table-cell">Spam</TableHead>
-                <TableHead className="hidden xl:table-cell">Ação</TableHead>
-                <TableHead className="text-right sticky right-0 bg-card">Ticket</TableHead>
+                <TableHead className="w-[42%]">E-mail</TableHead>
+                <TableHead className="w-[130px]">Classificação</TableHead>
+                <TableHead className="w-[120px]">Estado</TableHead>
+                <TableHead className="w-[110px] hidden sm:table-cell">Recebido</TableHead>
+                <TableHead className="w-[100px] text-right sticky right-0 bg-card">Ticket</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -270,27 +342,31 @@ export default function InboundEmailEvents() {
                 const badge = STATUS_BADGES[r.status] || { label: r.status, variant: "outline" as const };
                 const TERMINAL_ROW = ["processed", "duplicate", "spam", "ignored", "reviewed"];
                 const canCreate = !r.routed_ticket_id && !TERMINAL_ROW.includes(r.status);
+                const kind = spamKind(r);
                 return (
-                  <TableRow key={r.id} className="cursor-pointer" onClick={() => setSelected(r)}>
-                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(r.received_at), { addSuffix: true, locale: pt })}
-                    </TableCell>
+                  <TableRow
+                    key={r.id}
+                    className={`cursor-pointer ${kind === "spam" ? "bg-destructive/5" : kind === "suspect" ? "bg-amber-500/5" : ""}`}
+                    onClick={() => setSelected(r)}
+                  >
                     <TableCell className="text-sm">
-                      <div className="font-medium">{r.from_name || r.from_address}</div>
-                      {r.from_name && <div className="text-xs text-muted-foreground">{r.from_address}</div>}
-                      <div className="text-xs text-muted-foreground lg:hidden truncate max-w-[180px]">{r.subject || "—"}</div>
-                    </TableCell>
-                    <TableCell className="text-sm max-w-[280px] truncate hidden lg:table-cell">{r.subject || "—"}</TableCell>
-                    <TableCell><Badge variant={badge.variant}>{badge.label}</Badge></TableCell>
-                    <TableCell className="text-xs hidden md:table-cell">
-                      <span className={spamLabel(r.spam_score).cls}>
-                        {spamLabel(r.spam_score).label}
-                      </span>
-                      <div className="text-[10px] text-muted-foreground mt-0.5">
-                        score {r.spam_score}
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${SPAM_META[kind].dot}`} />
+                        <span className="font-medium truncate max-w-[240px]">{r.from_name || r.from_address}</span>
+                      </div>
+                      <div className="pl-4 text-xs text-muted-foreground truncate max-w-[420px]">
+                        {r.subject || "(sem assunto)"}
+                      </div>
+                      <div className="pl-4 text-[11px] text-muted-foreground/70 truncate max-w-[420px]">
+                        {r.from_address}
+                        <span className="sm:hidden"> · {formatDistanceToNow(new Date(r.received_at), { addSuffix: true, locale: pt })}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground hidden xl:table-cell">{r.routing_action || "—"}</TableCell>
+                    <TableCell><SpamFlag row={r} /></TableCell>
+                    <TableCell><Badge variant={badge.variant}>{badge.label}</Badge></TableCell>
+                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground hidden sm:table-cell">
+                      {formatDistanceToNow(new Date(r.received_at), { addSuffix: true, locale: pt })}
+                    </TableCell>
                     <TableCell className="text-right sticky right-0 bg-card">
                       {r.routed_ticket_id ? (
                         <Link to={`/tickets/${r.routed_ticket_id}`} onClick={(e) => e.stopPropagation()} className="text-primary hover:underline text-xs inline-flex items-center gap-1">
