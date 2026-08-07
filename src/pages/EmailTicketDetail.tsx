@@ -16,6 +16,8 @@ import { formatDistanceToNow, format } from "date-fns";
 import { pt } from "date-fns/locale";
 import FileUpload from "@/components/FileUpload";
 import { TicketContinuationBadges } from "@/components/ticket/TicketContinuationBadges";
+import { useTicketRefetch } from "@/hooks/useTicketRefetch";
+import { RefetchSummaryCard } from "@/components/ticket/RefetchSummaryCard";
 
 // Check if content looks like HTML
 function isHtmlContent(text: string): boolean {
@@ -156,7 +158,7 @@ export default function EmailTicketDetail() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [originalViewContent, setOriginalViewContent] = useState<string | null>(null);
   const [replyAttachments, setReplyAttachments] = useState<{ file_name: string; file_path: string; file_type: string; file_size: number; url: string }[]>([]);
-  const [refetching, setRefetching] = useState(false);
+  const { run: runRefetch, running: refetching, progress: refetchProgress, lastResult: refetchResult, retryByName: retryAttachment, clearResult: clearRefetch } = useTicketRefetch(id, ticket?.client_email);
   const [bgAttachments, setBgAttachments] = useState(0);
 
   const fetchData = async () => {
@@ -256,47 +258,15 @@ export default function EmailTicketDetail() {
   };
 
   const refetchEmails = async () => {
-    if (!id || !user || refetching) return;
-    setRefetching(true);
-    try {
-      // Phase 1: Fetch messages/content + collect attachment metadata
-      const { data, error } = await supabase.functions.invoke("fetch-inbound-emails", {
-        body: { action: "refetch_ticket", ticket_id: id, agent_id: user.id },
+    const res = await runRefetch();
+    if (res) {
+      toast({
+        title: res.error ? "Erro na re-importação" : "Re-importação concluída",
+        description: res.summary,
+        variant: res.error ? "destructive" : undefined,
       });
-      if (error) throw error;
-      if (data?.success === false) throw new Error(data.message);
-
-      // Phase 2: Download each attachment via dedicated lightweight function (avoids CPU limit)
-      const pending = data?.pending_attachments || [];
-      let imported = 0;
-      let failed = 0;
-      for (const att of pending) {
-        try {
-          const { data: attData, error: attErr } = await supabase.functions.invoke("download-attachment", {
-            body: {
-              seq_num: att.seq_num,
-              part_num: att.part_num,
-              ticket_id: id,
-              filename: att.filename,
-              content_type: att.content_type,
-              encoding: att.encoding,
-              client_email: ticket?.client_email,
-            },
-          });
-          if (attErr) { failed++; continue; }
-          if (attData?.success) imported++;
-        } catch (_e) { failed++; }
-      }
-
-      const msgParts = [data?.message || "Verificado"];
-      if (imported > 0) msgParts.push(`${imported} anexo(s) importado(s)`);
-      if (failed > 0) msgParts.push(`${failed} anexo(s) falharam`);
-      toast({ title: "Re-importação concluída", description: msgParts.join(", ") });
       fetchData();
-    } catch (err) {
-      toast({ title: "Erro na re-importação", description: (err as Error).message, variant: "destructive" });
     }
-    setRefetching(false);
   };
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!ticket) return <div className="text-center py-20 text-muted-foreground">Ticket não encontrado</div>;
@@ -327,10 +297,21 @@ export default function EmailTicketDetail() {
         {ticket.client_email && (
           <Button variant="outline" size="sm" onClick={refetchEmails} disabled={refetching} className="shrink-0 gap-1.5">
             <RefreshCw className={`h-3.5 w-3.5 ${refetching ? "animate-spin" : ""}`} />
-            {refetching ? "A importar..." : "Re-importar emails"}
+            {refetching ? (refetchProgress || "A importar...") : "Re-importar emails"}
           </Button>
         )}
       </div>
+
+      {refetchResult && (
+        <RefetchSummaryCard
+          result={refetchResult}
+          busy={refetching}
+          onRetry={async (f) => { await retryAttachment(f); fetchData(); }}
+          onClose={clearRefetch}
+        />
+      )}
+
+
 
       {bgAttachments > 0 && (
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary animate-pulse">

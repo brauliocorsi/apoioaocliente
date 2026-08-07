@@ -26,6 +26,8 @@ import { useTicketStatuses } from "@/hooks/useTicketStatuses";
 import MentionTextarea from "@/components/MentionTextarea";
 import ResolutionCard from "@/components/ticket/ResolutionCard";
 import MessageReactions from "@/components/chat/MessageReactions";
+import { useTicketRefetch } from "@/hooks/useTicketRefetch";
+import { RefetchSummaryCard } from "@/components/ticket/RefetchSummaryCard";
 import { TicketContinuationBadges } from "@/components/ticket/TicketContinuationBadges";
 import TicketTimeline from "@/components/ticket/TicketTimeline";
 
@@ -187,6 +189,19 @@ export default function TicketDetail() {
   const [fullViewContent, setFullViewContent] = useState<string | null>(null);
   const [failedEmails, setFailedEmails] = useState<any[]>([]);
   const [retryingEmailId, setRetryingEmailId] = useState<string | null>(null);
+  const { run: runRefetch, running: refetching, progress: refetchProgress, lastResult: refetchResult, retryByName: retryAttachment, clearResult: clearRefetch } = useTicketRefetch(id, ticket?.client_email);
+
+  const handleRefetch = async () => {
+    const res = await runRefetch();
+    if (res) {
+      toast({
+        title: res.error ? "Erro na re-importação" : "Re-importação concluída",
+        description: res.summary,
+        variant: res.error ? "destructive" : undefined,
+      });
+      await fetchTicket();
+    }
+  };
 
   const fetchTicket = async () => {
     if (!id) return;
@@ -649,6 +664,12 @@ export default function TicketDetail() {
           <TicketContinuationBadges ticketId={ticket.id} parentTicketId={(ticket as any).parent_ticket_id} />
         </div>
         <div className="flex items-center gap-2">
+          {(ticket.client_email || hasEmailThread) && (
+            <Button variant="outline" size="sm" onClick={handleRefetch} disabled={refetching} className="shrink-0 gap-1.5">
+              <RefreshCw className={`h-3.5 w-3.5 ${refetching ? "animate-spin" : ""}`} />
+              {refetching ? (refetchProgress || "A importar...") : "Re-importar e-mails"}
+            </Button>
+          )}
           <Select value={ticket.status} onValueChange={updateStatus}>
             <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -710,6 +731,16 @@ export default function TicketDetail() {
           )}
         </div>
       </div>
+
+      {refetchResult && (
+        <RefetchSummaryCard
+          result={refetchResult}
+          busy={refetching}
+          onRetry={async (f) => { await retryAttachment(f); await fetchTicket(); }}
+          onClose={clearRefetch}
+        />
+      )}
+
 
       {suggestions.length > 0 && (
         <Card className="border-warning/50 bg-warning/5">
