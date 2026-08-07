@@ -1,45 +1,47 @@
-# Bloquear duplicados sem travar a receção de clientes
+# Botão "Re-importar e-mails" no ticket
 
 ## Situação atual (verificada)
 
-- A deduplicação é feita só em memória/aplicação: a função de importação carrega os `message_id` das últimas 48h de `email_threads` e `pending_emails` e compara com a impressão digital do e-mail.
-- Não existe **nenhuma restrição única** na base de dados: `inbound_email_events`, `pending_emails` e `email_threads` só têm índices normais.
-- Consequência medida hoje: 300 impressões digitais repetidas em `inbound_email_events` e 16 `message_id` repetidos em `pending_emails` (106 pendentes em aberto).
-- Quando o `Message-ID` do e-mail falta, a impressão digital é gerada a partir de remetente + assunto + corpo — para cabeçalhos sem corpo isso dá o mesmo valor para e-mails diferentes com o mesmo assunto, o que é arriscado como chave única.
-
-O princípio-guia: **duplicado = mesma mensagem de e-mail**, nunca "mesmo cliente" ou "mesmo assunto". Assim nada de clientes legítimos é bloqueado.
+- A re-importação já existe, mas **só na página de ticket de e-mail** (`/emails/:id`): botão "Re-importar emails" que chama a ação `refetch_ticket` e depois descarrega cada anexo pela função `download-attachment`.
+- A página principal do ticket (`/tickets/:id`) **não tem** esse botão, apesar de já saber se o ticket tem thread de e-mail (`hasEmailThread`) e de já listar mensagens e anexos.
+- A ação `refetch_ticket` procura no IMAP todos os e-mails do `client_email` do ticket, adiciona mensagens em falta, atualiza a descrição quando está vazia e devolve a lista de anexos ainda não importados.
 
 ## O que fazer
 
-### 1. Chave forte na base de dados (a rede de segurança)
+### 1. Extrair a lógica para um sítio partilhado
 
-- Criar uma coluna calculada de deduplicação `dedupe_key` = `message_id` quando existe; caso contrário `email_fingerprint`.
-- Índice **único** em `inbound_email_events(dedupe_key)` apenas quando o `message_id` real existe (impressões digitais geradas ficam de fora do índice único, para não bloquear e-mails distintos por engano).
-- Índice único em `pending_emails(message_id)` quando não nulo e o estado ainda é `pending`.
-- Nas inserções passa a usar-se "inserir ou ignorar": se a chave já existe, o e-mail é marcado como duplicado em vez de rebentar a importação.
+Criar um hook `useTicketRefetch(ticketId, clientEmail)` que faz exatamente o que hoje está embutido na página de e-mail:
+1. chama `refetch_ticket` (mensagens + conteúdo + inventário de anexos);
+2. percorre os anexos em falta e descarrega cada um via `download-attachment`;
+3. devolve estado de progresso e um resumo do resultado.
 
-### 2. Deduplicação por conteúdo mais fiável (sem falsos positivos)
+A página de e-mail passa a usar o hook (mesmo comportamento, sem duplicação de código).
 
-- Alargar a janela em memória de 48h para 7 dias, mas passar a consultar `inbound_email_events` (que tem o histórico completo) em vez de só `email_threads` + `pending_emails`.
-- Quando não há `Message-ID`, exigir **duas** coincidências para considerar duplicado: mesmo remetente **e** mesmo corpo normalizado (sem citações), dentro de 7 dias. Só assunto igual nunca chega.
-- A comparação de conteúdo já existente ao anexar a um ticket aberto passa a comparar o corpo limpo completo (hash) em vez dos primeiros 200 caracteres, que hoje marca como duplicado respostas curtas legítimas do tipo "Obrigado, e agora?".
+### 2. Botão no ticket normal
 
-### 3. Proteção contra corridas na criação manual
+No cabeçalho de `/tickets/:id`, quando o ticket tem e-mail de cliente ou thread de e-mail, mostrar o botão **"Re-importar e-mails"** com ícone de refrescar.
 
-- No botão "Criar" da caixa de entrada, envolver a criação numa trava por evento (já existe o estado `processing`) e verificar a chave de deduplicação antes de inserir, para dois cliques rápidos não gerarem dois tickets.
+Durante a operação:
+- botão desativado com ícone a rodar e texto de progresso ("A verificar e-mails…", "A importar anexo 2 de 5…");
+- no fim, aviso com o resumo: mensagens adicionadas, anexos importados, anexos falhados, ou "nada de novo encontrado";
+- a página recarrega mensagens e anexos automaticamente.
 
-### 4. Visibilidade em vez de silêncio
+### 3. Validação do que foi recebido
 
-- Duplicados nunca são apagados: ficam com estado `duplicate` e a razão registada, e continuam visíveis num filtro "Duplicados" na caixa de entrada.
-- Se um duplicado for afinal legítimo, o agente pode forçar a criação a partir do detalhe do evento (ação "Criar mesmo assim"), que ignora a chave de deduplicação.
+Para o agente conseguir confirmar que recebeu tudo:
+- o resumo final aparece também como um cartão discreto por baixo do cabeçalho enquanto estiver na página (lista dos ficheiros importados nesta execução);
+- anexos que falharem são listados pelo nome com botão "Tentar novamente" individual;
+- registo do evento na timeline do ticket ("Re-importação de e-mail: X mensagens, Y anexos") para ficar histórico de quem validou e quando.
 
-### 5. Limpeza dos duplicados existentes
+### 4. Segurança e limites
 
-- Antes de aplicar os índices únicos, marcar as 300 impressões digitais repetidas mantendo o registo mais antigo de cada grupo e passando os restantes a `duplicate`; o mesmo para os 16 pendentes repetidos, preservando o que já tem ticket associado.
+- A ação continua a exigir agente autenticado (`agent_id`) e é lida do lado do servidor.
+- Mantêm-se os limites atuais: anexos até 10 MB por ficheiro e download individual para não exceder o tempo de CPU da função.
 
 ## Notas técnicas
 
-- Migração: coluna gerada `dedupe_key`, índices únicos parciais, limpeza prévia dos duplicados atuais.
-- `supabase/functions/fetch-inbound-emails/index.ts`: janela de dedupe a 7 dias sobre `inbound_email_events`, regra remetente+corpo, hash de corpo em vez de prefixo de 200 caracteres, inserção tolerante a conflito.
-- `supabase/functions/handle-inbound-email-event-action/index.ts`: verificação da chave + trava antes de criar; suporte a `force: true`.
-- `src/pages/InboundEmailEvents.tsx`: filtro "Duplicados" e ação "Criar mesmo assim".
+- Novo `src/hooks/useTicketRefetch.ts` com a sequência `fetch-inbound-emails` (`action: "refetch_ticket"`) → `download-attachment` por anexo, expondo `{ run, running, progress, lastResult }`.
+- `src/pages/TicketDetail.tsx`: botão no cabeçalho + cartão de resumo, condicionado a `ticket.client_email || hasEmailThread`; chamar `fetchData()` no fim.
+- `src/pages/EmailTicketDetail.tsx`: substituir `refetchEmails` local pelo hook.
+- Inserção de um `ticket_events` do tipo nota do sistema com o resumo da re-importação.
+- Sem alterações de base de dados nem nas Edge Functions existentes.
