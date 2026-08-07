@@ -31,6 +31,7 @@ interface PendingAttachment {
  */
 export function useTicketRefetch(ticketId?: string | null, clientEmail?: string | null) {
   const [running, setRunning] = useState(false);
+  const [pendingRef, setPendingRef] = useState<PendingAttachment[]>([]);
   const [progress, setProgress] = useState<string>("");
   const [lastResult, setLastResult] = useState<RefetchResult | null>(null);
 
@@ -157,8 +158,6 @@ export function useTicketRefetch(ticketId?: string | null, clientEmail?: string 
       setProgress("");
     }
   }, [ticketId, running, downloadOne]);
-
-  const [pendingRef, setPendingRef] = useState<PendingAttachment[]>([]);
 
   const retryByName = useCallback(
     async (filename: string) => {
