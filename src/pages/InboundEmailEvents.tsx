@@ -103,6 +103,7 @@ export default function InboundEmailEvents() {
   const [rows, setRows] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
+  const [spamView, setSpamView] = useState<"all" | SpamKind>("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<EventRow | null>(null);
   const [acting, setActing] = useState(false);
