@@ -292,6 +292,34 @@ export default function InboundEmailEvents() {
           </div>
         </div>
 
+        {/* Separador spam / legítimo */}
+        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+          <span className="text-xs text-muted-foreground mr-1">Classificação:</span>
+          {([
+            { key: "all", label: "Tudo", count: spamCounts.all },
+            { key: "clean", label: "Legítimos", count: spamCounts.clean },
+            { key: "suspect", label: "Suspeitos", count: spamCounts.suspect },
+            { key: "spam", label: "Spam", count: spamCounts.spam },
+          ] as const).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setSpamView(t.key)}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                spamView === t.key
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {t.key !== "all" && (
+                <span className={`h-1.5 w-1.5 rounded-full ${SPAM_META[t.key as SpamKind].dot}`} />
+              )}
+              {t.label}
+              <span className="opacity-70">{t.count}</span>
+            </button>
+          ))}
+        </div>
+
+
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
