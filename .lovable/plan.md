@@ -1,62 +1,45 @@
-## Objetivo
+# Bloquear duplicados sem travar a receção de clientes
 
-Quando chega um e-mail na Caixa de Entrada, em vez de criar sempre um ticket novo (ou pedir ao agente para escolher), o sistema deve:
+## Situação atual (verificada)
 
-1. Procurar tickets do **mesmo cliente** (match por `client_email`, case-insensitive).
-2. Se existir **≥ 1 ticket aberto** (não resolvido / não fechado) → **anexar** o e-mail a esse ticket.
-3. Se só existirem tickets **fechados/resolvidos** → criar **novo ticket de continuação** com `parent_ticket_id` = último ticket fechado mais recente.
-4. Se **não existir** nenhum ticket desse cliente → criar ticket normal.
+- A deduplicação é feita só em memória/aplicação: a função de importação carrega os `message_id` das últimas 48h de `email_threads` e `pending_emails` e compara com a impressão digital do e-mail.
+- Não existe **nenhuma restrição única** na base de dados: `inbound_email_events`, `pending_emails` e `email_threads` só têm índices normais.
+- Consequência medida hoje: 300 impressões digitais repetidas em `inbound_email_events` e 16 `message_id` repetidos em `pending_emails` (106 pendentes em aberto).
+- Quando o `Message-ID` do e-mail falta, a impressão digital é gerada a partir de remetente + assunto + corpo — para cabeçalhos sem corpo isso dá o mesmo valor para e-mails diferentes com o mesmo assunto, o que é arriscado como chave única.
 
-Aplica-se a:
-- **Roteamento automático** dos e-mails novos (sem clique do agente).
-- **Botão "Criar" manual** da Caixa de Entrada (mesmo fluxo, mas sempre sob clique do agente).
+O princípio-guia: **duplicado = mesma mensagem de e-mail**, nunca "mesmo cliente" ou "mesmo assunto". Assim nada de clientes legítimos é bloqueado.
 
-## Comportamento detalhado
+## O que fazer
 
-**Múltiplos tickets abertos:**
-- Escolher o ticket aberto com `updated_at` mais recente.
-- Registar evento na timeline desse ticket: "E-mail anexado automaticamente (auto-routing)" com link ao `inbound_email_event_id`.
+### 1. Chave forte na base de dados (a rede de segurança)
 
-**Ticket aberto encontrado → anexar:**
-- Cria `ticket_messages` (sender_type=client) com o corpo do e-mail.
-- Marca o `inbound_email_events` como `processed` + `routing_action='auto_appended_to_open_ticket'` + `routed_ticket_id`.
-- Marca `pending_emails` como `approved` (se aplicável).
-- NÃO altera o estado do ticket — apenas adiciona mensagem; os triggers existentes tratam de SLA/notificações.
+- Criar uma coluna calculada de deduplicação `dedupe_key` = `message_id` quando existe; caso contrário `email_fingerprint`.
+- Índice **único** em `inbound_email_events(dedupe_key)` apenas quando o `message_id` real existe (impressões digitais geradas ficam de fora do índice único, para não bloquear e-mails distintos por engano).
+- Índice único em `pending_emails(message_id)` quando não nulo e o estado ainda é `pending`.
+- Nas inserções passa a usar-se "inserir ou ignorar": se a chave já existe, o e-mail é marcado como duplicado em vez de rebentar a importação.
 
-**Só fechado/resolvido → novo ticket de continuação:**
-- Cria ticket novo com `parent_ticket_id` = ticket fechado mais recente, `status='novo'`, `priority='P2'`.
-- Copia `client_name`, `client_email`, `email_received_at`.
-- Mantém extração conservadora de `order_number` (lógica já existente).
-- Marca evento como `processed` + `routing_action='auto_created_continuation'`.
+### 2. Deduplicação por conteúdo mais fiável (sem falsos positivos)
 
-**Sem tickets do cliente → novo ticket normal** (comportamento atual).
+- Alargar a janela em memória de 48h para 7 dias, mas passar a consultar `inbound_email_events` (que tem o histórico completo) em vez de só `email_threads` + `pending_emails`.
+- Quando não há `Message-ID`, exigir **duas** coincidências para considerar duplicado: mesmo remetente **e** mesmo corpo normalizado (sem citações), dentro de 7 dias. Só assunto igual nunca chega.
+- A comparação de conteúdo já existente ao anexar a um ticket aberto passa a comparar o corpo limpo completo (hash) em vez dos primeiros 200 caracteres, que hoje marca como duplicado respostas curtas legítimas do tipo "Obrigado, e agora?".
 
-**Sempre que houver hesitação (ex: 2+ abertos com mesmo email mas categorias diferentes):**
-- Para o **roteamento automático**: anexar ao mais recente (regra simples e previsível).
-- Para o **botão manual**: mostrar diálogo de escolha já existente (`suggest-open-ticket-for-inbound-email`) — recomendação passa a ser `auto_append_safe` se houver 1 aberto, ou `manual_select` se 2+.
+### 3. Proteção contra corridas na criação manual
 
-## Implementação técnica
+- No botão "Criar" da caixa de entrada, envolver a criação numa trava por evento (já existe o estado `processing`) e verificar a chave de deduplicação antes de inserir, para dois cliques rápidos não gerarem dois tickets.
 
-**1. Edge function `inbound-email` (roteamento automático)**
-- Após criar o `inbound_email_events`, antes de criar o ticket, consultar tickets do `from_address` com join a `ticket_statuses` (excluir `is_closed=true` e `is_resolved=true`).
-- Decidir: anexar | continuação | novo. Inserir `ticket_messages` ou `tickets` em conformidade.
-- Atualizar `inbound_email_events.routing_action`, `routed_ticket_id`, `routing_reason`.
+### 4. Visibilidade em vez de silêncio
 
-**2. Edge function `handle-inbound-email-event-action` (botão Criar manual)**
-- No início da ação `create_ticket`: chamar a mesma lógica de lookup.
-- Se encontrar ticket aberto → fazer `append_to_ticket` automaticamente (em vez de criar) e devolver `{action_taken:'appended', ticket_id, ticket_number}`.
-- Se só fechados → criar com `parent_ticket_id` preenchido e `routing_action='manual_created_continuation'`.
-- Se nenhum → comportamento atual.
+- Duplicados nunca são apagados: ficam com estado `duplicate` e a razão registada, e continuam visíveis num filtro "Duplicados" na caixa de entrada.
+- Se um duplicado for afinal legítimo, o agente pode forçar a criação a partir do detalhe do evento (ação "Criar mesmo assim"), que ignora a chave de deduplicação.
 
-**3. Frontend `InboundEmailEvents.tsx`**
-- Após `runActionOn(..., 'create_ticket')`, ler `action_taken` da resposta e ajustar toast:
-  - `appended` → "E-mail anexado ao ticket aberto #N do cliente".
-  - `continuation` → "Novo ticket de continuação #N criado (anterior #M fechado)".
-  - `new` → "Ticket #N criado".
+### 5. Limpeza dos duplicados existentes
 
-**4. Sem alterações de schema** — usamos `parent_ticket_id`, `routed_ticket_id`, `routing_action` que já existem.
+- Antes de aplicar os índices únicos, marcar as 300 impressões digitais repetidas mantendo o registo mais antigo de cada grupo e passando os restantes a `duplicate`; o mesmo para os 16 pendentes repetidos, preservando o que já tem ticket associado.
 
-## Fora de escopo
-- Match por número de encomenda (foi rejeitado nas respostas).
-- Reabertura de tickets fechados (foi rejeitado — sempre continuação).
-- Quick Ticket de chamadas (não pedido).
+## Notas técnicas
+
+- Migração: coluna gerada `dedupe_key`, índices únicos parciais, limpeza prévia dos duplicados atuais.
+- `supabase/functions/fetch-inbound-emails/index.ts`: janela de dedupe a 7 dias sobre `inbound_email_events`, regra remetente+corpo, hash de corpo em vez de prefixo de 200 caracteres, inserção tolerante a conflito.
+- `supabase/functions/handle-inbound-email-event-action/index.ts`: verificação da chave + trava antes de criar; suporte a `force: true`.
+- `src/pages/InboundEmailEvents.tsx`: filtro "Duplicados" e ação "Criar mesmo assim".
