@@ -330,13 +330,11 @@ export default function InboundEmailEvents() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Recebido</TableHead>
-                <TableHead>Remetente</TableHead>
-                <TableHead className="hidden lg:table-cell">Assunto</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden md:table-cell">Spam</TableHead>
-                <TableHead className="hidden xl:table-cell">Ação</TableHead>
-                <TableHead className="text-right sticky right-0 bg-card">Ticket</TableHead>
+                <TableHead className="w-[42%]">E-mail</TableHead>
+                <TableHead className="w-[130px]">Classificação</TableHead>
+                <TableHead className="w-[120px]">Estado</TableHead>
+                <TableHead className="w-[110px] hidden sm:table-cell">Recebido</TableHead>
+                <TableHead className="w-[100px] text-right sticky right-0 bg-card">Ticket</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -344,27 +342,31 @@ export default function InboundEmailEvents() {
                 const badge = STATUS_BADGES[r.status] || { label: r.status, variant: "outline" as const };
                 const TERMINAL_ROW = ["processed", "duplicate", "spam", "ignored", "reviewed"];
                 const canCreate = !r.routed_ticket_id && !TERMINAL_ROW.includes(r.status);
+                const kind = spamKind(r);
                 return (
-                  <TableRow key={r.id} className="cursor-pointer" onClick={() => setSelected(r)}>
-                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(r.received_at), { addSuffix: true, locale: pt })}
-                    </TableCell>
+                  <TableRow
+                    key={r.id}
+                    className={`cursor-pointer ${kind === "spam" ? "bg-destructive/5" : kind === "suspect" ? "bg-amber-500/5" : ""}`}
+                    onClick={() => setSelected(r)}
+                  >
                     <TableCell className="text-sm">
-                      <div className="font-medium">{r.from_name || r.from_address}</div>
-                      {r.from_name && <div className="text-xs text-muted-foreground">{r.from_address}</div>}
-                      <div className="text-xs text-muted-foreground lg:hidden truncate max-w-[180px]">{r.subject || "—"}</div>
-                    </TableCell>
-                    <TableCell className="text-sm max-w-[280px] truncate hidden lg:table-cell">{r.subject || "—"}</TableCell>
-                    <TableCell><Badge variant={badge.variant}>{badge.label}</Badge></TableCell>
-                    <TableCell className="text-xs hidden md:table-cell">
-                      <span className={spamLabel(r.spam_score).cls}>
-                        {spamLabel(r.spam_score).label}
-                      </span>
-                      <div className="text-[10px] text-muted-foreground mt-0.5">
-                        score {r.spam_score}
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${SPAM_META[kind].dot}`} />
+                        <span className="font-medium truncate max-w-[240px]">{r.from_name || r.from_address}</span>
+                      </div>
+                      <div className="pl-4 text-xs text-muted-foreground truncate max-w-[420px]">
+                        {r.subject || "(sem assunto)"}
+                      </div>
+                      <div className="pl-4 text-[11px] text-muted-foreground/70 truncate max-w-[420px]">
+                        {r.from_address}
+                        <span className="sm:hidden"> · {formatDistanceToNow(new Date(r.received_at), { addSuffix: true, locale: pt })}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground hidden xl:table-cell">{r.routing_action || "—"}</TableCell>
+                    <TableCell><SpamFlag row={r} /></TableCell>
+                    <TableCell><Badge variant={badge.variant}>{badge.label}</Badge></TableCell>
+                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground hidden sm:table-cell">
+                      {formatDistanceToNow(new Date(r.received_at), { addSuffix: true, locale: pt })}
+                    </TableCell>
                     <TableCell className="text-right sticky right-0 bg-card">
                       {r.routed_ticket_id ? (
                         <Link to={`/tickets/${r.routed_ticket_id}`} onClick={(e) => e.stopPropagation()} className="text-primary hover:underline text-xs inline-flex items-center gap-1">
