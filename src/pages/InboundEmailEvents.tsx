@@ -542,7 +542,7 @@ function ActionToolbar({
 
   return (
     <div className="flex flex-wrap gap-2">
-      {(isPending || isQuarantined) && (
+      {(isPending || isQuarantined || isFailed || !event.routed_ticket_id) && (
         <>
           <Button size="sm" onClick={onCreate} disabled={acting}>
             <Plus className="h-4 w-4" /> {isQuarantined ? "Aprovar e criar ticket" : "Criar ticket"}
