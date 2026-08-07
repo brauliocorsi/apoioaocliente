@@ -258,16 +258,18 @@ export default function InboundEmailEvents() {
               <TableRow>
                 <TableHead>Recebido</TableHead>
                 <TableHead>Remetente</TableHead>
-                <TableHead>Assunto</TableHead>
+                <TableHead className="hidden lg:table-cell">Assunto</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Spam</TableHead>
-                <TableHead>Ação</TableHead>
-                <TableHead>Ticket</TableHead>
+                <TableHead className="hidden md:table-cell">Spam</TableHead>
+                <TableHead className="hidden xl:table-cell">Ação</TableHead>
+                <TableHead className="text-right sticky right-0 bg-card">Ticket</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.map((r) => {
                 const badge = STATUS_BADGES[r.status] || { label: r.status, variant: "outline" as const };
+                const TERMINAL_ROW = ["processed", "duplicate", "spam", "ignored", "reviewed"];
+                const canCreate = !r.routed_ticket_id && !TERMINAL_ROW.includes(r.status);
                 return (
                   <TableRow key={r.id} className="cursor-pointer" onClick={() => setSelected(r)}>
                     <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
@@ -276,10 +278,11 @@ export default function InboundEmailEvents() {
                     <TableCell className="text-sm">
                       <div className="font-medium">{r.from_name || r.from_address}</div>
                       {r.from_name && <div className="text-xs text-muted-foreground">{r.from_address}</div>}
+                      <div className="text-xs text-muted-foreground lg:hidden truncate max-w-[180px]">{r.subject || "—"}</div>
                     </TableCell>
-                    <TableCell className="text-sm max-w-[280px] truncate">{r.subject || "—"}</TableCell>
+                    <TableCell className="text-sm max-w-[280px] truncate hidden lg:table-cell">{r.subject || "—"}</TableCell>
                     <TableCell><Badge variant={badge.variant}>{badge.label}</Badge></TableCell>
-                    <TableCell className="text-xs">
+                    <TableCell className="text-xs hidden md:table-cell">
                       <span className={spamLabel(r.spam_score).cls}>
                         {spamLabel(r.spam_score).label}
                       </span>
@@ -287,16 +290,15 @@ export default function InboundEmailEvents() {
                         score {r.spam_score}
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{r.routing_action || "—"}</TableCell>
-                    <TableCell>
+                    <TableCell className="text-xs text-muted-foreground hidden xl:table-cell">{r.routing_action || "—"}</TableCell>
+                    <TableCell className="text-right sticky right-0 bg-card">
                       {r.routed_ticket_id ? (
                         <Link to={`/tickets/${r.routed_ticket_id}`} onClick={(e) => e.stopPropagation()} className="text-primary hover:underline text-xs inline-flex items-center gap-1">
                           Abrir <ExternalLink className="h-3 w-3" />
                         </Link>
-                      ) : (r.status === "pending_review" || r.status === "quarantined") ? (
+                      ) : canCreate ? (
                         <Button
                           size="sm"
-                          variant="outline"
                           className="h-7 px-2 text-xs"
                           disabled={acting}
                           onClick={(e) => { e.stopPropagation(); runActionOn(r.id, "create_ticket"); }}
@@ -307,6 +309,7 @@ export default function InboundEmailEvents() {
                     </TableCell>
                   </TableRow>
                 );
+
               })}
             </TableBody>
           </Table>
