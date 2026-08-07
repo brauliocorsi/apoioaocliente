@@ -302,6 +302,17 @@ export default function EmailTicketDetail() {
         )}
       </div>
 
+      {refetchResult && (
+        <RefetchSummaryCard
+          result={refetchResult}
+          busy={refetching}
+          onRetry={async (f) => { await retryAttachment(f); fetchData(); }}
+          onClose={clearRefetch}
+        />
+      )}
+
+
+
       {bgAttachments > 0 && (
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary animate-pulse">
           <Loader2 className="h-4 w-4 animate-spin" />
