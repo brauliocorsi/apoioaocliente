@@ -56,10 +56,47 @@ const STATUS_BADGES: Record<string, { label: string; variant: "default" | "secon
   reviewed: { label: "Revisto", variant: "outline" },
 };
 
+type SpamKind = "spam" | "suspect" | "clean";
+
+function spamKind(r: { spam_score: number; status: string }): SpamKind {
+  if (r.status === "spam" || r.status === "quarantined" || r.spam_score >= 80) return "spam";
+  if (r.spam_score >= 40) return "suspect";
+  return "clean";
+}
+
+const SPAM_META: Record<SpamKind, { label: string; cls: string; dot: string }> = {
+  spam: {
+    label: "Spam",
+    cls: "border-destructive/40 bg-destructive/10 text-destructive",
+    dot: "bg-destructive",
+  },
+  suspect: {
+    label: "Suspeito",
+    cls: "border-amber-500/40 bg-amber-500/10 text-amber-600",
+    dot: "bg-amber-500",
+  },
+  clean: {
+    label: "Legítimo",
+    cls: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600",
+    dot: "bg-emerald-500",
+  },
+};
+
+function SpamFlag({ row, showScore = true }: { row: { spam_score: number; status: string }; showScore?: boolean }) {
+  const kind = spamKind(row);
+  const meta = SPAM_META[kind];
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.cls}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+      {meta.label}
+      {showScore && <span className="opacity-60">· {row.spam_score}</span>}
+    </span>
+  );
+}
+
 function spamLabel(score: number): { label: string; cls: string } {
-  if (score >= 80) return { label: "Provável spam", cls: "text-destructive font-semibold" };
-  if (score >= 40) return { label: "Suspeito", cls: "text-amber-600 font-medium" };
-  return { label: "Legítimo", cls: "text-emerald-600 font-medium" };
+  const kind = spamKind({ spam_score: score, status: "" });
+  return { label: SPAM_META[kind].label, cls: SPAM_META[kind].cls };
 }
 
 export default function InboundEmailEvents() {
