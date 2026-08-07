@@ -159,16 +159,24 @@ export default function InboundEmailEvents() {
     return () => { cancelled = true; };
   }, [selected?.id, selected?.status]);
 
+  const spamCounts = useMemo(() => {
+    const c = { all: rows.length, clean: 0, suspect: 0, spam: 0 };
+    rows.forEach((r) => { c[spamKind(r)]++; });
+    return c;
+  }, [rows]);
+
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
-    if (!s) return rows;
-    return rows.filter(
-      (r) =>
+    return rows.filter((r) => {
+      if (spamView !== "all" && spamKind(r) !== spamView) return false;
+      if (!s) return true;
+      return (
         r.from_address?.toLowerCase().includes(s) ||
         r.subject?.toLowerCase().includes(s) ||
-        r.routed_ticket_id?.toLowerCase().includes(s),
-    );
-  }, [rows, search]);
+        r.routed_ticket_id?.toLowerCase().includes(s)
+      );
+    });
+  }, [rows, search, spamView]);
 
   async function runActionOn(eventId: string, action: string, extra: Record<string, unknown> = {}) {
     setActing(true);
