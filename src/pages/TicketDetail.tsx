@@ -732,6 +732,16 @@ export default function TicketDetail() {
         </div>
       </div>
 
+      {refetchResult && (
+        <RefetchSummaryCard
+          result={refetchResult}
+          busy={refetching}
+          onRetry={async (f) => { await retryAttachment(f); await fetchTicket(); }}
+          onClose={clearRefetch}
+        />
+      )}
+
+
       {suggestions.length > 0 && (
         <Card className="border-warning/50 bg-warning/5">
           <CardHeader className="pb-2">
