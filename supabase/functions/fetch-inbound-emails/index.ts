@@ -1778,63 +1778,38 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
         }
 
         // No open ticket but the sender has a closed/resolved one →
-        // create a NEW ticket linked to the closed parent (bug fix:
-        // never append client emails into closed tickets).
+        // NÃO cria ticket de continuação automaticamente: envia para Pendentes
+        // para o agente decidir (o botão "Criar" cria a continuação ligada ao pai).
         if (!ticketId && closedParentId) {
           const htmlPreviewC = msg.bodyHtml ? msg.bodyHtml.substring(0, 20000) : "";
-          const htmlFullC = htmlPreviewC ? sanitizeHtml(htmlPreviewC).substring(0, 10000) : "";
-          const textFullC = (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
-          const stripTags = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-          const hasHtmlC = !!htmlFullC && stripTags(htmlFullC).length > 0;
-          const childDescription = hasHtmlC ? htmlFullC : textFullC;
+          const pendingInsertC: any = {
+            from_address: clientEmail.toLowerCase(),
+            from_name: clientName,
+            subject: (msg.subject || "(sem assunto)").substring(0, 500),
+            body_text: (msg.bodyText || "").substring(0, 5000),
+            body_html: htmlPreviewC ? sanitizeHtml(htmlPreviewC).substring(0, 10000) : "",
+            message_id: emailFingerprint,
+            status: "pending",
+          };
+          if (msg.date) pendingInsertC.created_at = msg.date;
+          const { data: pendingEmailC } = await adminClient
+            .from("pending_emails")
+            .insert(pendingInsertC)
+            .select("id")
+            .single();
 
-          const child = await createChildTicketFromClosed(
-            adminClient,
-            closedParentId,
-            {
-              subject: msg.subject || "Sem assunto",
-              description: childDescription,
-              clientName,
-              clientEmail,
-              receivedAt: msg.date ? new Date(msg.date).toISOString() : undefined,
-            },
-            createdBy!,
-          );
-
-          if (child) {
-            // Fresh email thread for the new ticket so future replies stay here
-            await adminClient.from("email_threads").insert({
-              ticket_id: child.id,
-              email_address: clientEmail.toLowerCase(),
-              last_message_id: emailFingerprint,
-            });
-
-            if (msg.attachments.length > 0) {
-              for (const att of msg.attachments) {
-                try {
-                  await uploadAttachment(adminClient, child.id, att, createdBy!);
-                } catch (err) {
-                  console.error(`Attachment error: ${(err as Error).message}`);
-                }
-              }
-            }
-            await fetchAttachmentsParts(imap, adminClient, seqNum, child.id, createdBy!);
-
-            await fireTicketCreatedConfirmation(child.id, "email_closed_continuation");
-
-            await updateInboundEvent(adminClient, eventId, {
-              status: "processed",
-              routing_action: "created_child_ticket_from_closed",
-              routed_ticket_id: child.id,
-              parent_ticket_id: closedParentId,
-              routing_reason: "ticket fechado/resolvido",
-              processed_at: new Date().toISOString(),
-            });
-            created++;
-            await imap.markAsSeen(seqNum);
-            newEmailProcessed = true;
-            break;
-          }
+          await updateInboundEvent(adminClient, eventId, {
+            status: "pending_review",
+            routing_action: "pending_review",
+            parent_ticket_id: closedParentId,
+            routing_reason: "Ticket anterior fechado/resolvido — aguarda decisão do agente",
+            pending_email_id: pendingEmailC?.id ?? null,
+            processed_at: new Date().toISOString(),
+          });
+          pending++;
+          await imap.markAsSeen(seqNum);
+          newEmailProcessed = true;
+          break;
         }
 
         if (ticketId) {
@@ -1929,49 +1904,30 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
             break;
         }
 
-        // Unknown sender, no open/closed ticket → AUTO-CREATE a new ticket directly.
-        const htmlPreviewN = msg.bodyHtml ? msg.bodyHtml.substring(0, 20000) : "";
-        const htmlFullN = htmlPreviewN ? sanitizeHtml(htmlPreviewN).substring(0, 10000) : "";
-        const textFullN = (msg.bodyText || "(email sem conteúdo)").substring(0, 5000);
-        const stripTagsN = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-        const hasHtmlN = !!htmlFullN && stripTagsN(htmlFullN).length > 0;
-        const newDescription = hasHtmlN ? htmlFullN : textFullN;
-
-        const newTicketInsert: Record<string, unknown> = {
-          client_name: clientName || clientEmail,
-          client_email: clientEmail.toLowerCase(),
-          subject: (msg.subject || "(sem assunto)").substring(0, 200),
-          description: newDescription,
-          priority: "P2",
-          status: "novo",
-          created_by: createdBy!,
-        };
-        if (msg.date) newTicketInsert.email_received_at = new Date(msg.date).toISOString();
-
-        const { data: createdTicket, error: createTicketErr } = await adminClient
-          .from("tickets")
-          .insert(newTicketInsert)
-          .select("id, ticket_number")
-          .single();
-
-        if (createTicketErr || !createdTicket) {
-          // Safety net: fall back to pending_review if auto-create failed.
+        // Unknown sender, no open/closed ticket → NUNCA criar ticket automaticamente.
+        // Vai para a caixa de entrada (Pendentes) para revisão manual do agente.
+        {
           const pendingHtmlPreview = msg.bodyHtml ? msg.bodyHtml.substring(0, 20000) : "";
           const pendingInsert: any = {
             from_address: clientEmail.toLowerCase(),
             from_name: clientName,
-            subject: msg.subject.substring(0, 500),
+            subject: (msg.subject || "(sem assunto)").substring(0, 500),
             body_text: (msg.bodyText || "").substring(0, 5000),
             body_html: pendingHtmlPreview ? sanitizeHtml(pendingHtmlPreview).substring(0, 10000) : "",
             message_id: emailFingerprint,
             status: "pending",
           };
           if (msg.date) pendingInsert.created_at = msg.date;
-          const { data: pendingEmail } = await adminClient.from("pending_emails").insert(pendingInsert).select("id").single();
+          const { data: pendingEmail } = await adminClient
+            .from("pending_emails")
+            .insert(pendingInsert)
+            .select("id")
+            .single();
+
           await updateInboundEvent(adminClient, eventId, {
             status: "pending_review",
             routing_action: "pending_review",
-            routing_reason: `auto-create falhou: ${createTicketErr?.message || "erro"}`,
+            routing_reason: "Remetente sem tickets existentes — aguarda decisão do agente",
             pending_email_id: pendingEmail?.id ?? null,
             processed_at: new Date().toISOString(),
           });
@@ -1980,37 +1936,6 @@ async function processEmails(params: { fetchRecent: boolean; maxEmails: number; 
           newEmailProcessed = true;
           break;
         }
-
-        await adminClient.from("email_threads").insert({
-          ticket_id: createdTicket.id,
-          email_address: clientEmail.toLowerCase(),
-          last_message_id: emailFingerprint,
-        });
-
-        if (msg.attachments.length > 0) {
-          for (const att of msg.attachments) {
-            try {
-              await uploadAttachment(adminClient, createdTicket.id, att, createdBy!);
-            } catch (err) {
-              console.error(`Attachment error: ${(err as Error).message}`);
-            }
-          }
-        }
-        await fetchAttachmentsParts(imap, adminClient, seqNum, createdTicket.id, createdBy!);
-
-        await fireTicketCreatedConfirmation(createdTicket.id, "email");
-
-        await updateInboundEvent(adminClient, eventId, {
-          status: "processed",
-          routing_action: "auto_created_ticket",
-          routed_ticket_id: createdTicket.id,
-          routing_reason: "Auto-criado (remetente sem tickets existentes)",
-          processed_at: new Date().toISOString(),
-        });
-        created++;
-        await imap.markAsSeen(seqNum);
-        newEmailProcessed = true;
-        break;
 
         pending++;
         await imap.markAsSeen(seqNum);
