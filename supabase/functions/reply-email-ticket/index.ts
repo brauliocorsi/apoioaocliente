@@ -334,7 +334,7 @@ Deno.serve(async (req) => {
         .eq("id", ticket_id);
     }
 
-    if (deliveryStatus !== "delivered" && deliveryStatus !== "accepted") {
+    if (!okStatuses.includes(deliveryStatus)) {
       return new Response(JSON.stringify({ 
         error: `Email não enviado: ${deliveryDetails}`,
         delivery_status: deliveryStatus,
