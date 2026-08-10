@@ -225,7 +225,7 @@ export default function TicketDetail() {
         supabase.from("email_threads").select("id").eq("ticket_id", id).limit(1).maybeSingle(),
         supabase.from("email_logs").select("id, created_at, delivery_status, delivery_details, error_message, subject")
           .eq("ticket_id", id)
-          .eq("status", "failed")
+          .or("status.eq.failed,delivery_status.in.(failed,bounced,complained)")
           .order("created_at", { ascending: false })
           .limit(5),
       ]);
@@ -1093,7 +1093,7 @@ export default function TicketDetail() {
                                   .from("email_logs")
                                   .select("id, created_at, delivery_status, delivery_details, error_message, subject")
                                   .eq("ticket_id", id)
-                                  .eq("status", "failed")
+                                  .or("status.eq.failed,delivery_status.in.(failed,bounced,complained)")
                                   .order("created_at", { ascending: false })
                                   .limit(5);
                                 setFailedEmails(updatedLogs || []);
