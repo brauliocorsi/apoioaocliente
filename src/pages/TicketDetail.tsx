@@ -1054,10 +1054,11 @@ export default function TicketDetail() {
                     <AlertDescription className="text-xs">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <strong>Falha no envio de email!</strong>
+                          <strong>Problema na entrega do e-mail!</strong>
                           {failedEmails.slice(0, 3).map((fe) => (
-                            <div key={fe.id} className="mt-1 opacity-90">
-                              • {fe.delivery_details || fe.error_message || "Erro desconhecido"}{" "}
+                            <div key={fe.id} className="mt-1 opacity-90 flex flex-wrap items-center gap-1.5">
+                              <EmailDeliveryBadge status={fe.delivery_status} detail={fe.error_message} />
+                              <span>{fe.error_message || fe.delivery_details || "Erro desconhecido"}</span>
                               <span className="opacity-60">({new Date(fe.created_at).toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })})</span>
                             </div>
                           ))}
