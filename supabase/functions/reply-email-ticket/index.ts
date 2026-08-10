@@ -304,16 +304,21 @@ Deno.serve(async (req) => {
       }
     }
 
+    const okStatuses = ["delivered", "accepted", "sent"];
     await adminClient.from("email_logs").insert({
       recipient: clientEmail,
       subject,
-      status: deliveryStatus === "delivered" || deliveryStatus === "accepted" ? "sent" : "failed",
+      status: okStatuses.includes(deliveryStatus) ? "sent" : "failed",
       error_message: sendError,
       source: "reply-email-ticket",
       ticket_id,
       delivery_status: deliveryStatus,
       delivery_details: deliveryDetails,
       smtp_response: smtpResponse,
+      provider: useResend ? "resend" : "smtp",
+      provider_message_id: providerMessageId,
+      last_event_at: new Date().toISOString(),
+      events: [{ type: useResend ? "resend.accepted" : "smtp.accepted", at: new Date().toISOString(), detail: deliveryDetails }],
     });
 
     // Update first_responded_at if not set
