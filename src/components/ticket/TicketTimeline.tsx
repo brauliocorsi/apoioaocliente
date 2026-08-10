@@ -6,6 +6,7 @@ import {
   MessageSquare, User, Bot, Mail, MailX, Paperclip, Activity,
   GitBranch, AlertTriangle, Inbox, Loader2, Phone, PhoneMissed,
 } from "lucide-react";
+import { EmailDeliveryBadge, isDeliveryProblem } from "./EmailDeliveryBadge";
 
 /**
  * Unified, read-only ticket timeline.
