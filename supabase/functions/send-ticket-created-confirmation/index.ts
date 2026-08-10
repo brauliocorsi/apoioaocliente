@@ -266,9 +266,12 @@ Deno.serve(async (req) => {
     const { text, html, subject } = buildEmail(ticket.ticket_number, toName, ticket.subject);
 
     try {
+    let providerMessageId: string | null = null;
+    try {
       if (useResend) {
         const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.resend_from_email || cfg.smtp_from_email || "noreply@upmoveis.pt"}>`;
-        await sendViaResend(fromAddr, toEmail, subject, text, html);
+        const result = await sendViaResend(fromAddr, toEmail, subject, text, html);
+        providerMessageId = result?.id ?? null;
       } else if (cfg.smtp_host && cfg.smtp_user && cfg.smtp_pass) {
         await sendViaSmtp(cfg, toEmail, subject, text, html);
       } else {
@@ -278,7 +281,11 @@ Deno.serve(async (req) => {
       await adminClient.from("email_logs").insert({
         recipient: toEmail, subject, status: "sent",
         source: "ticket_created_confirmation", ticket_id: ticketId,
+        delivery_status: useResend ? "sent" : "accepted",
         delivery_details: `caller:${callerKind}:src:${source}:${useResend ? "resend" : "smtp"}`,
+        provider: useResend ? "resend" : "smtp",
+        provider_message_id: providerMessageId,
+        last_event_at: new Date().toISOString(),
       });
       return jsonResponse({ success: true, status: "sent" });
     } catch (sendErr) {
@@ -287,6 +294,8 @@ Deno.serve(async (req) => {
         recipient: toEmail, subject, status: "failed",
         error_message: msg, source: "ticket_created_confirmation",
         ticket_id: ticketId, delivery_details: `caller:${callerKind}:src:${source}`,
+        delivery_status: "failed", provider: useResend ? "resend" : "smtp",
+        last_event_at: new Date().toISOString(),
       });
       // never throw — caller's ticket creation must not be affected
       return jsonResponse({ success: false, status: "failed", message: msg });
