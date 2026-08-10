@@ -190,20 +190,28 @@ Deno.serve(async (req) => {
     const htmlEmail = wrapEmailHtml(body);
 
     try {
+    let providerMessageId: string | null = null;
+    try {
       if (useResend) {
         const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.resend_from_email || cfg.smtp_from_email || "noreply@upmoveis.pt"}>`;
-        await sendViaResend(fromAddr, clientEmail, subject, plainText, htmlEmail);
+        const result = await sendViaResend(fromAddr, clientEmail, subject, plainText, htmlEmail);
+        providerMessageId = result?.id ?? null;
       } else {
         await sendViaSmtp(cfg, clientEmail, subject, plainText, htmlEmail);
       }
       await adminClient.from("email_logs").insert({
         recipient: clientEmail, subject, status: "sent", source: "send-ticket-email", ticket_id, template_id,
         smtp_response: useResend ? "Resend API" : `SMTP ${cfg.smtp_host}`,
-        delivery_details: useResend ? "Enviado via Resend API" : `Enviado via SMTP (${cfg.smtp_host})`,
+        delivery_status: useResend ? "sent" : "accepted",
+        delivery_details: useResend ? "Aceite pelo Resend — a aguardar confirmação de entrega" : `Aceite pelo servidor SMTP (${cfg.smtp_host})`,
+        provider: useResend ? "resend" : "smtp",
+        provider_message_id: providerMessageId,
+        last_event_at: new Date().toISOString(),
       });
     } catch (sendErr) {
       await adminClient.from("email_logs").insert({
         recipient: clientEmail, subject, status: "failed", error_message: (sendErr as Error).message, source: "send-ticket-email", ticket_id, template_id,
+        delivery_status: "failed", provider: useResend ? "resend" : "smtp", last_event_at: new Date().toISOString(),
       });
       throw sendErr;
     }
