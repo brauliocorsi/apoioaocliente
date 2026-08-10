@@ -189,7 +189,6 @@ Deno.serve(async (req) => {
     const plainText = stripHtmlToText(body);
     const htmlEmail = wrapEmailHtml(body);
 
-    try {
     let providerMessageId: string | null = null;
     try {
       if (useResend) {
