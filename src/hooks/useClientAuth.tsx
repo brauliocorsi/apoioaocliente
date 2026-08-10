@@ -74,14 +74,14 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
       password,
       options: {
         emailRedirectTo: window.location.origin + "/portal/tickets",
-        data: { full_name: fullName },
+        data: { full_name: fullName, phone: phone || null, account_type: "client" },
       },
     });
     if (error) return { error: error as Error };
 
-    // Create client_users entry and role
+    // Garantir dados do cliente (o registo base é criado pelo backend)
     if (data.user) {
-      await supabase.from("client_users").insert({
+      await supabase.from("client_users").upsert({
         id: data.user.id,
         email,
         full_name: fullName,

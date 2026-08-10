@@ -150,7 +150,7 @@ Deno.serve(async (req) => {
     } else {
       password = generatePassword();
       const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
-        email, password, email_confirm: true, user_metadata: { full_name },
+        email, password, email_confirm: true, user_metadata: { full_name, phone: phone || null, account_type: "client" },
       });
       if (createError) {
         return new Response(JSON.stringify({ error: createError.message }), {
@@ -160,7 +160,8 @@ Deno.serve(async (req) => {
       }
       userId = newUser.user!.id;
       await adminClient.from("user_roles").update({ role: "client" }).eq("user_id", userId);
-      await adminClient.from("client_users").insert({ id: userId, email, full_name, phone: phone || null });
+      await adminClient.from("profiles").delete().eq("id", userId);
+      await adminClient.from("client_users").upsert({ id: userId, email, full_name, phone: phone || null });
     }
 
     if (ticket_id) {
