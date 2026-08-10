@@ -265,7 +265,6 @@ Deno.serve(async (req) => {
     const useResend = cfg.resend_enabled === "true";
     const { text, html, subject } = buildEmail(ticket.ticket_number, toName, ticket.subject);
 
-    try {
     let providerMessageId: string | null = null;
     try {
       if (useResend) {
