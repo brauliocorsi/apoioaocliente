@@ -209,13 +209,16 @@ Deno.serve(async (req) => {
     let deliveryDetails: string | null = null;
     let smtpResponse: string | null = null;
     let sendError: string | null = null;
+    let providerMessageId: string | null = null;
 
     try {
       if (useResend) {
         const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.resend_from_email || cfg.smtp_from_email || "noreply@upmoveis.pt"}>`;
         const result = await sendViaResend(fromAddr, clientEmail, subject, plainText, htmlBody, downloadedAttachments);
-        deliveryStatus = "delivered";
-        deliveryDetails = "Enviado via Resend API";
+        providerMessageId = (result as { id?: string })?.id ?? null;
+        // Resend só confirma aceitação neste momento; a entrega real chega via webhook.
+        deliveryStatus = "sent";
+        deliveryDetails = "Aceite pelo Resend — a aguardar confirmação de entrega";
         smtpResponse = JSON.stringify(result);
       } else {
         const port = Number(cfg.smtp_port) || 465;
