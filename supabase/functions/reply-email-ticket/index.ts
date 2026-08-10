@@ -255,8 +255,8 @@ Deno.serve(async (req) => {
         if (sendResult) {
           smtpResponse = typeof sendResult === "string" ? sendResult : JSON.stringify(sendResult);
         }
-        deliveryStatus = "delivered";
-        deliveryDetails = `SMTP accepted by ${cfg.smtp_host}:${port}`;
+        deliveryStatus = "accepted";
+        deliveryDetails = `Aceite pelo servidor SMTP ${cfg.smtp_host}:${port} (sem confirmação de entrega)`;
         try { await client.close(); } catch { /* ignore */ }
       }
     } catch (err) {
