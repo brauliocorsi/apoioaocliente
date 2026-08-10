@@ -497,7 +497,11 @@ export type Database = {
           delivery_details: string | null
           delivery_status: string
           error_message: string | null
+          events: Json
           id: string
+          last_event_at: string | null
+          provider: string | null
+          provider_message_id: string | null
           recipient: string
           smtp_response: string | null
           source: string
@@ -511,7 +515,11 @@ export type Database = {
           delivery_details?: string | null
           delivery_status?: string
           error_message?: string | null
+          events?: Json
           id?: string
+          last_event_at?: string | null
+          provider?: string | null
+          provider_message_id?: string | null
           recipient: string
           smtp_response?: string | null
           source?: string
@@ -525,7 +533,11 @@ export type Database = {
           delivery_details?: string | null
           delivery_status?: string
           error_message?: string | null
+          events?: Json
           id?: string
+          last_event_at?: string | null
+          provider?: string | null
+          provider_message_id?: string | null
           recipient?: string
           smtp_response?: string | null
           source?: string
