@@ -33,7 +33,7 @@ async function loadCfg(admin: ReturnType<typeof createClient>) {
   return cfg;
 }
 
-async function sendResend(from: string, to: string, subject: string, text: string, html: string) {
+async function sendResend(from: string, to: string, subject: string, text: string, html: string): Promise<{ id?: string }> {
   const key = Deno.env.get("RESEND_API_KEY");
   if (!key) throw new Error("RESEND_API_KEY ausente");
   const res = await fetch("https://api.resend.com/emails", {
@@ -42,6 +42,7 @@ async function sendResend(from: string, to: string, subject: string, text: strin
     body: JSON.stringify({ from, to: [to], subject, text, html }),
   });
   if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`);
+  return await res.json();
 }
 
 async function sendSmtp(cfg: Record<string,string>, to: string, subject: string, text: string, html: string) {
