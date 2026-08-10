@@ -97,7 +97,7 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
               .eq("ticket_id", ticketId)
               .order("created_at", { ascending: true }),
         supabase.from("email_logs")
-          .select("id, created_at, subject, recipient, delivery_status, error_message, source")
+          .select("id, created_at, subject, recipient, delivery_status, delivery_details, error_message, source, provider, last_event_at")
           .eq("ticket_id", ticketId)
           .order("created_at", { ascending: true }),
         supabase.from("inbound_email_events")
