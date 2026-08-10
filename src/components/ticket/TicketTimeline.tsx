@@ -279,6 +279,12 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
                     <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 ${meta.badge}`}>
                       {meta.label}
                     </Badge>
+                    {it.meta?.delivery_status && (
+                      <EmailDeliveryBadge
+                        status={it.meta.delivery_status as string}
+                        detail={(it.meta.delivery_detail as string) || null}
+                      />
+                    )}
                     {it.author && (
                       <span className="text-xs font-semibold text-foreground">{it.author}</span>
                     )}
