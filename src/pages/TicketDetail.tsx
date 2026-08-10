@@ -30,6 +30,7 @@ import { useTicketRefetch } from "@/hooks/useTicketRefetch";
 import { RefetchSummaryCard } from "@/components/ticket/RefetchSummaryCard";
 import { TicketContinuationBadges } from "@/components/ticket/TicketContinuationBadges";
 import TicketTimeline from "@/components/ticket/TicketTimeline";
+import { EmailDeliveryBadge } from "@/components/ticket/EmailDeliveryBadge";
 
 // Detect HTML content
 function isHtmlContent(text: string): boolean {
