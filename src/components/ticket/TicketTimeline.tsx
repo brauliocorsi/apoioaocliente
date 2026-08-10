@@ -168,13 +168,18 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
       });
 
       logs.forEach((l) => {
-        const failed = l.delivery_status && l.delivery_status !== "accepted" && l.delivery_status !== "sent";
+        const failed = isDeliveryProblem(l.delivery_status);
         built.push({
           id: `log-${l.id}`,
           at: l.created_at,
           kind: failed ? "email_failed" : "email_sent",
           author: l.source || null,
-          summary: `${l.subject || "(sem assunto)"} → ${l.recipient}${failed ? ` — ${l.error_message || l.delivery_status}` : ""}`,
+          summary: `${l.subject || "(sem assunto)"} → ${l.recipient}`,
+          meta: {
+            delivery_status: l.delivery_status || (failed ? "failed" : "sent"),
+            delivery_detail: l.error_message || l.delivery_details || null,
+            last_event_at: l.last_event_at || null,
+          },
         });
       });
 
