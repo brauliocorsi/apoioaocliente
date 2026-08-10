@@ -209,13 +209,16 @@ Deno.serve(async (req) => {
     let deliveryDetails: string | null = null;
     let smtpResponse: string | null = null;
     let sendError: string | null = null;
+    let providerMessageId: string | null = null;
 
     try {
       if (useResend) {
         const fromAddr = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.resend_from_email || cfg.smtp_from_email || "noreply@upmoveis.pt"}>`;
         const result = await sendViaResend(fromAddr, clientEmail, subject, plainText, htmlBody, downloadedAttachments);
-        deliveryStatus = "delivered";
-        deliveryDetails = "Enviado via Resend API";
+        providerMessageId = (result as { id?: string })?.id ?? null;
+        // Resend só confirma aceitação neste momento; a entrega real chega via webhook.
+        deliveryStatus = "sent";
+        deliveryDetails = "Aceite pelo Resend — a aguardar confirmação de entrega";
         smtpResponse = JSON.stringify(result);
       } else {
         const port = Number(cfg.smtp_port) || 465;
@@ -252,8 +255,8 @@ Deno.serve(async (req) => {
         if (sendResult) {
           smtpResponse = typeof sendResult === "string" ? sendResult : JSON.stringify(sendResult);
         }
-        deliveryStatus = "delivered";
-        deliveryDetails = `SMTP accepted by ${cfg.smtp_host}:${port}`;
+        deliveryStatus = "accepted";
+        deliveryDetails = `Aceite pelo servidor SMTP ${cfg.smtp_host}:${port} (sem confirmação de entrega)`;
         try { await client.close(); } catch { /* ignore */ }
       }
     } catch (err) {
@@ -301,16 +304,21 @@ Deno.serve(async (req) => {
       }
     }
 
+    const okStatuses = ["delivered", "accepted", "sent"];
     await adminClient.from("email_logs").insert({
       recipient: clientEmail,
       subject,
-      status: deliveryStatus === "delivered" || deliveryStatus === "accepted" ? "sent" : "failed",
+      status: okStatuses.includes(deliveryStatus) ? "sent" : "failed",
       error_message: sendError,
       source: "reply-email-ticket",
       ticket_id,
       delivery_status: deliveryStatus,
       delivery_details: deliveryDetails,
       smtp_response: smtpResponse,
+      provider: useResend ? "resend" : "smtp",
+      provider_message_id: providerMessageId,
+      last_event_at: new Date().toISOString(),
+      events: [{ type: useResend ? "resend.accepted" : "smtp.accepted", at: new Date().toISOString(), detail: deliveryDetails }],
     });
 
     // Update first_responded_at if not set
@@ -326,7 +334,7 @@ Deno.serve(async (req) => {
         .eq("id", ticket_id);
     }
 
-    if (deliveryStatus !== "delivered" && deliveryStatus !== "accepted") {
+    if (!okStatuses.includes(deliveryStatus)) {
       return new Response(JSON.stringify({ 
         error: `Email não enviado: ${deliveryDetails}`,
         delivery_status: deliveryStatus,

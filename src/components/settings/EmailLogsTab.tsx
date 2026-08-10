@@ -27,6 +27,11 @@ interface EmailLog {
 
 const DELIVERY_STATUS_CONFIG: Record<string, { label: string; icon: typeof CheckCircle2; className: string }> = {
   delivered: { label: "Entregue", icon: CheckCircle2, className: "text-green-600 dark:text-green-400" },
+  opened: { label: "Aberto", icon: CheckCircle2, className: "text-green-600 dark:text-green-400" },
+  clicked: { label: "Clicado", icon: CheckCircle2, className: "text-green-600 dark:text-green-400" },
+  sent: { label: "A aguardar entrega", icon: Clock, className: "text-blue-600 dark:text-blue-400" },
+  delivery_delayed: { label: "Atrasado", icon: Clock, className: "text-yellow-600 dark:text-yellow-400" },
+  complained: { label: "Spam", icon: XCircle, className: "text-destructive" },
   accepted: { label: "Aceite", icon: ArrowDownCircle, className: "text-blue-600 dark:text-blue-400" },
   bounced: { label: "Devolvido", icon: XCircle, className: "text-destructive" },
   rejected: { label: "Rejeitado", icon: XCircle, className: "text-destructive" },
@@ -73,15 +78,15 @@ export default function EmailLogsTab() {
   const filteredLogs = filter === "all" 
     ? logs 
     : filter === "problems"
-      ? logs.filter(l => l.delivery_status && !["delivered", "accepted"].includes(l.delivery_status) || l.status === "failed")
+      ? logs.filter(l => ["bounced", "rejected", "failed", "deferred", "complained"].includes(l.delivery_status || "") || l.status === "failed")
       : logs.filter(l => l.source === filter);
 
   // Stats
   const stats = {
     total: logs.length,
-    delivered: logs.filter(l => l.delivery_status === "delivered" || (l.status === "sent" && !l.delivery_status)).length,
-    accepted: logs.filter(l => l.delivery_status === "accepted").length,
-    problems: logs.filter(l => ["bounced", "rejected", "failed", "deferred"].includes(l.delivery_status || "") || l.status === "failed").length,
+    delivered: logs.filter(l => ["delivered", "opened", "clicked"].includes(l.delivery_status || "") || (l.status === "sent" && !l.delivery_status)).length,
+    accepted: logs.filter(l => ["accepted", "sent"].includes(l.delivery_status || "")).length,
+    problems: logs.filter(l => ["bounced", "rejected", "failed", "deferred", "complained"].includes(l.delivery_status || "") || l.status === "failed").length,
     received: logs.filter(l => l.source === "inbound").length,
   };
 

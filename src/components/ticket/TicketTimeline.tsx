@@ -6,6 +6,7 @@ import {
   MessageSquare, User, Bot, Mail, MailX, Paperclip, Activity,
   GitBranch, AlertTriangle, Inbox, Loader2, Phone, PhoneMissed,
 } from "lucide-react";
+import { EmailDeliveryBadge, isDeliveryProblem } from "./EmailDeliveryBadge";
 
 /**
  * Unified, read-only ticket timeline.
@@ -97,7 +98,7 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
               .eq("ticket_id", ticketId)
               .order("created_at", { ascending: true }),
         supabase.from("email_logs")
-          .select("id, created_at, subject, recipient, delivery_status, error_message, source")
+          .select("id, created_at, subject, recipient, delivery_status, delivery_details, error_message, source, provider, last_event_at")
           .eq("ticket_id", ticketId)
           .order("created_at", { ascending: true }),
         supabase.from("inbound_email_events")
@@ -168,13 +169,18 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
       });
 
       logs.forEach((l) => {
-        const failed = l.delivery_status && l.delivery_status !== "accepted" && l.delivery_status !== "sent";
+        const failed = isDeliveryProblem(l.delivery_status);
         built.push({
           id: `log-${l.id}`,
           at: l.created_at,
           kind: failed ? "email_failed" : "email_sent",
           author: l.source || null,
-          summary: `${l.subject || "(sem assunto)"} → ${l.recipient}${failed ? ` — ${l.error_message || l.delivery_status}` : ""}`,
+          summary: `${l.subject || "(sem assunto)"} → ${l.recipient}`,
+          meta: {
+            delivery_status: l.delivery_status || (failed ? "failed" : "sent"),
+            delivery_detail: l.error_message || l.delivery_details || null,
+            last_event_at: l.last_event_at || null,
+          },
         });
       });
 
@@ -273,6 +279,12 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
                     <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 ${meta.badge}`}>
                       {meta.label}
                     </Badge>
+                    {it.meta?.delivery_status && (
+                      <EmailDeliveryBadge
+                        status={it.meta.delivery_status as string}
+                        detail={(it.meta.delivery_detail as string) || null}
+                      />
+                    )}
                     {it.author && (
                       <span className="text-xs font-semibold text-foreground">{it.author}</span>
                     )}

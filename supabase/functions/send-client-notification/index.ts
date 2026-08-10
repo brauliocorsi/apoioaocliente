@@ -33,7 +33,7 @@ async function loadCfg(admin: ReturnType<typeof createClient>) {
   return cfg;
 }
 
-async function sendResend(from: string, to: string, subject: string, text: string, html: string) {
+async function sendResend(from: string, to: string, subject: string, text: string, html: string): Promise<{ id?: string }> {
   const key = Deno.env.get("RESEND_API_KEY");
   if (!key) throw new Error("RESEND_API_KEY ausente");
   const res = await fetch("https://api.resend.com/emails", {
@@ -42,6 +42,7 @@ async function sendResend(from: string, to: string, subject: string, text: strin
     body: JSON.stringify({ from, to: [to], subject, text, html }),
   });
   if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`);
+  return await res.json();
 }
 
 async function sendSmtp(cfg: Record<string,string>, to: string, subject: string, text: string, html: string) {
@@ -136,10 +137,12 @@ Deno.serve(async (req) => {
     const cfg = await loadCfg(admin);
     const useResend = cfg.resend_enabled === "true";
 
+    let providerMessageId: string | null = null;
     try {
       if (useResend) {
         const from = `${cfg.smtp_from_name || "Apoio ao Cliente"} <${cfg.resend_from_email || cfg.smtp_from_email || "noreply@upmoveis.pt"}>`;
-        await sendResend(from, email, subject, text, html);
+        const result = await sendResend(from, email, subject, text, html);
+        providerMessageId = result?.id ?? null;
       } else if (cfg.smtp_host && cfg.smtp_user && cfg.smtp_pass) {
         await sendSmtp(cfg, email, subject, text, html);
       } else {
@@ -154,7 +157,11 @@ Deno.serve(async (req) => {
         recipient: email, subject, status: "sent",
         source: "client_notification", ticket_id: notif.ticket_id,
         smtp_response: useResend ? "Resend API" : `SMTP ${cfg.smtp_host}`,
+        delivery_status: useResend ? "sent" : "accepted",
         delivery_details: `Notificação cliente: ${notif.type}`,
+        provider: useResend ? "resend" : "smtp",
+        provider_message_id: providerMessageId,
+        last_event_at: new Date().toISOString(),
       });
 
       return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -164,6 +171,8 @@ Deno.serve(async (req) => {
       await admin.from("email_logs").insert({
         recipient: email, subject, status: "failed",
         source: "client_notification", ticket_id: notif.ticket_id, error_message: msg,
+        delivery_status: "failed", provider: useResend ? "resend" : "smtp",
+        last_event_at: new Date().toISOString(),
       });
       return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
