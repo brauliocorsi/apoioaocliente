@@ -113,7 +113,7 @@ UP Móveis — Apoio ao Cliente`;
   return { text, html, subject: `Recebemos o seu pedido — Ticket #${ticketNumber}` };
 }
 
-async function sendViaResend(from: string, to: string, subject: string, text: string, html: string) {
+async function sendViaResend(from: string, to: string, subject: string, text: string, html: string): Promise<{ id?: string }> {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) throw new Error("RESEND_API_KEY não configurada");
   const res = await fetch("https://api.resend.com/emails", {
@@ -122,6 +122,7 @@ async function sendViaResend(from: string, to: string, subject: string, text: st
     body: JSON.stringify({ from, to: [to], subject, text, html }),
   });
   if (!res.ok) throw new Error(`Resend (${res.status}): ${await res.text()}`);
+  return await res.json();
 }
 
 async function sendViaSmtp(cfg: Record<string, string>, to: string, subject: string, text: string, html: string) {
