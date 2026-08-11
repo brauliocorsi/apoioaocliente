@@ -11,6 +11,7 @@ import { ArrowLeft, Loader2, Send, Paperclip, FileText, Download, X, FileImage, 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { v4 as uuidv4 } from "uuid";
 import MessageReactions from "@/components/chat/MessageReactions";
+import { withSignedUrls, getAttachmentUrl } from "@/lib/attachmentUrl";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 
@@ -70,14 +71,8 @@ export default function PortalTicketDetail() {
     (sts || []).forEach((s: any) => { map[s.id] = { name: s.name, color: s.color }; });
     setStatuses(map);
 
-    setAttachments((atts || []).map((a: any) => ({
-      ...a,
-      url: supabase.storage.from("ticket-attachments").getPublicUrl(a.file_path).data.publicUrl,
-    })));
-    setDocuments(((docs as any[]) || []).map((d: any) => ({
-      ...d,
-      url: supabase.storage.from("ticket-attachments").getPublicUrl(d.file_path).data.publicUrl,
-    })));
+    setAttachments(await withSignedUrls((atts || []) as any[]));
+    setDocuments(await withSignedUrls(((docs as any[]) || []) as any[]));
     setLoading(false);
   };
 
@@ -102,14 +97,12 @@ export default function PortalTicketDetail() {
         }
       )
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "ticket_attachments", filter: `ticket_id=eq.${id}` },
-        (payload) => {
+        async (payload) => {
           const a = payload.new as any;
+          const url = await getAttachmentUrl(a.file_path);
           setAttachments((prev) => {
             if (prev.some((x) => x.id === a.id)) return prev;
-            return [...prev, {
-              ...a,
-              url: supabase.storage.from("ticket-attachments").getPublicUrl(a.file_path).data.publicUrl,
-            }];
+            return [...prev, { ...a, url }];
           });
         }
       )

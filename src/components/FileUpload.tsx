@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Paperclip, X, Loader2, Image, Film } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
+import { getAttachmentUrl } from "@/lib/attachmentUrl";
 
 type Attachment = {
   id?: string;
@@ -49,14 +50,14 @@ export default function FileUpload({ ticketId, userId, attachments, onAttachment
         continue;
       }
 
-      const { data: urlData } = supabase.storage.from("ticket-attachments").getPublicUrl(path);
+      const signedUrl = await getAttachmentUrl(path);
 
       newAttachments.push({
         file_name: file.name,
         file_path: path,
         file_type: file.type,
         file_size: file.size,
-        url: urlData.publicUrl,
+        url: signedUrl,
       });
     }
 

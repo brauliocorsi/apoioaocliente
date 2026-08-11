@@ -31,6 +31,7 @@ import { RefetchSummaryCard } from "@/components/ticket/RefetchSummaryCard";
 import { TicketContinuationBadges } from "@/components/ticket/TicketContinuationBadges";
 import TicketTimeline from "@/components/ticket/TicketTimeline";
 import { EmailDeliveryBadge } from "@/components/ticket/EmailDeliveryBadge";
+import { withSignedUrls } from "@/lib/attachmentUrl";
 
 // Detect HTML content
 function isHtmlContent(text: string): boolean {
@@ -235,10 +236,7 @@ export default function TicketDetail() {
     }
     setTags((tTags || []).map((r: any) => r.tag_id));
     setClauses((tClauses || []).map((r: any) => r.clause_id));
-    setAttachments((tAttachments || []).map((a: any) => ({
-      ...a,
-      url: supabase.storage.from("ticket-attachments").getPublicUrl(a.file_path).data.publicUrl,
-    })));
+    setAttachments(await withSignedUrls((tAttachments || []) as any[]));
 
     // Build clause and macro maps
     const cMap: Record<string, { code: string; description: string }> = {};
@@ -1007,18 +1005,18 @@ export default function TicketDetail() {
                               return (
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   {msgAtts.map((att: any) => {
-                                    const { data: urlData } = supabase.storage.from("ticket-attachments").getPublicUrl(att.file_path);
+                                    const url = att.url as string;
                                     const isImg = att.file_type?.startsWith("image/");
                                     return (
                                       <a
                                         key={att.id}
-                                        href={urlData.publicUrl}
+                                        href={url}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="flex items-center gap-1.5 rounded border bg-background/50 px-2 py-1 text-xs hover:bg-muted transition-colors"
                                       >
                                         {isImg ? (
-                                          <img src={urlData.publicUrl} alt={att.file_name} className="h-10 w-10 object-cover rounded" />
+                                          <img src={url} alt={att.file_name} className="h-10 w-10 object-cover rounded" />
                                         ) : (
                                           <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                                         )}
