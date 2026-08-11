@@ -18,6 +18,7 @@ import FileUpload from "@/components/FileUpload";
 import { TicketContinuationBadges } from "@/components/ticket/TicketContinuationBadges";
 import { useTicketRefetch } from "@/hooks/useTicketRefetch";
 import { RefetchSummaryCard } from "@/components/ticket/RefetchSummaryCard";
+import { openAttachment } from "@/lib/attachmentUrl";
 
 // Check if content looks like HTML
 function isHtmlContent(text: string): boolean {
@@ -252,9 +253,8 @@ export default function EmailTicketDetail() {
     fetchData();
   };
 
-  const downloadAttachment = (att: any) => {
-    const { data } = supabase.storage.from("ticket-attachments").getPublicUrl(att.file_path);
-    window.open(data.publicUrl, "_blank");
+  const downloadAttachment = async (att: any) => {
+    await openAttachment(att.file_path);
   };
 
   const refetchEmails = async () => {

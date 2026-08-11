@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { FileText, Upload, Trash2, ExternalLink, Loader2 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
+import { openAttachment } from "@/lib/attachmentUrl";
 
 const DOCUMENT_TYPES: { value: string; label: string }[] = [
   { value: "fatura", label: "Fatura" },
@@ -100,9 +101,8 @@ export default function TicketDocuments({ ticketId, userId }: TicketDocumentsPro
     fetchDocs();
   };
 
-  const openDoc = (doc: DocRow) => {
-    const { data } = supabase.storage.from("ticket-attachments").getPublicUrl(doc.file_path);
-    window.open(data.publicUrl, "_blank");
+  const openDoc = async (doc: DocRow) => {
+    await openAttachment(doc.file_path);
   };
 
   const formatSize = (bytes: number) => {
