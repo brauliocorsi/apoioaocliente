@@ -1135,18 +1135,28 @@ function parseBodyStructureAttachments(bs: string, prefix = ""): AttachmentPart[
       continue;
     }
     
+    // Content type of this part (image/application/audio/video)
+    const ctMatch = part.match(/"(image|application|audio|video)"\s+"([^"]+)"/i);
+
     // Look for filename in this part
     const nameMatch = part.match(/(?:"name"\s*"([^"]+)"|"filename"\s*"([^"]+)")/i);
-    if (!nameMatch) continue;
-    
-    const filename = decodeHeaderValue(nameMatch[1] || nameMatch[2]);
-    if (!filename) continue;
-    
+    let filename = nameMatch ? decodeHeaderValue(nameMatch[1] || nameMatch[2]) : "";
+
+    if (!filename) {
+      // Inline parts (embedded images/PDFs) often carry only a Content-ID and no name.
+      // Import them anyway with a synthesized filename so nothing is lost.
+      if (!ctMatch) continue;
+      const subtype = (ctMatch[2] || "bin").toLowerCase().replace(/[^a-z0-9]+/g, "");
+      const cidMatch = part.match(/<([^>]+)>/);
+      const base = cidMatch ? cidMatch[1].split("@")[0].replace(/[^\w.-]+/g, "_").substring(0, 40) : `inline-${partNum}`;
+      filename = `${base || `inline-${partNum}`}.${subtype}`;
+    }
+
     // Skip text parts without attachment disposition
-    const ctMatch = part.match(/"(image|application|audio|video)"\s+"([^"]+)"/i);
     if (!ctMatch && !part.toLowerCase().includes('"attachment"')) continue;
-    
+
     const contentType = ctMatch ? `${ctMatch[1]}/${ctMatch[2]}`.toLowerCase() : "application/octet-stream";
+
     const encMatch = part.match(/"(base64|quoted-printable|7bit|8bit)"/i);
     const encoding = encMatch ? encMatch[1].toLowerCase() : "base64";
     

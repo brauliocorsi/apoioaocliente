@@ -666,7 +666,7 @@ export default function TicketDetail() {
           {(ticket.client_email || hasEmailThread) && (
             <Button variant="outline" size="sm" onClick={handleRefetch} disabled={refetching} className="shrink-0 gap-1.5">
               <RefreshCw className={`h-3.5 w-3.5 ${refetching ? "animate-spin" : ""}`} />
-              {refetching ? (refetchProgress || "A importar...") : "Re-importar e-mails"}
+              {refetching ? (refetchProgress || "A importar...") : "Re-importar e-mails e anexos"}
             </Button>
           )}
           <Select value={ticket.status} onValueChange={updateStatus}>
