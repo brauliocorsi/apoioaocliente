@@ -97,14 +97,12 @@ export default function PortalTicketDetail() {
         }
       )
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "ticket_attachments", filter: `ticket_id=eq.${id}` },
-        (payload) => {
+        async (payload) => {
           const a = payload.new as any;
+          const url = await getAttachmentUrl(a.file_path);
           setAttachments((prev) => {
             if (prev.some((x) => x.id === a.id)) return prev;
-            return [...prev, {
-              ...a,
-              url: supabase.storage.from("ticket-attachments").getPublicUrl(a.file_path).data.publicUrl,
-            }];
+            return [...prev, { ...a, url }];
           });
         }
       )
