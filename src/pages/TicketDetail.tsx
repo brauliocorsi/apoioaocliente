@@ -31,6 +31,7 @@ import { RefetchSummaryCard } from "@/components/ticket/RefetchSummaryCard";
 import { TicketContinuationBadges } from "@/components/ticket/TicketContinuationBadges";
 import TicketTimeline from "@/components/ticket/TicketTimeline";
 import { EmailDeliveryBadge } from "@/components/ticket/EmailDeliveryBadge";
+import { withSignedUrls } from "@/lib/attachmentUrl";
 
 // Detect HTML content
 function isHtmlContent(text: string): boolean {
@@ -235,10 +236,7 @@ export default function TicketDetail() {
     }
     setTags((tTags || []).map((r: any) => r.tag_id));
     setClauses((tClauses || []).map((r: any) => r.clause_id));
-    setAttachments((tAttachments || []).map((a: any) => ({
-      ...a,
-      url: supabase.storage.from("ticket-attachments").getPublicUrl(a.file_path).data.publicUrl,
-    })));
+    setAttachments(await withSignedUrls((tAttachments || []) as any[]));
 
     // Build clause and macro maps
     const cMap: Record<string, { code: string; description: string }> = {};
