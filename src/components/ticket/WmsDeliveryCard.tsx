@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Truck, Package, Camera } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/use-toast";
+import { Truck, Package, Camera, RefreshCw, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
 
 interface ProductLine {
   product_id?: string | null;
@@ -29,27 +31,89 @@ interface Incident {
   attachments_status: string;
 }
 
+interface EvidenceRow {
+  id: string;
+  storage_reference: string;
+  file_name: string | null;
+  mime_type: string | null;
+  file_size: number | null;
+  status: string;
+  attempts: number;
+  last_error: string | null;
+}
+
 /** Contexto da assistência aberta pelo entregador (origem: Entrega WMS). */
 export default function WmsDeliveryCard({ ticketId }: { ticketId: string }) {
   const [incident, setIncident] = useState<Incident | null>(null);
+  const [evidence, setEvidence] = useState<EvidenceRow[]>([]);
+  const [importing, setImporting] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const { data } = await supabase
-        .from("wms_delivery_incidents")
-        .select("*")
-        .eq("ticket_id", ticketId)
-        .maybeSingle();
-      if (!cancelled && data) setIncident(data as unknown as Incident);
-    })();
-    return () => { cancelled = true; };
+  const load = useCallback(async () => {
+    const { data } = await supabase
+      .from("wms_delivery_incidents")
+      .select("*")
+      .eq("ticket_id", ticketId)
+      .maybeSingle();
+    if (data) setIncident(data as unknown as Incident);
+
+    const { data: att } = await supabase
+      .from("wms_incident_attachments")
+      .select("id, storage_reference, file_name, mime_type, file_size, status, attempts, last_error")
+      .eq("ticket_id", ticketId)
+      .order("created_at", { ascending: true });
+    setEvidence((att as EvidenceRow[]) || []);
   }, [ticketId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const runImport = async () => {
+    setImporting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("wms-attachment-import", {
+        body: { ticket_id: ticketId },
+      });
+      if (error) throw error;
+      const res = data as { imported?: number; failed?: number; error?: string; missing_configuration?: string[] };
+      if (res?.error) {
+        toast({
+          title: "Importação indisponível",
+          description: res.missing_configuration?.length
+            ? `Configuração em falta: ${res.missing_configuration.join(", ")}`
+            : res.error,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Evidências processadas",
+          description: `${res?.imported ?? 0} copiada(s), ${res?.failed ?? 0} com erro.`,
+        });
+      }
+      await load();
+    } catch (e) {
+      toast({ title: "Falha ao importar evidências", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
 
   if (!incident) return null;
 
   const lines = Array.isArray(incident.product_lines) ? incident.product_lines : [];
   const atts = Array.isArray(incident.attachments) ? incident.attachments : [];
+  const rows: EvidenceRow[] = evidence.length
+    ? evidence
+    : atts.map((a, i) => ({
+        id: `fallback-${i}`,
+        storage_reference: "",
+        file_name: a.name ?? null,
+        mime_type: a.mime_type ?? null,
+        file_size: null,
+        status: incident.attachments_status === "copied" ? "copied" : "pending",
+        attempts: 0,
+        last_error: null,
+      }));
+  const outstanding = rows.filter((r) => r.status !== "copied").length;
+
 
   return (
     <Card className="shadow-soft border-warning/40">
@@ -97,23 +161,48 @@ export default function WmsDeliveryCard({ ticketId }: { ticketId: string }) {
           </div>
         )}
 
-        {atts.length > 0 && (
-          <div className="rounded-lg bg-muted/50 p-2.5">
-            <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-1">
-              <Camera className="h-3.5 w-3.5" /> Evidências ({atts.length})
-            </p>
-            <ul className="text-xs text-muted-foreground space-y-0.5">
-              {atts.map((a, i) => (
-                <li key={i}>{a.name || `ficheiro ${i + 1}`}{a.mime_type ? ` · ${a.mime_type}` : ""}</li>
+        {rows.length > 0 && (
+          <div className="rounded-lg bg-muted/50 p-2.5 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                <Camera className="h-3.5 w-3.5" /> Evidências ({rows.length})
+              </p>
+              {outstanding > 0 && (
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={runImport} disabled={importing}>
+                  <RefreshCw className={`h-3.5 w-3.5 mr-1 ${importing ? "animate-spin" : ""}`} />
+                  {importing ? "A importar…" : "Importar fotografias"}
+                </Button>
+              )}
+            </div>
+            <ul className="text-xs space-y-1">
+              {rows.map((r, i) => (
+                <li key={r.id} className="flex items-start gap-1.5">
+                  {r.status === "copied" ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0 mt-0.5" />
+                  ) : r.status === "error" ? (
+                    <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
+                  ) : (
+                    <Clock className="h-3.5 w-3.5 text-warning shrink-0 mt-0.5" />
+                  )}
+                  <span className="text-muted-foreground break-words">
+                    {r.file_name || `ficheiro ${i + 1}`}
+                    {r.mime_type ? ` · ${r.mime_type}` : ""}
+                    {r.status === "copied" && " · copiada para o ticket"}
+                    {r.status === "pending" && " · por copiar"}
+                    {r.status === "error" && ` · erro: ${r.last_error || "desconhecido"}`}
+                    {r.attempts > 0 && r.status !== "copied" ? ` (tentativas: ${r.attempts})` : ""}
+                  </span>
+                </li>
               ))}
             </ul>
-            {incident.attachments_status === "pending" && (
-              <p className="text-xs text-warning mt-1.5">
-                As fotografias continuam guardadas na app de entregas — ainda não foram copiadas para o ticket.
+            {outstanding > 0 && (
+              <p className="text-xs text-warning">
+                {outstanding} fotografia(s) continuam guardadas na app de entregas — ainda não foram copiadas para o ticket.
               </p>
             )}
           </div>
         )}
+
       </CardContent>
     </Card>
   );

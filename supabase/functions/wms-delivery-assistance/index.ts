@@ -213,17 +213,11 @@ Deno.serve(async (req) => {
     { auth: { persistSession: false } },
   );
 
-  // Autor auditável: agente de sistema local. O ator WMS fica em metadata,
-  // nunca em created_by (IDs de outra base não são identidades locais).
-  const { data: agent } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("is_active", true)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (!agent?.id) return json({ error: "no active local agent to own the ticket" }, 503);
+  // Autoria: ator de integração, não uma pessoa. Não se falsifica autoria
+  // humana nem se usa o UUID do driver (identidade de outra base).
+  // Opcional: WMS_ASSISTANCE_INTEGRATION_USER_ID (utilizador técnico dedicado).
+  const integrationUserId = Deno.env.get("WMS_ASSISTANCE_INTEGRATION_USER_ID");
+  const createdBy = integrationUserId && UUID_RE.test(integrationUserId) ? integrationUserId : null;
 
   const payload = { ...v.value.payload, description: buildDescription(v.value.payload as any) };
   const hash = await sha256Hex(JSON.stringify(canonical(v.value.payload)));
@@ -233,7 +227,7 @@ Deno.serve(async (req) => {
     _incident_id: v.value.incident_id,
     _payload_hash: hash,
     _payload: payload,
-    _created_by: agent.id,
+    _created_by: createdBy,
   });
 
   if (error) {
