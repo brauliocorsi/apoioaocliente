@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Truck, Package, Camera } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/use-toast";
+import { Truck, Package, Camera, RefreshCw, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
 
 interface ProductLine {
   product_id?: string | null;
@@ -29,27 +31,89 @@ interface Incident {
   attachments_status: string;
 }
 
+interface EvidenceRow {
+  id: string;
+  storage_reference: string;
+  file_name: string | null;
+  mime_type: string | null;
+  file_size: number | null;
+  status: string;
+  attempts: number;
+  last_error: string | null;
+}
+
 /** Contexto da assistência aberta pelo entregador (origem: Entrega WMS). */
 export default function WmsDeliveryCard({ ticketId }: { ticketId: string }) {
   const [incident, setIncident] = useState<Incident | null>(null);
+  const [evidence, setEvidence] = useState<EvidenceRow[]>([]);
+  const [importing, setImporting] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const { data } = await supabase
-        .from("wms_delivery_incidents")
-        .select("*")
-        .eq("ticket_id", ticketId)
-        .maybeSingle();
-      if (!cancelled && data) setIncident(data as unknown as Incident);
-    })();
-    return () => { cancelled = true; };
+  const load = useCallback(async () => {
+    const { data } = await supabase
+      .from("wms_delivery_incidents")
+      .select("*")
+      .eq("ticket_id", ticketId)
+      .maybeSingle();
+    if (data) setIncident(data as unknown as Incident);
+
+    const { data: att } = await supabase
+      .from("wms_incident_attachments")
+      .select("id, storage_reference, file_name, mime_type, file_size, status, attempts, last_error")
+      .eq("ticket_id", ticketId)
+      .order("created_at", { ascending: true });
+    setEvidence((att as EvidenceRow[]) || []);
   }, [ticketId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const runImport = async () => {
+    setImporting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("wms-attachment-import", {
+        body: { ticket_id: ticketId },
+      });
+      if (error) throw error;
+      const res = data as { imported?: number; failed?: number; error?: string; missing_configuration?: string[] };
+      if (res?.error) {
+        toast({
+          title: "Importação indisponível",
+          description: res.missing_configuration?.length
+            ? `Configuração em falta: ${res.missing_configuration.join(", ")}`
+            : res.error,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Evidências processadas",
+          description: `${res?.imported ?? 0} copiada(s), ${res?.failed ?? 0} com erro.`,
+        });
+      }
+      await load();
+    } catch (e) {
+      toast({ title: "Falha ao importar evidências", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
 
   if (!incident) return null;
 
   const lines = Array.isArray(incident.product_lines) ? incident.product_lines : [];
   const atts = Array.isArray(incident.attachments) ? incident.attachments : [];
+  const rows: EvidenceRow[] = evidence.length
+    ? evidence
+    : atts.map((a, i) => ({
+        id: `fallback-${i}`,
+        storage_reference: "",
+        file_name: a.name ?? null,
+        mime_type: a.mime_type ?? null,
+        file_size: null,
+        status: incident.attachments_status === "copied" ? "copied" : "pending",
+        attempts: 0,
+        last_error: null,
+      }));
+  const outstanding = rows.filter((r) => r.status !== "copied").length;
+
 
   return (
     <Card className="shadow-soft border-warning/40">
