@@ -161,23 +161,48 @@ export default function WmsDeliveryCard({ ticketId }: { ticketId: string }) {
           </div>
         )}
 
-        {atts.length > 0 && (
-          <div className="rounded-lg bg-muted/50 p-2.5">
-            <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-1">
-              <Camera className="h-3.5 w-3.5" /> Evidências ({atts.length})
-            </p>
-            <ul className="text-xs text-muted-foreground space-y-0.5">
-              {atts.map((a, i) => (
-                <li key={i}>{a.name || `ficheiro ${i + 1}`}{a.mime_type ? ` · ${a.mime_type}` : ""}</li>
+        {rows.length > 0 && (
+          <div className="rounded-lg bg-muted/50 p-2.5 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                <Camera className="h-3.5 w-3.5" /> Evidências ({rows.length})
+              </p>
+              {outstanding > 0 && (
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={runImport} disabled={importing}>
+                  <RefreshCw className={`h-3.5 w-3.5 mr-1 ${importing ? "animate-spin" : ""}`} />
+                  {importing ? "A importar…" : "Importar fotografias"}
+                </Button>
+              )}
+            </div>
+            <ul className="text-xs space-y-1">
+              {rows.map((r, i) => (
+                <li key={r.id} className="flex items-start gap-1.5">
+                  {r.status === "copied" ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0 mt-0.5" />
+                  ) : r.status === "error" ? (
+                    <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
+                  ) : (
+                    <Clock className="h-3.5 w-3.5 text-warning shrink-0 mt-0.5" />
+                  )}
+                  <span className="text-muted-foreground break-words">
+                    {r.file_name || `ficheiro ${i + 1}`}
+                    {r.mime_type ? ` · ${r.mime_type}` : ""}
+                    {r.status === "copied" && " · copiada para o ticket"}
+                    {r.status === "pending" && " · por copiar"}
+                    {r.status === "error" && ` · erro: ${r.last_error || "desconhecido"}`}
+                    {r.attempts > 0 && r.status !== "copied" ? ` (tentativas: ${r.attempts})` : ""}
+                  </span>
+                </li>
               ))}
             </ul>
-            {incident.attachments_status === "pending" && (
-              <p className="text-xs text-warning mt-1.5">
-                As fotografias continuam guardadas na app de entregas — ainda não foram copiadas para o ticket.
+            {outstanding > 0 && (
+              <p className="text-xs text-warning">
+                {outstanding} fotografia(s) continuam guardadas na app de entregas — ainda não foram copiadas para o ticket.
               </p>
             )}
           </div>
         )}
+
       </CardContent>
     </Card>
   );
