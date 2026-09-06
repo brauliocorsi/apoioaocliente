@@ -1899,6 +1899,80 @@ export type Database = {
         }
         Relationships: []
       }
+      wms_delivery_incidents: {
+        Row: {
+          attachments: Json
+          attachments_status: string
+          attempt_id: string | null
+          created_at: string
+          delivery_outcome: string | null
+          driver_id: string | null
+          driver_name: string | null
+          id: string
+          incident_id: string
+          note_id: string | null
+          occurred_at: string | null
+          order_number: string | null
+          payload: Json
+          payload_hash: string
+          product_lines: Json
+          route_id: string | null
+          source_project_id: string
+          ticket_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          attachments?: Json
+          attachments_status?: string
+          attempt_id?: string | null
+          created_at?: string
+          delivery_outcome?: string | null
+          driver_id?: string | null
+          driver_name?: string | null
+          id?: string
+          incident_id: string
+          note_id?: string | null
+          occurred_at?: string | null
+          order_number?: string | null
+          payload?: Json
+          payload_hash: string
+          product_lines?: Json
+          route_id?: string | null
+          source_project_id: string
+          ticket_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attachments?: Json
+          attachments_status?: string
+          attempt_id?: string | null
+          created_at?: string
+          delivery_outcome?: string | null
+          driver_id?: string | null
+          driver_name?: string | null
+          id?: string
+          incident_id?: string
+          note_id?: string | null
+          occurred_at?: string | null
+          order_number?: string | null
+          payload?: Json
+          payload_hash?: string
+          product_lines?: Json
+          route_id?: string | null
+          source_project_id?: string
+          ticket_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wms_delivery_incidents_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       phone_calls_reconciliation: {
@@ -2001,6 +2075,20 @@ export type Database = {
       sla_default_resolution_hours: {
         Args: { _priority: string }
         Returns: number
+      }
+      wms_upsert_assistance: {
+        Args: {
+          _created_by: string
+          _incident_id: string
+          _payload: Json
+          _payload_hash: string
+          _source_project_id: string
+        }
+        Returns: {
+          deduplicated: boolean
+          ticket_id: string
+          ticket_number: number
+        }[]
       }
     }
     Enums: {
