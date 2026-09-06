@@ -30,6 +30,8 @@ import { useTicketRefetch } from "@/hooks/useTicketRefetch";
 import { RefetchSummaryCard } from "@/components/ticket/RefetchSummaryCard";
 import { TicketContinuationBadges } from "@/components/ticket/TicketContinuationBadges";
 import TicketTimeline from "@/components/ticket/TicketTimeline";
+import WmsDeliveryCard from "@/components/ticket/WmsDeliveryCard";
+
 import { EmailDeliveryBadge } from "@/components/ticket/EmailDeliveryBadge";
 import { withSignedUrls } from "@/lib/attachmentUrl";
 
@@ -1172,8 +1174,12 @@ export default function TicketDetail() {
             </CardContent>
           </Card>
 
+          {/* Contexto de assistência aberta na app de entregas (WMS) */}
+          <WmsDeliveryCard ticketId={ticket.id} />
+
           {/* Unified ticket timeline (additive, read-only) */}
           <TicketTimeline ticketId={ticket.id} preloadedMessages={messages as any} preloadedEvents={events as any} />
+
 
           {/* Internal Timeline */}
           <Card>
