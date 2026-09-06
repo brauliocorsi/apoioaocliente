@@ -1681,7 +1681,7 @@ export type Database = {
           client_phone: string | null
           client_user_id: string | null
           created_at: string
-          created_by: string
+          created_by: string | null
           delivery_date: string | null
           delivery_type: string | null
           description: string | null
@@ -1739,7 +1739,7 @@ export type Database = {
           client_phone?: string | null
           client_user_id?: string | null
           created_at?: string
-          created_by: string
+          created_by?: string | null
           delivery_date?: string | null
           delivery_type?: string | null
           description?: string | null
@@ -1797,7 +1797,7 @@ export type Database = {
           client_phone?: string | null
           client_user_id?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           delivery_date?: string | null
           delivery_type?: string | null
           description?: string | null
@@ -1973,6 +1973,88 @@ export type Database = {
           },
         ]
       }
+      wms_incident_attachments: {
+        Row: {
+          attempts: number
+          copied_at: string | null
+          created_at: string
+          file_name: string | null
+          file_size: number | null
+          id: string
+          incident_id: string
+          last_attempt_at: string | null
+          last_error: string | null
+          mime_type: string | null
+          source_project_id: string
+          status: string
+          storage_reference: string
+          ticket_attachment_id: string | null
+          ticket_id: string | null
+          updated_at: string
+          wms_incident_row_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          copied_at?: string | null
+          created_at?: string
+          file_name?: string | null
+          file_size?: number | null
+          id?: string
+          incident_id: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          mime_type?: string | null
+          source_project_id: string
+          status?: string
+          storage_reference: string
+          ticket_attachment_id?: string | null
+          ticket_id?: string | null
+          updated_at?: string
+          wms_incident_row_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          copied_at?: string | null
+          created_at?: string
+          file_name?: string | null
+          file_size?: number | null
+          id?: string
+          incident_id?: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          mime_type?: string | null
+          source_project_id?: string
+          status?: string
+          storage_reference?: string
+          ticket_attachment_id?: string | null
+          ticket_id?: string | null
+          updated_at?: string
+          wms_incident_row_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wms_incident_attachments_ticket_attachment_id_fkey"
+            columns: ["ticket_attachment_id"]
+            isOneToOne: false
+            referencedRelation: "ticket_attachments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wms_incident_attachments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wms_incident_attachments_wms_incident_row_id_fkey"
+            columns: ["wms_incident_row_id"]
+            isOneToOne: false
+            referencedRelation: "wms_delivery_incidents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       phone_calls_reconciliation: {
@@ -2078,7 +2160,7 @@ export type Database = {
       }
       wms_upsert_assistance: {
         Args: {
-          _created_by: string
+          _created_by?: string
           _incident_id: string
           _payload: Json
           _payload_hash: string
