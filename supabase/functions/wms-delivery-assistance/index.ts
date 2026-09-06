@@ -227,7 +227,7 @@ Deno.serve(async (req) => {
     _incident_id: v.value.incident_id,
     _payload_hash: hash,
     _payload: payload,
-    _created_by: agent.id,
+    _created_by: createdBy,
   });
 
   if (error) {
