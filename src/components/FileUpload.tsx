@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Paperclip, X, Loader2, Image, Film } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
-import { getAttachmentUrl } from "@/lib/attachmentUrl";
+import { getAttachmentUrl, openAttachment } from "@/lib/attachmentUrl";
 
 type Attachment = {
   id?: string;
@@ -78,6 +78,18 @@ export default function FileUpload({ ticketId, userId, attachments, onAttachment
   const isVideo = (type: string) => type.startsWith("video/");
   const isPdf = (type: string) => type === "application/pdf";
 
+  const viewAttachment = async (path: string) => {
+    try {
+      await openAttachment(path);
+    } catch (error) {
+      toast({
+        title: "Não foi possível abrir o anexo",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-3">
       <input
@@ -104,25 +116,25 @@ export default function FileUpload({ ticketId, userId, attachments, onAttachment
           {attachments.map((att, i) => (
             <div key={i} className="relative group border rounded-md overflow-hidden bg-muted">
               {isImage(att.file_type) ? (
-                <a href={att.url} target="_blank" rel="noopener noreferrer">
+                <button type="button" className="block w-full" onClick={() => viewAttachment(att.file_path)}>
                   <img src={att.url} alt={att.file_name} className="w-full h-24 object-cover" />
-                </a>
+                </button>
               ) : isVideo(att.file_type) ? (
-                <a href={att.url} target="_blank" rel="noopener noreferrer" className="w-full h-24 flex items-center justify-center">
+                <button type="button" onClick={() => viewAttachment(att.file_path)} className="w-full h-24 flex items-center justify-center">
                   <Film className="h-8 w-8 text-muted-foreground" />
-                </a>
+                </button>
               ) : isPdf(att.file_type) ? (
-                <a href={att.url} target="_blank" rel="noopener noreferrer" className="block">
+                <button type="button" onClick={() => viewAttachment(att.file_path)} className="block w-full">
                   <iframe
                     src={`${att.url}#toolbar=0&navpanes=0`}
                     className="w-full h-24 pointer-events-none"
                     title={att.file_name}
                   />
-                </a>
+                </button>
               ) : (
-                <a href={att.url} target="_blank" rel="noopener noreferrer" className="w-full h-24 flex items-center justify-center">
+                <button type="button" onClick={() => viewAttachment(att.file_path)} className="w-full h-24 flex items-center justify-center">
                   <Image className="h-8 w-8 text-muted-foreground" />
-                </a>
+                </button>
               )}
               <p className="text-xs truncate px-1 py-0.5">{att.file_name}</p>
               {!disabled && (
