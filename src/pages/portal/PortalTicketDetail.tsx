@@ -99,12 +99,18 @@ export default function PortalTicketDetail() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "ticket_attachments", filter: `ticket_id=eq.${id}` },
         async (payload) => {
           const a = payload.new as any;
-          const url = await getAttachmentUrl(a.file_path);
+          let url = "";
+          try {
+            url = await getAttachmentUrl(a.file_path);
+          } catch {
+            url = "";
+          }
           setAttachments((prev) => {
             if (prev.some((x) => x.id === a.id)) return prev;
             return [...prev, { ...a, url }];
           });
         }
+
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
