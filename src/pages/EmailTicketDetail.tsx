@@ -254,8 +254,17 @@ export default function EmailTicketDetail() {
   };
 
   const downloadAttachment = async (att: any) => {
-    await openAttachment(att.file_path);
+    try {
+      await openAttachment(att.file_path);
+    } catch (error) {
+      toast({
+        title: "Não foi possível abrir o anexo",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    }
   };
+
 
   const refetchEmails = async () => {
     const res = await runRefetch();

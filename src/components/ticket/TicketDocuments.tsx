@@ -102,8 +102,17 @@ export default function TicketDocuments({ ticketId, userId }: TicketDocumentsPro
   };
 
   const openDoc = async (doc: DocRow) => {
-    await openAttachment(doc.file_path);
+    try {
+      await openAttachment(doc.file_path);
+    } catch (error) {
+      toast({
+        title: "Não foi possível abrir o documento",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    }
   };
+
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;

@@ -35,35 +35,48 @@ export default function FileUpload({ ticketId, userId, attachments, onAttachment
     setUploading(true);
     const newAttachments: Attachment[] = [];
 
-    for (const file of Array.from(files)) {
-      if (file.size > MAX_SIZE) {
-        toast({ title: "Ficheiro muito grande", description: `${file.name} excede 20MB`, variant: "destructive" });
-        continue;
+    try {
+      for (const file of Array.from(files)) {
+        if (file.size > MAX_SIZE) {
+          toast({ title: "Ficheiro muito grande", description: `${file.name} excede 20MB`, variant: "destructive" });
+          continue;
+        }
+
+        const ext = file.name.split(".").pop();
+        const path = `${ticketId || "draft"}/${uuidv4()}.${ext}`;
+
+        const { error } = await supabase.storage.from("ticket-attachments").upload(path, file);
+        if (error) {
+          toast({ title: "Erro no upload", description: error.message, variant: "destructive" });
+          continue;
+        }
+
+        let signedUrl = "";
+        try {
+          signedUrl = await getAttachmentUrl(path);
+        } catch (err) {
+          toast({
+            title: "Pré-visualização indisponível",
+            description: `${file.name} foi enviado, mas não foi possível gerar a pré-visualização.`,
+            variant: "destructive",
+          });
+        }
+
+        newAttachments.push({
+          file_name: file.name,
+          file_path: path,
+          file_type: file.type,
+          file_size: file.size,
+          url: signedUrl,
+        });
       }
 
-      const ext = file.name.split(".").pop();
-      const path = `${ticketId || "draft"}/${uuidv4()}.${ext}`;
-
-      const { error } = await supabase.storage.from("ticket-attachments").upload(path, file);
-      if (error) {
-        toast({ title: "Erro no upload", description: error.message, variant: "destructive" });
-        continue;
-      }
-
-      const signedUrl = await getAttachmentUrl(path);
-
-      newAttachments.push({
-        file_name: file.name,
-        file_path: path,
-        file_type: file.type,
-        file_size: file.size,
-        url: signedUrl,
-      });
+      onAttachmentsChange([...attachments, ...newAttachments]);
+    } finally {
+      setUploading(false);
     }
-
-    onAttachmentsChange([...attachments, ...newAttachments]);
-    setUploading(false);
   };
+
 
   const remove = async (index: number) => {
     const att = attachments[index];
