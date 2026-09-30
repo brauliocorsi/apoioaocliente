@@ -108,20 +108,39 @@ export default function OrderContextCard({ ticket, userId, onUpdate }: OrderCont
         toast({ title: "Encomenda não encontrada" });
       } else {
         const snapshot = buildSnapshot(venda);
+        // Preenche apenas campos vazios do ticket (nunca sobrescreve o que o agente escreveu)
+        const fill: Record<string, any> = {};
+        const c: any = snapshot?.cliente || {};
+        const genericName = !ticket?.client_name || /^cliente/i.test(ticket.client_name) || ticket.client_name.includes("@");
+        if (c.nome && genericName) fill.client_name = c.nome;
+        if (c.email && !ticket?.client_email) fill.client_email = c.email;
+        if (c.telefone && !ticket?.client_phone) fill.client_phone = c.telefone;
+        if (snapshot?.data_venda && !ticket?.purchase_date && /^\d{4}-\d{2}-\d{2}/.test(snapshot.data_venda)) {
+          fill.purchase_date = snapshot.data_venda.slice(0, 10);
+        }
+        if (snapshot?.produtos?.length && !ticket?.product_name) {
+          fill.product_name = snapshot.produtos.map((p: any) => p.nome).join(", ").slice(0, 500);
+        }
         await supabase.from("tickets").update({
+          ...fill,
           order_lookup_status: "found",
           order_lookup_at: now,
           order_lookup_error: null,
           order_snapshot: snapshot,
         }).eq("id", ticket.id);
+        const filled = Object.keys(fill);
+        const labels: Record<string, string> = { client_name: "nome", client_email: "e-mail", client_phone: "telefone", purchase_date: "data da compra", product_name: "produtos" };
         await supabase.from("ticket_events").insert({
           ticket_id: ticket.id,
           user_id: userId,
           event_type: "note",
-          content: `Consulta de encomenda ${code}: encontrada (${snapshot?.situacao || "—"}).`,
-          metadata: { order_lookup_status: "found", order_number: code },
+          content: `Dados da venda ${code} importados (${snapshot?.situacao || "—"})${filled.length ? ` · preenchido: ${filled.map((k) => labels[k]).join(", ")}` : ""}.`,
+          metadata: { order_lookup_status: "found", order_number: code, filled },
         });
-        toast({ title: "Encomenda atualizada" });
+        toast({
+          title: "Dados da venda importados",
+          description: filled.length ? `Preenchido: ${filled.map((k) => labels[k]).join(", ")}` : "Os dados do ticket já estavam completos.",
+        });
       }
       onUpdate();
     } catch (e: any) {
@@ -177,10 +196,12 @@ export default function OrderContextCard({ ticket, userId, onUpdate }: OrderCont
               onChange={(e) => setOrderInput(e.target.value)}
               placeholder="Ex: 12345"
             />
-            <Button size="sm" onClick={doLookup} disabled={loading} className="h-8">
-              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : ticket?.order_snapshot ? <RefreshCw className="h-3.5 w-3.5" /> : <Search className="h-3.5 w-3.5" />}
-            </Button>
           </div>
+          <Button size="sm" onClick={doLookup} disabled={loading} className="h-8 w-full gap-1.5 mt-2">
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : ticket?.order_snapshot ? <RefreshCw className="h-3.5 w-3.5" /> : <Search className="h-3.5 w-3.5" />}
+            {loading ? "A importar…" : ticket?.order_snapshot ? "Atualizar dados da venda e cliente" : "Puxar dados da venda e cliente"}
+          </Button>
+          <p className="text-[11px] text-muted-foreground">Preenche só os campos vazios do ticket; nada do que já escreveu é apagado.</p>
         </div>
 
         {ticket?.order_lookup_error && status === "error" && (
