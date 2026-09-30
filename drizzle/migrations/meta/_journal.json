@@ -8,6 +8,13 @@
       "when": 1790796842748,
       "tag": "0000_allow_user_deletion_preserve_history",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790797066372,
+      "tag": "0001_remove_duplicate_client_message_alert",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+DROP TRIGGER IF EXISTS on_client_message_notify ON public.ticket_messages;
