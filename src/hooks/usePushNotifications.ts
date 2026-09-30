@@ -44,6 +44,25 @@ export function usePushNotifications(userId: string | undefined) {
           };
         }
       })
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "notifications",
+        filter: `user_id=eq.${userId}`,
+      }, (payload: any) => {
+        const data = payload.new;
+        if (document.visibilityState !== "hidden") return;
+        const n = new Notification(data.title || "UP Móveis - Nova Notificação", {
+          body: data.message || "",
+          icon: "/pwa-192x192.png",
+          tag: `sys-${data.id}`,
+        });
+        n.onclick = () => {
+          window.focus();
+          if (data.ticket_id) window.location.href = `/tickets/${data.ticket_id}`;
+          n.close();
+        };
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
