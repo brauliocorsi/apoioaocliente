@@ -70,6 +70,9 @@ Deno.serve(async (req) => {
       });
     }
 
+    const { data: target } = await adminClient.from("client_users").select("email, full_name").eq("id", client_user_id).maybeSingle();
+    const { data: callerProfile } = await adminClient.from("profiles").select("full_name").eq("id", userData.user.id).maybeSingle();
+
     // Remove client_user_id from tickets (set to null, keep tickets)
     await adminClient
       .from("tickets")
@@ -102,6 +105,18 @@ Deno.serve(async (req) => {
       console.error("Error deleting auth user:", authDeleteError.message);
       // Non-fatal: data already cleaned
     }
+
+    await adminClient.from("user_deletion_audit").insert({
+      deleted_user_id: client_user_id,
+      deleted_user_email: target?.email ?? null,
+      deleted_user_name: target?.full_name ?? null,
+      account_type: "client",
+      deleted_by: userData.user.id,
+      deleted_by_name: callerProfile?.full_name ?? null,
+      status: authDeleteError ? "partial" : "success",
+      error_message: authDeleteError?.message ?? null,
+    });
+
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

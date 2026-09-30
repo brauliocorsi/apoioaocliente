@@ -53,21 +53,33 @@ Deno.serve(async (req) => {
       });
     }
 
+    const { data: target } = await adminClient.from("profiles").select("email, full_name").eq("id", user_id).maybeSingle();
+    const { data: callerProfile } = await adminClient.from("profiles").select("full_name").eq("id", caller.id).maybeSingle();
+    const audit = (status: string, error_message: string | null) =>
+      adminClient.from("user_deletion_audit").insert({
+        deleted_user_id: user_id,
+        deleted_user_email: target?.email ?? null,
+        deleted_user_name: target?.full_name ?? null,
+        account_type: "agent",
+        deleted_by: caller.id,
+        deleted_by_name: callerProfile?.full_name ?? null,
+        status,
+        error_message,
+      });
+
     // Unlink references to preserve history (tickets keep client_name in text)
     await adminClient.from("tickets").update({ assigned_to: null }).eq("assigned_to", user_id);
     await adminClient.from("phone_calls").update({ assigned_to: null }).eq("assigned_to", user_id);
 
-    // Remove role and profile
-    await adminClient.from("user_roles").delete().eq("user_id", user_id);
-    await adminClient.from("profiles").delete().eq("id", user_id);
-
-    // Remove from auth
+    // Remove from auth first (profile/roles cascade); keeps data intact if it fails
     const { error: authErr } = await adminClient.auth.admin.deleteUser(user_id);
     if (authErr) {
-      return new Response(JSON.stringify({ error: authErr.message }), {
+      await audit("failed", authErr.message);
+      return new Response(JSON.stringify({ error: "Não foi possível eliminar o agente: " + authErr.message }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    await audit("success", null);
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
