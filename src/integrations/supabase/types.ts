@@ -1878,6 +1878,45 @@ export type Database = {
           },
         ]
       }
+      user_deletion_audit: {
+        Row: {
+          account_type: string
+          created_at: string
+          deleted_by: string | null
+          deleted_by_name: string | null
+          deleted_user_email: string | null
+          deleted_user_id: string
+          deleted_user_name: string | null
+          error_message: string | null
+          id: string
+          status: string
+        }
+        Insert: {
+          account_type: string
+          created_at?: string
+          deleted_by?: string | null
+          deleted_by_name?: string | null
+          deleted_user_email?: string | null
+          deleted_user_id: string
+          deleted_user_name?: string | null
+          error_message?: string | null
+          id?: string
+          status?: string
+        }
+        Update: {
+          account_type?: string
+          created_at?: string
+          deleted_by?: string | null
+          deleted_by_name?: string | null
+          deleted_user_email?: string | null
+          deleted_user_id?: string
+          deleted_user_name?: string | null
+          error_message?: string | null
+          id?: string
+          status?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
