@@ -110,7 +110,7 @@ export default function OrderContextCard({ ticket, userId, onUpdate }: OrderCont
         const snapshot = buildSnapshot(venda);
         // Preenche apenas campos vazios do ticket (nunca sobrescreve o que o agente escreveu)
         const fill: Record<string, any> = {};
-        const c = snapshot?.cliente || {};
+        const c: any = snapshot?.cliente || {};
         const genericName = !ticket?.client_name || /^cliente/i.test(ticket.client_name) || ticket.client_name.includes("@");
         if (c.nome && genericName) fill.client_name = c.nome;
         if (c.email && !ticket?.client_email) fill.client_email = c.email;
