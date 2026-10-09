@@ -34,27 +34,7 @@ import WmsDeliveryCard from "@/components/ticket/WmsDeliveryCard";
 
 import { EmailDeliveryBadge } from "@/components/ticket/EmailDeliveryBadge";
 import { withSignedUrls } from "@/lib/attachmentUrl";
-
-// Detect HTML content
-function isHtmlContent(text: string): boolean {
-  if (!text) return false;
-  return /<\w+[^>]*>/.test(text) && (text.includes("</") || text.includes("/>"));
-}
-
-// Sanitize HTML for safe rendering
-function sanitizeForDisplay(html: string): string {
-  let safe = html;
-  safe = safe.replace(/<script[\s\S]*?<\/script>/gi, "");
-  safe = safe.replace(/<style[\s\S]*?<\/style>/gi, "");
-  safe = safe.replace(/\s+on\w+\s*=\s*"[^"]*"/gi, "");
-  safe = safe.replace(/\s+on\w+\s*=\s*'[^']*'/gi, "");
-  safe = safe.replace(/href\s*=\s*"javascript:[^"]*"/gi, 'href="#"');
-  // Fix charset meta tag to prevent browser re-interpretation
-  safe = safe.replace(/<meta[^>]*charset[^>]*>/gi, '<meta charset="utf-8">');
-  // Replace Unicode replacement characters with a visible placeholder
-  safe = safe.replace(/\uFFFD+/g, "?");
-  return safe;
-}
+import { isHtmlContent, sanitizeForDisplay } from "@/lib/messageFormatting";
 
 // Clean raw MIME content (strip headers, decode quoted-printable)
 function cleanMimeContent(text: string): string {
@@ -134,7 +114,7 @@ function RichContent({ content, onViewFull }: { content: string; onViewFull?: ()
     return (
       <div className="relative group">
         <div
-          className="prose prose-sm dark:prose-invert max-w-none [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1 [&_a]:text-primary [&_a]:underline [&_p]:my-1 [&_*]:max-w-full overflow-hidden break-words"
+          className="message-content message-content--html text-sm"
           dangerouslySetInnerHTML={{ __html: sanitizeForDisplay(display) }}
         />
         {onViewFull && (
@@ -153,7 +133,7 @@ function RichContent({ content, onViewFull }: { content: string; onViewFull?: ()
     return <span className="text-muted-foreground italic text-xs">(Mensagem sem conteúdo de texto)</span>;
   }
 
-  return <p className="text-sm whitespace-pre-wrap leading-relaxed">{trimmed}</p>;
+  return <p className="message-content message-content--plain text-sm">{trimmed}</p>;
 }
 
 export default function TicketDetail() {
@@ -1328,12 +1308,12 @@ export default function TicketDetail() {
                 if (isHtmlContent(cleaned)) {
                   return (
                     <div
-                      className="prose prose-sm dark:prose-invert max-w-none [&_img]:max-w-full [&_table]:border-collapse [&_td]:p-1 [&_a]:text-primary [&_a]:underline"
+                      className="message-content message-content--html text-sm"
                       dangerouslySetInnerHTML={{ __html: sanitizeForDisplay(cleaned) }}
                     />
                   );
                 }
-                return <pre className="text-sm whitespace-pre-wrap font-sans leading-relaxed">{cleaned}</pre>;
+                return <p className="message-content message-content--plain text-sm">{cleaned}</p>;
               })()}
             </div>
           </div>
