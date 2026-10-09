@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { v4 as uuidv4 } from "uuid";
 import MessageReactions from "@/components/chat/MessageReactions";
 import { withSignedUrls, getAttachmentUrl } from "@/lib/attachmentUrl";
+import { isHtmlContent, sanitizeForDisplay } from "@/lib/messageFormatting";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 
@@ -304,7 +305,7 @@ export default function PortalTicketDetail() {
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm">Descrição</CardTitle></CardHeader>
           <CardContent>
-            <p className="text-sm whitespace-pre-wrap text-muted-foreground">{ticket.description}</p>
+            <p className="message-content message-content--plain text-sm text-muted-foreground">{ticket.description}</p>
           </CardContent>
         </Card>
       )}
@@ -318,7 +319,7 @@ export default function PortalTicketDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="text-sm whitespace-pre-wrap">{ticket.resolution_client_reason || ticket.resolution_reason}</p>
+            <p className="message-content message-content--plain text-sm">{ticket.resolution_client_reason || ticket.resolution_reason}</p>
             <p className="text-xs text-muted-foreground">
               Decisão registada em {new Date(ticket.resolution_at).toLocaleString("pt-PT")}
             </p>
@@ -452,7 +453,7 @@ export default function PortalTicketDetail() {
                       key={msg.id}
                       className={`group flex ${msg.sender_type === "client" ? "justify-end" : "justify-start"}`}
                     >
-                      <div className="max-w-[75%] space-y-1">
+                      <div className="min-w-0 max-w-[75%] space-y-1">
                         <div
                           className={`rounded-lg px-4 py-2 text-sm ${
                             msg.sender_type === "client"
@@ -460,7 +461,11 @@ export default function PortalTicketDetail() {
                               : "bg-muted text-foreground"
                           }`}
                         >
-                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                          {isHtmlContent(msg.content || "") ? (
+                            <div className="message-content message-content--html" dangerouslySetInnerHTML={{ __html: sanitizeForDisplay(msg.content) }} />
+                          ) : (
+                            <p className="message-content message-content--plain">{msg.content}</p>
+                          )}
                           <p className={`text-xs mt-1 ${msg.sender_type === "client" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
                             {new Date(msg.created_at).toLocaleString("pt-PT")}
                           </p>

@@ -7,6 +7,7 @@ import {
   GitBranch, AlertTriangle, Inbox, Loader2, Phone, PhoneMissed,
 } from "lucide-react";
 import { EmailDeliveryBadge, isDeliveryProblem } from "./EmailDeliveryBadge";
+import { isHtmlContent, sanitizeForDisplay } from "@/lib/messageFormatting";
 
 /**
  * Unified, read-only ticket timeline.
@@ -70,7 +71,15 @@ const KIND_META: Record<TimelineKind, { label: string; icon: React.ComponentType
 
 function stripHtml(s: string | null | undefined, limit = 200): string {
   if (!s) return "";
-  return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, limit);
+  let text = s;
+  if (isHtmlContent(s)) {
+    const container = document.createElement("div");
+    container.innerHTML = sanitizeForDisplay(s)
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(?:p|div|li|tr|blockquote)>/gi, "\n");
+    text = container.textContent || "";
+  }
+  return text.replace(/\r\n?/g, "\n").replace(/[^\S\n]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, limit);
 }
 
 export default function TicketTimeline({ ticketId, preloadedMessages, preloadedEvents }: Props) {
@@ -295,7 +304,7 @@ export default function TicketTimeline({ ticketId, preloadedMessages, preloadedE
                       })}
                     </span>
                   </div>
-                  <p className="text-sm text-foreground/90 break-words leading-relaxed">{it.summary || "—"}</p>
+                  <p className="message-content message-content--plain text-sm text-foreground/90">{it.summary || "—"}</p>
                 </li>
               );
             })}
