@@ -19,23 +19,7 @@ import { TicketContinuationBadges } from "@/components/ticket/TicketContinuation
 import { useTicketRefetch } from "@/hooks/useTicketRefetch";
 import { RefetchSummaryCard } from "@/components/ticket/RefetchSummaryCard";
 import { openAttachment } from "@/lib/attachmentUrl";
-
-// Check if content looks like HTML
-function isHtmlContent(text: string): boolean {
-  if (!text) return false;
-  return /<\w+[^>]*>/.test(text) && (text.includes("</") || text.includes("/>"));
-}
-
-// Sanitize HTML for safe rendering (extra frontend layer)
-function sanitizeForDisplay(html: string): string {
-  let safe = html;
-  safe = safe.replace(/<script[\s\S]*?<\/script>/gi, "");
-  safe = safe.replace(/<style[\s\S]*?<\/style>/gi, "");
-  safe = safe.replace(/\s+on\w+\s*=\s*"[^"]*"/gi, "");
-  safe = safe.replace(/\s+on\w+\s*=\s*'[^']*'/gi, "");
-  safe = safe.replace(/href\s*=\s*"javascript:[^"]*"/gi, 'href="#"');
-  return safe;
-}
+import { isHtmlContent, sanitizeForDisplay } from "@/lib/messageFormatting";
 
 // Clean plain text email
 function cleanEmailText(text: string): string {
@@ -100,10 +84,7 @@ function EmailBody({ content }: { content: string }) {
 
     return (
       <div
-        className="email-html-content text-sm prose prose-sm dark:prose-invert max-w-none 
-          [&_img]:max-w-full [&_img]:h-auto [&_table]:border-collapse [&_td]:p-1 
-          [&_a]:text-primary [&_a]:underline [&_p]:my-1 [&_br+br+br]:hidden
-          [&_*]:max-w-full overflow-hidden break-words"
+        className="message-content message-content--html text-sm"
         dangerouslySetInnerHTML={{ __html: cleaned }}
       />
     );
@@ -128,7 +109,7 @@ function EmailBody({ content }: { content: string }) {
     );
   }
 
-  return <p className="text-sm whitespace-pre-wrap leading-relaxed">{result}</p>;
+  return <p className="message-content message-content--plain text-sm">{result}</p>;
 }
 
 function getFileIcon(fileType: string) {
@@ -551,11 +532,11 @@ export default function EmailTicketDetail() {
         {originalViewContent && (
           isHtmlContent(originalViewContent) ? (
             <div
-              className="prose prose-sm dark:prose-invert max-w-none [&_img]:max-w-full [&_img]:h-auto [&_a]:text-primary [&_a]:underline break-words"
+              className="message-content message-content--html text-sm"
               dangerouslySetInnerHTML={{ __html: sanitizeForDisplay(originalViewContent) }}
             />
           ) : (
-            <p className="text-sm whitespace-pre-wrap">{originalViewContent}</p>
+            <p className="message-content message-content--plain text-sm">{originalViewContent}</p>
           )
         )}
       </DialogContent>

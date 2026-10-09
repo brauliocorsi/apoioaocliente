@@ -1,5 +1,7 @@
 # Roadmap
 
+- [ ] Corrigir apresentação de mensagens/e-mails (parágrafos, listas e textos longos), sem alterar conteúdo guardado
+
 - [x] Eliminar agentes/clientes sem erro, preservando histórico
 - [x] Remover aviso duplicado de mensagem do cliente
 - [x] Primeiros testes automáticos (nº de encomenda)
