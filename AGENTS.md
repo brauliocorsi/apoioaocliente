@@ -5,3 +5,4 @@
 - Email AI intake uses a caller-scoped transactional RPC and the caller's authenticated client; this preserves staff permissions, ticket defaults and retry safety without privileged credentials.
 - Auth providers wrap the router once so route transitions retain their context; staff and client authorization remain enforced by server policies.
 - Define auth contexts in a stable shared module separate from provider/hook exports to avoid duplicated contexts during hot reload.
+- The home screen is the support queue and the summary queries support tickets only; legacy operational dashboards remain archived routes rather than primary workflows.

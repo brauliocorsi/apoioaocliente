@@ -5,7 +5,7 @@ const items = [
   { to: "/tickets", label: "Tickets", icon: Ticket },
   { to: "/inbound-events", label: "Entrada", icon: Inbox },
   { to: "/notifications", label: "Alertas", icon: Bell },
-  { to: "/", label: "Resumo", icon: LayoutDashboard },
+  { to: "/summary", label: "Resumo", icon: LayoutDashboard },
 ];
 
 export function MobileNavigation() {

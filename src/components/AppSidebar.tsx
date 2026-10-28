@@ -27,7 +27,7 @@ const groups: Group[] = [
   {
     label: "Visão Geral",
     items: [
-      { title: "Resumo", url: "/", icon: LayoutDashboard, color: "var(--cat-2)" },
+      { title: "Resumo", url: "/summary", icon: LayoutDashboard, color: "var(--cat-2)" },
     ],
   },
   {

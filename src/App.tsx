@@ -8,7 +8,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ClientAuthProvider } from "@/hooks/useClientAuth";
 import { AppLayout } from "@/components/AppLayout";
 import Auth from "./pages/Auth";
-import Dashboard from "./pages/Dashboard";
+import SupportOverview from "./pages/SupportOverview";
 import PhoneCalls from "./pages/PhoneCalls";
 import DeliveryConfirmations from "./pages/DeliveryConfirmations";
 import PostDeliveryConfirmations from "./pages/PostDeliveryConfirmations";
@@ -46,7 +46,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route element={<AppLayout />}>
               <Route path="/" element={<Tickets />} />
-              <Route path="/summary" element={<Dashboard />} />
+              <Route path="/summary" element={<SupportOverview />} />
               <Route path="/tickets" element={<Tickets />} />
               <Route path="/phone-calls" element={<PhoneCalls />} />
               <Route path="/delivery-confirmations" element={<DeliveryConfirmations />} />
