@@ -354,6 +354,7 @@ function InlineStatusHeader({
 }
 
 export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, onOpenTicket, callCounts, agentProfiles, unreadCounts, emailUnreadCounts, ticketTagsMap, allTags, agentRepliedMap, attachmentInfoMap }: KanbanBoardProps) {
+  const navigateToTicket = useNavigate();
   const { toast } = useToast();
   const { statuses, statusLabels, refetch: refetchStatuses } = useTicketStatuses();
   const [activeTicket, setActiveTicket] = useState<TicketRow | null>(null);
@@ -498,7 +499,7 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, onO
             <SelectContent>{statuses.map(s => <SelectItem key={s.id} value={s.id}>{s.name} ({(grouped[s.id] || []).length})</SelectItem>)}</SelectContent>
           </Select>
           {(grouped[selectedStatus.id] || []).map(t => (
-            <Button key={t.id} variant="ghost" className="block h-auto w-full p-0 text-left whitespace-normal" onClick={() => { onOpenTicket?.(t.id); navigateToTicket(t.id); }}>
+            <Button key={t.id} variant="ghost" className="block h-auto w-full p-0 text-left whitespace-normal" onClick={() => { onOpenTicket?.(t.id); navigateToTicket(`/tickets/${t.id}`); }}>
               <TicketCard ticket={t} categoryNames={categoryNames} agentProfile={t.assigned_to ? agentProfiles?.[t.assigned_to] : undefined} unreadCount={unreadCounts?.[t.id]} emailUnreadCount={emailUnreadCounts?.[t.id]} ticketTags={ticketTagsMap?.[t.id]} allTags={allTags} agentReplied={agentRepliedMap?.[t.id]} attachmentInfo={attachmentInfoMap?.[t.id]} />
             </Button>
           ))}

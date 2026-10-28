@@ -644,7 +644,7 @@ export default function TicketDetail() {
           <p className="text-sm text-muted-foreground">{ticket.client_name}{ticket.order_number ? ` · Enc. ${ticket.order_number}` : ""}{ticket.service_number ? ` · OS ${ticket.service_number}` : ""}</p>
           <TicketContinuationBadges ticketId={ticket.id} parentTicketId={(ticket as any).parent_ticket_id} />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {(ticket.client_email || hasEmailThread) && (
             <Button variant="outline" size="sm" onClick={handleRefetch} disabled={refetching} className="shrink-0 gap-1.5">
               <RefreshCw className={`h-3.5 w-3.5 ${refetching ? "animate-spin" : ""}`} />
@@ -652,7 +652,7 @@ export default function TicketDetail() {
             </Button>
           )}
           <Select value={ticket.status} onValueChange={updateStatus}>
-            <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+            <SelectTrigger aria-label="Estado do ticket" className="w-full sm:w-48 h-11"><SelectValue /></SelectTrigger>
             <SelectContent>
               {statuses.map((s) => (
                 <SelectItem key={s.id} value={s.id}>
@@ -1216,12 +1216,7 @@ export default function TicketDetail() {
                         {(ev.content || '').replace(/<[^>]+>/g, '').substring(0, 100)}
                       </p>
                     ) : (
-                      <p dangerouslySetInnerHTML={{
-                        __html: (ev.content || "").replace(
-                          /@([\w\s]+?)(?=\s@|\s*$|[.,!?])/g,
-                          '<span class="font-semibold text-primary">@$1</span>'
-                        )
-                      }} />
+                      <RichContent content={ev.content || ""} />
                     )}
                     <p className="text-xs text-muted-foreground">
                       {new Date(ev.created_at).toLocaleString("pt-PT", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
