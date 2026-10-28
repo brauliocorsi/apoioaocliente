@@ -1,4 +1,5 @@
-import { LayoutDashboard, Ticket, MessageSquareText, Settings, LogOut, Phone, Truck, ClipboardCheck, AlertTriangle, Inbox, Activity } from "lucide-react";
+import { LayoutDashboard, Ticket, MessageSquareText, Settings, LogOut, Inbox, Bell, type LucideIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import ProfileDialog from "@/components/ProfileDialog";
@@ -18,7 +19,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-type Item = { title: string; url: string; icon: any; color: string };
+type Item = { title: string; url: string; icon: LucideIcon; color: string };
 type Group = { label: string; items: Item[] };
 
 // Hue tokens per group/item — used as background tint behind icon
@@ -26,8 +27,7 @@ const groups: Group[] = [
   {
     label: "Visão Geral",
     items: [
-      { title: "Painel Operacional", url: "/operational-dashboard", icon: Activity, color: "var(--cat-1)" },
-      { title: "Dashboard", url: "/", icon: LayoutDashboard, color: "var(--cat-2)" },
+      { title: "Resumo", url: "/summary", icon: LayoutDashboard, color: "var(--cat-2)" },
     ],
   },
   {
@@ -35,22 +35,13 @@ const groups: Group[] = [
     items: [
       { title: "Tickets", url: "/tickets", icon: Ticket, color: "var(--cat-4)" },
       { title: "Caixa de Entrada", url: "/inbound-events", icon: Inbox, color: "var(--cat-7)" },
-    ],
-  },
-  {
-    label: "Operação",
-    items: [
-      { title: "Encomendas Atrasadas", url: "/delayed-orders", icon: AlertTriangle, color: "var(--cat-8)" },
-      { title: "Pós-Entrega", url: "/post-delivery", icon: ClipboardCheck, color: "var(--cat-5)" },
-      { title: "Ligações", url: "/phone-calls", icon: Phone, color: "var(--cat-6)" },
-      { title: "Ligações por Ramal", url: "/extension-calls", icon: Activity, color: "var(--cat-3)" },
-      { title: "Reg. Ligações", url: "/delivery-confirmations", icon: Truck, color: "var(--cat-2)" },
+      { title: "Notificações", url: "/notifications", icon: Bell, color: "var(--cat-3)" },
     ],
   },
   {
     label: "Gestão",
     items: [
-      { title: "Macros", url: "/macros", icon: MessageSquareText, color: "var(--cat-4)" },
+      { title: "Respostas e documentos", url: "/macros", icon: MessageSquareText, color: "var(--cat-4)" },
     ],
   },
   {
@@ -155,15 +146,15 @@ export function AppSidebar() {
             avatarUrl={profile?.avatar_url}
             table="profiles"
             trigger={
-              <button className="shrink-0 group relative">
+              <Button variant="ghost" size="icon" aria-label="Editar perfil" className="shrink-0 group relative">
                 <Avatar className="h-9 w-9 ring-2 ring-sidebar-primary/30 transition-all group-hover:ring-sidebar-primary/60">
                   <AvatarImage src={profile?.avatar_url || undefined} />
-                  <AvatarFallback className="bg-gradient-primary text-[11px] font-semibold text-white">
+                  <AvatarFallback className="bg-primary text-[11px] font-semibold text-primary-foreground">
                     {initials}
                   </AvatarFallback>
                 </Avatar>
                 <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-success ring-2 ring-sidebar-background" />
-              </button>
+              </Button>
             }
           />
           <div className="flex-1 min-w-0">
@@ -175,12 +166,12 @@ export function AppSidebar() {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <button
+                <Button variant="ghost" size="icon" aria-label="Terminar sessão"
                   onClick={signOut}
                   className="flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/50 transition-colors hover:bg-destructive/15 hover:text-destructive"
                 >
                   <LogOut className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               </TooltipTrigger>
               <TooltipContent side="top">
                 <p className="text-xs">Terminar sessão</p>

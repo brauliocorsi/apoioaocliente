@@ -8,7 +8,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ClientAuthProvider } from "@/hooks/useClientAuth";
 import { AppLayout } from "@/components/AppLayout";
 import Auth from "./pages/Auth";
-import Dashboard from "./pages/Dashboard";
+import SupportOverview from "./pages/SupportOverview";
 import PhoneCalls from "./pages/PhoneCalls";
 import DeliveryConfirmations from "./pages/DeliveryConfirmations";
 import PostDeliveryConfirmations from "./pages/PostDeliveryConfirmations";
@@ -40,12 +40,13 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <AuthProvider><ClientAuthProvider><BrowserRouter>
           <Routes>
             {/* Agent routes */}
-            <Route path="/auth" element={<AuthProvider><Auth /></AuthProvider>} />
-            <Route element={<AuthProvider><AppLayout /></AuthProvider>}>
-              <Route path="/" element={<Dashboard />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route element={<AppLayout />}>
+              <Route path="/" element={<Tickets />} />
+              <Route path="/summary" element={<SupportOverview />} />
               <Route path="/tickets" element={<Tickets />} />
               <Route path="/phone-calls" element={<PhoneCalls />} />
               <Route path="/delivery-confirmations" element={<DeliveryConfirmations />} />
@@ -64,8 +65,8 @@ const App = () => (
             </Route>
 
             {/* Portal (client) routes */}
-            <Route path="/portal/login" element={<ClientAuthProvider><PortalLogin /></ClientAuthProvider>} />
-            <Route element={<ClientAuthProvider><PortalLayout /></ClientAuthProvider>}>
+            <Route path="/portal/login" element={<PortalLogin />} />
+            <Route element={<PortalLayout />}>
               <Route path="/portal/tickets" element={<PortalTickets />} />
               <Route path="/portal/tickets/new" element={<PortalNewTicket />} />
               <Route path="/portal/tickets/:id" element={<PortalTicketDetail />} />
@@ -74,7 +75,7 @@ const App = () => (
 
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </BrowserRouter>
+        </BrowserRouter></ClientAuthProvider></AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   </ThemeProvider>

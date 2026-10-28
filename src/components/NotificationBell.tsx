@@ -410,7 +410,7 @@ export default function NotificationBell() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-0 overflow-hidden border-border/60 shadow-xl" align="end">
+      <PopoverContent className="w-[min(400px,calc(100vw-24px))] p-0 overflow-hidden border-border/60 shadow-xl" align="end">
         {/* Header with gradient */}
         <div className="relative px-4 py-4 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-b border-border/60">
           <div className="flex items-center justify-between">
@@ -440,10 +440,10 @@ export default function NotificationBell() {
             {tabPill("mentions", "Menções", unreadMentions, "bg-warning")}
             {tabPill("messages", "Msgs", unreadMsgCount, "bg-info")}
             {tabPill("tickets", "Tickets", unreadTicketNotifs, "bg-primary")}
-            {tabPill("ops", "Op.", unreadOpCount, "bg-warning")}
+            {tabPill("ops", "Prazos", unreadOpCount, "bg-warning")}
           </TabsList>
           <TabsContent value={tab} className="m-0">
-            <ScrollArea className="h-[440px]">{filteredView()}</ScrollArea>
+            <ScrollArea className="h-[min(440px,60dvh)]">{filteredView()}</ScrollArea>
           </TabsContent>
         </Tabs>
 

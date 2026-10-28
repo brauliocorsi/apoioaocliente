@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertTriangle, Clock, CheckCircle, Timer, TrendingUp } from "lucide-react";
 
@@ -33,10 +33,8 @@ export function getTicketSlaStatus(t: Pick<SlaTicket, "resolved_at" | "sla_resol
   if (!deadline) return "no_sla";
 
   const remaining = calcRemaining(deadline, t.sla_paused_total_seconds || 0, t.sla_paused_at);
-  const total = new Date(deadline).getTime() - (Date.now() - remaining);
-
   if (remaining <= 0) return "breached";
-  if (remaining / total < 0.25) return "at_risk";
+  if (remaining <= 2 * 60 * 60 * 1000) return "at_risk";
   return "on_track";
 }
 
@@ -45,6 +43,11 @@ interface SlaDashboardProps {
 }
 
 export default function SlaDashboard({ tickets }: SlaDashboardProps) {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setTick(t => t + 1), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
   const stats = useMemo(() => {
     let breached = 0;
     let atRisk = 0;
@@ -70,7 +73,7 @@ export default function SlaDashboard({ tickets }: SlaDashboardProps) {
     const complianceRate = active > 0 ? Math.round(((active - breached) / active) * 100) : 100;
 
     return { breached, atRisk, onTrack, completed, firstResponseBreached, active, complianceRate };
-  }, [tickets]);
+  }, [tickets, tick]);
 
   const cards = [
     {

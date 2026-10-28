@@ -24,6 +24,8 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type TicketRow = {
   id: string;
@@ -352,9 +354,13 @@ function InlineStatusHeader({
 }
 
 export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, onOpenTicket, callCounts, agentProfiles, unreadCounts, emailUnreadCounts, ticketTagsMap, allTags, agentRepliedMap, attachmentInfoMap }: KanbanBoardProps) {
+  const navigateToTicket = useNavigate();
   const { toast } = useToast();
   const { statuses, statusLabels, refetch: refetchStatuses } = useTicketStatuses();
   const [activeTicket, setActiveTicket] = useState<TicketRow | null>(null);
+  const isMobile = useIsMobile();
+  const [mobileStatus, setMobileStatus] = useState("");
+  const selectedStatus = statuses.find(s => s.id === mobileStatus) || statuses[0];
   const [overColumn, setOverColumn] = useState<string | null>(null);
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColumnName, setNewColumnName] = useState("");
@@ -486,7 +492,21 @@ export default function KanbanBoard({ tickets, categoryNames, onTicketMoved, onO
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4" style={{ minHeight: 400 }}>
+      {isMobile && selectedStatus && (
+        <div className="space-y-3">
+          <Select value={selectedStatus.id} onValueChange={setMobileStatus}>
+            <SelectTrigger aria-label="Coluna do Kanban" className="h-12"><SelectValue /></SelectTrigger>
+            <SelectContent>{statuses.map(s => <SelectItem key={s.id} value={s.id}>{s.name} ({(grouped[s.id] || []).length})</SelectItem>)}</SelectContent>
+          </Select>
+          {(grouped[selectedStatus.id] || []).map(t => (
+            <Button key={t.id} variant="ghost" className="block h-auto w-full p-0 text-left whitespace-normal" onClick={() => { onOpenTicket?.(t.id); navigateToTicket(`/tickets/${t.id}`); }}>
+              <TicketCard ticket={t} categoryNames={categoryNames} agentProfile={t.assigned_to ? agentProfiles?.[t.assigned_to] : undefined} unreadCount={unreadCounts?.[t.id]} emailUnreadCount={emailUnreadCounts?.[t.id]} ticketTags={ticketTagsMap?.[t.id]} allTags={allTags} agentReplied={agentRepliedMap?.[t.id]} attachmentInfo={attachmentInfoMap?.[t.id]} />
+            </Button>
+          ))}
+          {(grouped[selectedStatus.id] || []).length === 0 && <p className="py-12 text-center text-sm text-muted-foreground">Sem tickets neste estado</p>}
+        </div>
+      )}
+      <div className="hidden md:flex gap-4 overflow-x-auto pb-4 min-h-[400px]">
         {statuses.map((s) => (
           <DroppableColumn key={s.id} statusId={s.id} color={s.color} isOver={overColumn === s.id}>
             <InlineStatusHeader

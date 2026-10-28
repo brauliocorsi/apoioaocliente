@@ -15,6 +15,7 @@ import GestaoClickSearch from "./GestaoClickSearch";
 import OrderContextCard from "./OrderContextCard";
 import SlaStatusCard from "./SlaStatusCard";
 import { useNavigate } from "react-router-dom";
+import { isHtmlContent, sanitizeForDisplay } from "@/lib/messageFormatting";
 
 interface TicketSidebarProps {
   ticket: any;
@@ -41,6 +42,7 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
   const [selectedEmail, setSelectedEmail] = useState<any>(null);
   const [clientOS, setClientOS] = useState<any[]>([]);
   const [loadingOS, setLoadingOS] = useState(false);
+  const [osError, setOsError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -77,17 +79,23 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
   // Fetch OS from GestãoClick by client name
   useEffect(() => {
     if (!ticket?.client_name) return;
+    let active = true;
     setLoadingOS(true);
+    setOsError(null);
     supabase.functions
       .invoke("gestaoclick-proxy", {
         body: { action: "search_os", nome: ticket.client_name },
       })
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) throw error;
         const list = data?.data || data?.ordens_servicos || (Array.isArray(data) ? data : []);
+        if (!Array.isArray(list)) throw new Error("Resposta inválida do GestãoClick");
         setClientOS(list.map((o: any) => o.ordem_servico || o));
       })
-      .catch(() => setClientOS([]))
-      .finally(() => setLoadingOS(false));
+      .catch(() => { if (active) { setClientOS([]); setOsError("Não foi possível verificar as OS no GestãoClick."); } })
+      .finally(() => { if (active) setLoadingOS(false); });
+    return () => { active = false; };
   }, [ticket?.client_name]);
 
   useEffect(() => {
@@ -475,21 +483,16 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
                   <div className="flex-1 overflow-y-auto border rounded-md p-4 bg-muted/20">
                     {selectedEmail && (() => {
                       const content = selectedEmail.content || '';
-                      const isHtml = /<\w+[^>]*>/.test(content) && (content.includes("</") || content.includes("/>"));
+                      const isHtml = isHtmlContent(content);
                       if (isHtml) {
-                        let safe = content
-                          .replace(/<script[\s\S]*?<\/script>/gi, "")
-                          .replace(/<style[\s\S]*?<\/style>/gi, "")
-                          .replace(/\s+on\w+\s*=\s*"[^"]*"/gi, "")
-                          .replace(/href\s*=\s*"javascript:[^"]*"/gi, 'href="#"');
                         return (
                           <div
-                            className="prose prose-sm dark:prose-invert max-w-none [&_img]:max-w-full [&_a]:text-primary break-words"
-                            dangerouslySetInnerHTML={{ __html: safe }}
+                            className="message-content message-content--html text-sm"
+                            dangerouslySetInnerHTML={{ __html: sanitizeForDisplay(content) }}
                           />
                         );
                       }
-                      return <p className="text-sm whitespace-pre-wrap leading-relaxed">{content}</p>;
+                      return <p className="message-content message-content--plain text-sm">{content}</p>;
                     })()}
                   </div>
                   {/* Navigation */}
@@ -541,6 +544,8 @@ export default function TicketSidebar({ ticket, tags, clauses, userId, onUpdate 
                   )}
                 </div>
                 {/* OS associadas do GestãoClick */}
+                {osError && <p role="alert" className="text-xs text-destructive pt-2">{osError}</p>}
+                {!loadingOS && !osError && clientOS.length === 0 && <p className="text-xs text-muted-foreground pt-2">Nenhuma OS encontrada para este nome de cliente.</p>}
                 {loadingOS && (
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-1">
                     <Loader2 className="h-3 w-3 animate-spin" /> A verificar OS...

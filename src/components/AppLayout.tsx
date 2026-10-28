@@ -8,6 +8,7 @@ import NotificationBell from "@/components/NotificationBell";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import OrderLookupDialog from "@/components/OrderLookupDialog";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { MobileNavigation } from "@/components/MobileNavigation";
 
 export function AppLayout() {
   const { session, user, loading } = useAuth();
@@ -23,14 +24,6 @@ export function AppLayout() {
 
       if (e.ctrlKey || e.metaKey) {
         switch (e.key.toLowerCase()) {
-          case "l":
-            e.preventDefault();
-            navigate("/phone-calls?new=1");
-            break;
-          case "p":
-            e.preventDefault();
-            navigate("/post-delivery?new=1");
-            break;
           case "t":
             e.preventDefault();
             navigate("/tickets/new");
@@ -65,20 +58,24 @@ export function AppLayout() {
 
   return (
     <SidebarProvider defaultOpen={sidebarDefaultOpen}>
-      <div className="flex min-h-screen w-full bg-background">
+      <div className="flex min-h-dvh w-full bg-background">
         <AppSidebar />
         <main className="flex-1 flex flex-col min-w-0">
-          <header className="flex h-12 items-center justify-between gap-4 border-b border-border bg-card px-5 sticky top-0 z-20">
-            <SidebarTrigger className="text-muted-foreground hover:text-foreground transition-colors" />
+          <header className="flex h-14 items-center justify-between gap-2 border-b border-border bg-card px-3 sm:px-5 sticky top-0 z-20">
+            <div className="flex items-center gap-2 min-w-0">
+              <SidebarTrigger className="h-11 w-11 text-muted-foreground hover:text-foreground transition-colors" />
+              <span className="text-sm font-semibold truncate md:hidden">UP Móveis</span>
+            </div>
             <div className="flex items-center gap-1">
               <OrderLookupDialog />
               <ThemeToggle />
               <NotificationBell />
             </div>
           </header>
-          <div className="flex-1 p-5 fade-in">
+          <div className="flex-1 min-w-0 p-3 pb-24 sm:p-5 md:pb-5 fade-in">
             <Outlet />
           </div>
+          <MobileNavigation />
         </main>
       </div>
     </SidebarProvider>

@@ -80,7 +80,6 @@ type TicketRow = {
 
 export default function Tickets() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
-  const [callCounts, setCallCounts] = useState<Record<string, number>>({});
   const [categories, setCategories] = useState<Record<string, string>>({});
   const [allTags, setAllTags] = useState<{ id: string; name: string; color: string | null }[]>([]);
   const [ticketTagsMap, setTicketTagsMap] = useState<Record<string, string[]>>({});
@@ -169,18 +168,11 @@ export default function Tickets() {
       if (priorityFilter !== "all") query = query.eq("priority", priorityFilter as any);
       if (agentFilter !== "all") query = query.eq("assigned_to", agentFilter);
 
-      const [{ data }, { data: callData }, { data: ttData }] = await Promise.all([
+      const [{ data }, { data: ttData }] = await Promise.all([
         query.limit(200),
-        supabase.from("phone_calls").select("ticket_id").not("ticket_id", "is", null),
         supabase.from("ticket_tags").select("ticket_id, tag_id"),
       ]);
       setTickets((data as TicketRow[]) || []);
-      // Group call counts by ticket_id
-      const counts: Record<string, number> = {};
-      (callData || []).forEach((c: any) => {
-        counts[c.ticket_id] = (counts[c.ticket_id] || 0) + 1;
-      });
-      setCallCounts(counts);
       // Group tags by ticket_id
       const tagsMap: Record<string, string[]> = {};
       (ttData || []).forEach((tt: any) => {
@@ -314,10 +306,10 @@ export default function Tickets() {
         actions={
           <>
             <div className="flex border border-border/60 rounded-lg overflow-hidden bg-card/80 backdrop-blur-sm">
-              <Button variant={view === "list" ? "secondary" : "ghost"} size="icon" className="h-9 w-9 rounded-none" onClick={() => setView("list")}>
+              <Button aria-label="Ver lista" title="Ver lista" variant={view === "list" ? "secondary" : "ghost"} size="icon" className="h-11 w-11 rounded-none" onClick={() => setView("list")}>
                 <List className="h-4 w-4" />
               </Button>
-              <Button variant={view === "kanban" ? "secondary" : "ghost"} size="icon" className="h-9 w-9 rounded-none" onClick={() => setView("kanban")}>
+              <Button aria-label="Ver Kanban" title="Ver Kanban" variant={view === "kanban" ? "secondary" : "ghost"} size="icon" className="h-11 w-11 rounded-none" onClick={() => setView("kanban")}>
                 <LayoutGrid className="h-4 w-4" />
               </Button>
             </div>
@@ -330,14 +322,14 @@ export default function Tickets() {
 
       {!loading && <SlaDashboard tickets={filtered as SlaTicket[]} />}
 
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
+        <div className="relative col-span-2 sm:flex-1 sm:min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Pesquisar por nome, telefone, assunto, nº encomenda, nº assistência..." className="pl-10" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input aria-label="Pesquisar tickets" placeholder="Cliente, ticket ou encomenda" className="pl-10 h-11" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         {view === "list" && (
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-48"><SelectValue placeholder="Estado" /></SelectTrigger>
+            <SelectTrigger aria-label="Estado" className="w-full sm:w-48 h-11"><SelectValue placeholder="Estado" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os estados</SelectItem>
               {statuses.map((s) => (
@@ -347,7 +339,7 @@ export default function Tickets() {
           </Select>
         )}
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-          <SelectTrigger className="w-36"><SelectValue placeholder="Prioridade" /></SelectTrigger>
+          <SelectTrigger aria-label="Prioridade" className="w-full sm:w-36 h-11"><SelectValue placeholder="Prioridade" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas</SelectItem>
             <SelectItem value="P1">P1 Urgente</SelectItem>
@@ -356,7 +348,7 @@ export default function Tickets() {
           </SelectContent>
         </Select>
         <Select value={agentFilter} onValueChange={setAgentFilter}>
-          <SelectTrigger className="w-44"><SelectValue placeholder="Agente" /></SelectTrigger>
+          <SelectTrigger aria-label="Agente" className="w-full sm:w-44 h-11"><SelectValue placeholder="Agente" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os agentes</SelectItem>
             {agents.map((a) => (
@@ -365,7 +357,7 @@ export default function Tickets() {
           </SelectContent>
         </Select>
         <Select value={slaFilter} onValueChange={setSlaFilter}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="SLA" /></SelectTrigger>
+          <SelectTrigger aria-label="Prazo" className="w-full sm:w-40 h-11"><SelectValue placeholder="SLA" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos SLA</SelectItem>
             <SelectItem value="breached">Expirado ({preSlaCounts.breached})</SelectItem>
@@ -379,7 +371,7 @@ export default function Tickets() {
       {loading ? (
         <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
       ) : view === "kanban" ? (
-        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} onOpenTicket={markTicketAsRead} callCounts={callCounts} agentProfiles={agentProfiles} unreadCounts={unreadCounts} emailUnreadCounts={emailUnreadCounts} ticketTagsMap={ticketTagsMap} allTags={allTags} agentRepliedMap={agentRepliedMap} attachmentInfoMap={attachmentInfoMap} />
+        <KanbanBoard tickets={filtered} categoryNames={categories} onTicketMoved={refreshTickets} onOpenTicket={markTicketAsRead} agentProfiles={agentProfiles} unreadCounts={unreadCounts} emailUnreadCounts={emailUnreadCounts} ticketTagsMap={ticketTagsMap} allTags={allTags} agentRepliedMap={agentRepliedMap} attachmentInfoMap={attachmentInfoMap} />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -390,12 +382,12 @@ export default function Tickets() {
                 {filtered.map((t) => (
                   <div
                     key={t.id}
-                    className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-3 sm:px-4 py-4 cursor-pointer hover:bg-muted/50 transition-colors"
                     onClick={() => { void markTicketAsRead(t.id); navigate(`/tickets/${t.id}`); }}
                   >
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-start gap-3 min-w-0">
                       <span className="text-xs font-mono text-muted-foreground w-12">#{t.ticket_number}</span>
-                      <div>
+                      <div className="min-w-0 break-words">
                         <p className="text-sm font-medium">{t.subject}</p>
                         <p className="text-xs text-muted-foreground">
                           {t.client_name}
@@ -404,7 +396,7 @@ export default function Tickets() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {attachmentInfoMap[t.id] && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -416,17 +408,6 @@ export default function Tickets() {
                             </span>
                           </TooltipTrigger>
                           <TooltipContent><p className="text-xs">{attachmentInfoMap[t.id].count} anexo(s){attachmentInfoMap[t.id].hasImages ? " · fotos" : ""}{attachmentInfoMap[t.id].hasVideos ? " · vídeos" : ""}</p></TooltipContent>
-                        </Tooltip>
-                      )}
-                      {callCounts[t.id] > 0 && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center gap-0.5 text-muted-foreground cursor-default">
-                              <Phone className="h-3.5 w-3.5" />
-                              <span className="text-xs">{callCounts[t.id]}</span>
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent><p className="text-xs">{callCounts[t.id]} ligação(ões) vinculada(s)</p></TooltipContent>
                         </Tooltip>
                       )}
                       <SlaIcon status={getTicketSlaStatus(t)} ticket={t as SlaTicket} />

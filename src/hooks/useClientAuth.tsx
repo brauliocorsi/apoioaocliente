@@ -1,25 +1,8 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { useContext, useEffect, useState, ReactNode } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
-interface ClientProfile {
-  full_name: string;
-  email: string;
-  phone: string | null;
-  avatar_url?: string | null;
-}
-
-interface ClientAuthContextType {
-  session: Session | null;
-  user: User | null;
-  profile: ClientProfile | null;
-  loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<{ error: Error | null }>;
-  signOut: () => Promise<void>;
-}
-
-const ClientAuthContext = createContext<ClientAuthContextType | undefined>(undefined);
+import { ClientAuthContext, type ClientProfile } from "./authContexts";
 
 export function ClientAuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
