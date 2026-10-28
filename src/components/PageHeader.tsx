@@ -26,12 +26,7 @@ export function PageHeader({
   children,
 }: PageHeaderProps) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-card via-card to-muted/40 px-6 py-5 shadow-soft">
-      <div
-        className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full opacity-30 blur-3xl"
-        style={{ background: `radial-gradient(circle, hsl(var(--${accent})) 0%, transparent 70%)` }}
-        aria-hidden
-      />
+    <div className="border-b border-border pb-5">
       <div className="relative flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-start gap-4 min-w-0">
           {icon && (
@@ -40,13 +35,13 @@ export function PageHeader({
             </div>
           )}
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground truncate">{title}</h1>
+            <h1 className="text-2xl font-semibold text-foreground break-words">{title}</h1>
             {subtitle && (
               <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p>
             )}
           </div>
         </div>
-        {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
+        {actions && <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">{actions}</div>}
       </div>
       {children && <div className="relative mt-4">{children}</div>}
     </div>
